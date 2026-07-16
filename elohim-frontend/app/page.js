@@ -1,82 +1,73 @@
 import Image from "next/image";
 import Link from "next/link";
+import HomeWalletCard from "@/components/HomeWalletCard";
 
 export const metadata = {
-  title: "Elohim Grains Store | Fresh Grains & Bulk Supply",
+  title: "Elohim Grains Store | Agro Fintech",
   description:
-    "Shop rice, beans, maize, garri, flour, and wholesale grains with reliable delivery from Elohim Grains.",
+    "Shop grains, fund a wallet, save toward food goals, and pay securely with Elohim Grains.",
 };
 
 export const dynamic = "force-dynamic";
 
 const heroImage = "/grains/Rice.jpg";
 
-const storeCategories = [
-  { title: "Rice", image: "/grains/Rice.jpg", href: "#marketplace", note: "Local and premium bags" },
-  { title: "Beans", image: "/grains/Beans.jpg", href: "#marketplace", note: "Oloyin, cowpea, kidney" },
-  { title: "Maize", image: "/grains/Maize.jpg", href: "#marketplace", note: "Market and bulk supply" },
-  { title: "Flours", image: "/grains/Yam-Flour(Amala).jpg", href: "#marketplace", note: "Yam and plantain flour" },
-];
-
-const storeHighlights = [
-  { label: "Fresh grain categories", value: "12+" },
-  { label: "Bulk order support", value: "10+ bags" },
-  { label: "Delivery scheduling", value: "Flexible" },
-  { label: "Secure checkout", value: "Wallet + card" },
-];
-
-const storeServices = [
-  {
-    title: "Retail grain shopping",
-    text: "Buy everyday food staples in small or standard bag sizes with clear prices and stock visibility.",
-  },
-  {
-    title: "Bulk supply requests",
-    text: "Request wholesale quantities for homes, schools, churches, restaurants, and market resellers.",
-  },
-  {
-    title: "Verified marketplace",
-    text: "Shop from Elohim inventory and verified vendors with order tracking and invoice support.",
-  },
-];
-
 const financeProducts = [
   {
-    title: "Store Wallet",
-    value: "Fast checkout",
-    text: "Fund once and pay quickly for grain orders, delivery, refunds, and repeat purchases.",
+    title: "Wallet",
+    value: "Instant top up",
+    text: "Fund, withdraw, transfer, and receive refunds directly in your Elohim wallet.",
     href: "/wallet",
   },
   {
-    title: "Food Savings",
-    value: "Plan ahead",
-    text: "Save toward rice, beans, maize, and bulk food goals before prices move.",
+    title: "Smart Savings",
+    value: "Goal plans",
+    text: "Save daily, weekly, or monthly toward rice, beans, maize, and bulk supply goals.",
     href: "/plans",
   },
   {
-    title: "Pay Later",
-    value: "BNPL",
-    text: "Collect food staples now and repay with structured installments when eligible.",
+    title: "BNPL",
+    value: "Pay small-small",
+    text: "Collect grains now and repay with structured installments and reminders.",
     href: "/bnpl",
   },
   {
+    title: "Inventory Finance",
+    value: "Grain collateral",
+    text: "Use stored grains as collateral to access short-term working capital.",
+    href: "/inventory-finance",
+  },
+  {
     title: "Smart Warehouse",
-    value: "Buy & store",
-    text: "Buy grains into storage, monitor market value, and request resale later.",
+    value: "Store and resell",
+    text: "Buy grains into warehouse storage, track market value, and sell later when prices rise.",
     href: "/warehouse",
   },
   {
     title: "Receipts",
-    value: "Records",
-    text: "Download receipts, statements, and tax invoices for household or business records.",
+    value: "PDF records",
+    text: "Generate receipts, monthly statements, savings history, and tax invoices for your account.",
     href: "/receipts-statements",
   },
   {
     title: "Escrow",
-    value: "Protected bulk",
-    text: "Protect large orders by holding funds until delivery is confirmed.",
+    value: "Protected orders",
+    text: "Hold funds safely until delivery is confirmed for large and interstate orders.",
     href: "/cart",
   },
+  {
+    title: "KYC Verification",
+    value: "Trust checks",
+    text: "Verify BVN, NIN, phone, and email to unlock stronger trust across finance features.",
+    href: "/kyc",
+  },
+];
+
+const trustMetrics = [
+  { label: "Fintech services", value: "8+" },
+  { label: "Staple categories", value: "6" },
+  { label: "Payment channels", value: "5" },
+  { label: "Bulk buying support", value: "24/7" },
 ];
 
 const marketSignals = [
@@ -191,29 +182,6 @@ function ProductTile({ product }) {
   );
 }
 
-function CategoryTile({ category }) {
-  return (
-    <Link
-      href={category.href}
-      className="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-    >
-      <div className="relative h-36 bg-slate-100">
-        <Image
-          src={category.image}
-          alt={category.title}
-          fill
-          sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-          className="object-cover transition duration-300 group-hover:scale-105"
-        />
-      </div>
-      <div className="p-4">
-        <p className="font-black text-slate-950">{category.title}</p>
-        <p className="mt-1 text-sm text-slate-500">{category.note}</p>
-      </div>
-    </Link>
-  );
-}
-
 export default async function Home() {
   const products = await getProducts();
 
@@ -226,24 +194,24 @@ export default async function Home() {
             alt="Bags of rice and grains"
             fill
             priority
-            className="object-cover opacity-60"
+            className="object-cover opacity-55"
             sizes="100vw"
           />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.9),rgba(15,23,42,0.68),rgba(15,23,42,0.24))]" />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.92),rgba(15,23,42,0.72),rgba(15,23,42,0.35))]" />
         </div>
 
-        <div className="relative mx-auto grid min-h-[590px] max-w-7xl items-center gap-8 px-4 py-14 md:px-6 lg:grid-cols-[1fr_440px]">
+        <div className="relative mx-auto grid min-h-[560px] max-w-6xl items-center gap-8 px-4 py-14 md:px-6 lg:grid-cols-[1fr_420px]">
           <div className="max-w-3xl text-white">
             <p className="text-sm font-bold uppercase tracking-wide text-green-200">
-              Fresh grains, direct to your door
+              Elohim Grains Store
             </p>
             <h1 className="mt-4 text-4xl font-black leading-tight md:text-6xl">
-              Shop quality grains for home, business, and bulk supply.
+              Buy grains, save for food goals, and pay with confidence.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-100">
-              Order rice, beans, maize, garri, wheat, flour, and other food
-              staples with transparent prices, reliable fulfillment, and
-              flexible delivery options.
+              A modern grain marketplace with wallet funding, smart savings,
+              BNPL, escrow protection, cooperative buying, and payment gateway
+              options built into one store.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -254,15 +222,15 @@ export default async function Home() {
                 Shop Grains
               </Link>
               <Link
-                href="/bulk"
+                href="/wallet"
                 className="rounded-lg bg-white px-6 py-3 text-center font-bold text-slate-950 shadow-sm transition hover:bg-slate-100"
               >
-                Request Bulk Supply
+                Open Wallet
               </Link>
             </div>
 
             <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {storeHighlights.map((metric) => (
+              {trustMetrics.map((metric) => (
                 <div
                   key={metric.label}
                   className="rounded-lg border border-white/15 bg-white/10 p-4 backdrop-blur"
@@ -276,83 +244,26 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-white/15 bg-white p-5 shadow-2xl">
-            <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wide text-green-700">
-                  Featured supply
-                </p>
-                <h2 className="mt-1 text-2xl font-black text-slate-950">
-                  Rice, beans, maize and flour
-                </h2>
-              </div>
-              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
-                In store
-              </span>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              {storeCategories.slice(0, 4).map((category) => (
-                <div key={category.title} className="overflow-hidden rounded-lg bg-slate-100">
-                  <div className="relative h-24">
-                    <Image
-                      src={category.image}
-                      alt={category.title}
-                      fill
-                      sizes="220px"
-                      className="object-cover"
-                    />
-                  </div>
-                  <p className="bg-white px-3 py-2 text-sm font-black text-slate-950">
-                    {category.title}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-5 rounded-lg bg-slate-950 p-4 text-white">
-              <p className="text-xs font-bold uppercase tracking-wide text-green-200">
-                Store promise
-              </p>
-              <p className="mt-2 text-xl font-black">Clean staples. Clear pricing.</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                Choose products, confirm quantity, pay securely, and track your order
-                from checkout to delivery.
-              </p>
-            </div>
-          </div>
+          <HomeWalletCard marketSignals={marketSignals} />
         </div>
       </section>
 
       <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto grid max-w-7xl gap-4 px-4 py-6 md:px-6 lg:grid-cols-3">
-          {storeServices.map((service) => (
-            <div key={service.title} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="font-black text-slate-950">{service.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{service.text}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-4 py-10 md:px-6">
-        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-sm font-bold uppercase tracking-wide text-green-700">
-              Shop by category
-            </p>
-            <h2 className="mt-1 text-2xl font-black text-slate-950">
-              Everyday food staples
-            </h2>
-          </div>
-          <Link href="#marketplace" className="text-sm font-bold text-green-700 hover:text-green-800">
-            View all products
-          </Link>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {storeCategories.map((category) => (
-            <CategoryTile key={category.title} category={category} />
+        <div className="mx-auto grid max-w-7xl gap-3 px-4 py-5 md:px-6 lg:grid-cols-8">
+          {financeProducts.map((item) => (
+            <Link
+              key={item.title}
+              href={item.href}
+              className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-green-200 hover:bg-green-50"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-black text-slate-950">{item.title}</h2>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                  {item.value}
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{item.text}</p>
+            </Link>
           ))}
         </div>
       </section>
@@ -361,7 +272,7 @@ export default async function Home() {
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-green-700">
-              Store marketplace
+              Marketplace
             </p>
             <h2 className="mt-1 text-2xl font-black text-slate-950">
               Fresh grains ready for checkout
@@ -389,17 +300,17 @@ export default async function Home() {
           </div>
         )}
 
-        <div className="mt-8 grid gap-4 lg:grid-cols-[1fr_1fr_1.3fr]">
+        <div className="mt-8 grid gap-4 lg:grid-cols-[1fr_1.4fr]">
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-bold uppercase tracking-wide text-green-700">
-              Market timing
+              Smart buying
             </p>
             <h3 className="mt-2 text-xl font-black text-slate-950">
-              Check prices before you buy
+              Plan supply before prices move
             </h3>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Use price insights to know when staples are rising, falling, or
-              entering a better buying window.
+              Use AI price insights, cooperative savings, and escrow to manage
+              large orders with better timing and stronger trust.
             </p>
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
               <Link
@@ -494,42 +405,6 @@ export default async function Home() {
                 </Link>
               </div>
             </div>
-        </div>
-      </section>
-
-      <section className="border-t border-slate-200 bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-10 md:px-6">
-          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-wide text-green-700">
-                Payment and store tools
-              </p>
-              <h2 className="mt-1 text-2xl font-black text-slate-950">
-                Helpful finance features, built around shopping
-              </h2>
-            </div>
-            <Link href="/user/financial-analytics" className="text-sm font-bold text-green-700 hover:text-green-800">
-              View analytics
-            </Link>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {financeProducts.map((item) => (
-              <Link
-                key={item.title}
-                href={item.href}
-                className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-green-200 hover:bg-green-50"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-black text-slate-950">{item.title}</h3>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-                    {item.value}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-slate-600">{item.text}</p>
-              </Link>
-            ))}
-          </div>
         </div>
       </section>
     </main>

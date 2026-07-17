@@ -122,13 +122,25 @@ const getProductStock = (product) => {
 
 async function getProducts() {
   try {
-    const res = await fetch("http://localhost:5000/api/products", {
+    // Use Railway in production and localhost during development
+    const baseUrl =
+      process.env.API_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      "http://localhost:5000/api";
+
+    const res = await fetch(`${baseUrl}/products`, {
       cache: "no-store",
     });
 
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error(
+        `Failed to fetch products: ${res.status} ${res.statusText}`
+      );
+      return [];
+    }
 
     const data = await res.json();
+
     return Array.isArray(data) ? data : [];
   } catch (err) {
     console.error("Failed to fetch products on server:", err);

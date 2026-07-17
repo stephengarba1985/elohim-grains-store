@@ -169,9 +169,12 @@ export default function BulkDashboard() {
     }
   };
 
-  const openInvoice = (orderId) => {
-    window.open(`http://localhost:5000/api/orders/${orderId}/invoice`);
-  };
+ const openInvoice = (orderId) => {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+  window.open(`${baseUrl}/orders/${orderId}/invoice`, "_blank");
+};
 
   const RequestCard = ({ request, action }) => {
     const approvedTotal = Number(request.approved_price || 0) * Number(request.quantity || 0);

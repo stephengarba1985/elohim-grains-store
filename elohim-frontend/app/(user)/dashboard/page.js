@@ -238,9 +238,11 @@ export default function Dashboard() {
   };
 
   const openInvoice = (orderId) => {
-    window.open(`http://localhost:5000/api/orders/${orderId}/invoice`);
-  };
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
+  window.open(`${baseUrl}/orders/${orderId}/invoice`, "_blank");
+};
   const holdEscrow = async (order) => {
     const confirmed = window.confirm(
       `Hold ${formatPrice(order.total_amount)} in escrow for order #${order.id}? Funds will stay protected until delivery is confirmed.`

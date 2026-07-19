@@ -28,8 +28,7 @@ const warehouseRoutes = require("./routes/warehouseRoutes");
 const kycRoutes = require("./routes/kycRoutes");
 const aiAssistantRoutes = require("./routes/aiAssistantRoutes");
 const { router: mobileRoutes } = require("./routes/mobileRoutes");
-
-// ✅ KEEP ONLY THIS (MAIN BULK SYSTEM)
+const userRoutes = require("./routes/userRoutes");
 const bulkRoutes = require("./routes/bulkRoutes");
 
 // ✅ PAYMENT ROUTE
@@ -79,7 +78,8 @@ app.use("/api/warehouse", warehouseRoutes);
 app.use("/api/kyc", kycRoutes);
 app.use("/api/ai-assistant", aiAssistantRoutes);
 app.use("/api/mobile", mobileRoutes);
-
+app.use("/api/users", userRoutes);
+// ✅ KEEP ONLY THIS (MAIN BULK SYSTEM)
 // ✅ SINGLE BULK ENTRY POINT
 app.use("/api/bulk", bulkRoutes);
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { Toaster } from "react-hot-toast";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
@@ -51,6 +52,7 @@ export default function ClientLayout({ children }) {
       {!hidePublicNavbar && <Navbar user={user} logout={logout} />}
       {children}
       {!hidePublicNavbar && <Footer />}
+      <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
     </>
   );
 }

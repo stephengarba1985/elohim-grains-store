@@ -5,26 +5,44 @@ const { verifyToken } = require("../middleware/auth");
 
 const router = express.Router();
 
+const getUserColumns = async () => {
+  const { rows } = await pool.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'users'`
+  );
+
+  return new Set(rows.map((row) => row.column_name));
+};
+
+const getProfileSelection = async () => {
+  const columns = await getUserColumns();
+  const selectColumns = ["id", "name", "email", "phone"];
+
+  if (columns.has("address")) selectColumns.push("address");
+  if (columns.has("avatar")) selectColumns.push("avatar");
+  if (columns.has("is_admin")) selectColumns.push("is_admin");
+
+  return { columns, selectColumns };
+};
+
 /* =========================
    GET PROFILE
 ========================= */
 router.get("/profile", verifyToken, async (req, res) => {
   try {
+    const { columns, selectColumns } = await getProfileSelection();
     const result = await pool.query(
-      `SELECT
-        id,
-        name,
-        email,
-        phone,
-        address,
-        avatar,
-        is_admin
-      FROM users
-      WHERE id = $1`,
+      `SELECT ${selectColumns.join(", ")} FROM users WHERE id = $1`,
       [req.user.id]
     );
 
-    res.json(result.rows[0]);
+    const profile = result.rows[0] || {};
+    if (!columns.has("address")) profile.address = null;
+    if (!columns.has("avatar")) profile.avatar = null;
+
+    res.json(profile);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load profile" });
@@ -37,19 +55,38 @@ router.get("/profile", verifyToken, async (req, res) => {
 router.put("/profile", verifyToken, async (req, res) => {
   try {
     const { name, phone, address } = req.body;
+    const columns = await getUserColumns();
+    const selectColumns = ["id", "name", "email", "phone"];
 
-    const result = await pool.query(
-      `UPDATE users
-       SET
-         name = $1,
-         phone = $2,
-         address = $3
-       WHERE id = $4
-       RETURNING id,name,email,phone,address,avatar,is_admin`,
-      [name, phone, address, req.user.id]
-    );
+    if (columns.has("address")) selectColumns.push("address");
+    if (columns.has("avatar")) selectColumns.push("avatar");
+    if (columns.has("is_admin")) selectColumns.push("is_admin");
 
-    res.json(result.rows[0]);
+    const payload = {};
+    if (typeof name !== "undefined") payload.name = name;
+    if (typeof phone !== "undefined") payload.phone = phone;
+    if (columns.has("address")) payload.address = address ?? null;
+
+    if (Object.keys(payload).length === 0) {
+      return res.status(400).json({ error: "No profile fields provided" });
+    }
+
+    const setClauses = Object.keys(payload).map((key, index) => `${key} = $${index + 1}`);
+    const values = Object.values(payload);
+    values.push(req.user.id);
+
+    const sql = `UPDATE users
+       SET ${setClauses.join(", ")}
+       WHERE id = $${values.length}
+       RETURNING ${selectColumns.join(", ")}`;
+
+    const result = await pool.query(sql, values);
+
+    const profile = result.rows[0] || {};
+    if (!columns.has("address")) profile.address = null;
+    if (!columns.has("avatar")) profile.avatar = null;
+
+    res.json(profile);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Profile update failed" });

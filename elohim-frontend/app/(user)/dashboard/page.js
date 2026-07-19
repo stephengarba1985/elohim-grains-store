@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
+import UserProfileCard from "@/components/UserProfileCard";
 
 const steps = ["Placed", "Processing", "Shipping", "Delivered"];
 
@@ -142,18 +143,6 @@ const getStatusStep = (status) => {
 export default function Dashboard() {
   const [orders, setOrders] = useState([]);
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState({
-  name: "",
-  email: "",
-  phone: "",
-  address: "",
-});
-
-const [password, setPassword] = useState({
-  currentPassword: "",
-  newPassword: "",
-  confirmPassword: "",
-});
   const [loading, setLoading] = useState(false);
   const [reorderingId, setReorderingId] = useState(null);
 
@@ -169,45 +158,6 @@ const [password, setPassword] = useState({
       const parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
       fetchOrders(parsedUser.id);
-      fetchProfile();
-      const fetchProfile = async () => {
-  try {
-    const res = await API.get("/users/profile");
-    setProfile(res.data);
-  } catch (err) {
-    console.error(err);
-    toast.error("Failed to load profile");
-  }
-};
-const saveProfile = async () => {
-  try {
-    await API.put("/users/profile", profile);
-
-    toast.success("Profile updated");
-  } catch (err) {
-    toast.error("Update failed");
-  }
-};
-const changePassword = async () => {
-  if (password.newPassword !== password.confirmPassword) {
-    return toast.error("Passwords do not match");
-  }
-
-  try {
-    await API.put("/users/change-password", password);
-
-    toast.success("Password updated");
-
-    setPassword({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    });
-
-  } catch (err) {
-    toast.error(err.response?.data?.error || "Failed");
-  }
-};
     } catch (err) {
       console.error(err);
       toast.error("Failed to read user session");
@@ -314,77 +264,95 @@ const changePassword = async () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-green-700 uppercase tracking-wide">
-              Dashboard
-            </p>
-            <h1 className="text-3xl font-bold text-slate-950 mt-1">
-              Welcome{user?.name ? `, ${user.name}` : ""}
-            </h1>
-            <p className="text-slate-600 mt-2 max-w-2xl">
-              Track orders, manage grain plans, review bulk deals, and keep your
-              recurring deliveries organized from one place.
-            </p>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(34,197,94,0.08),_transparent_35%),linear-gradient(180deg,_#f8fafc_0%,_#f1f5f9_100%)] p-4 md:p-6">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm ring-1 ring-slate-100 backdrop-blur">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex-1">
+              <div className="inline-flex items-center rounded-full bg-green-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-green-700">
+                Dashboard
+              </div>
+              <h1 className="mt-3 text-3xl font-bold text-slate-950">
+                Welcome{user?.name ? `, ${user.name}` : ""}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                Track orders, manage grain plans, review bulk deals, and keep your
+                recurring deliveries organized from one place.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                onClick={() => fetchOrders(user?.id)}
+                disabled={loading}
+                className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+              >
+                {loading ? "Refreshing..." : "Refresh"}
+              </button>
+              <Link
+                href="/"
+                className="rounded-xl bg-green-700 px-5 py-3 text-center text-sm font-semibold text-white shadow-sm transition hover:bg-green-800"
+              >
+                Browse Products
+              </Link>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              onClick={() => fetchOrders(user?.id)}
-              disabled={loading}
-              className="border border-slate-300 text-slate-700 hover:bg-white disabled:text-slate-400 px-5 py-3 rounded-lg font-semibold"
-            >
-              {loading ? "Refreshing..." : "Refresh"}
-            </button>
-            <Link
-              href="/"
-              className="bg-green-700 hover:bg-green-800 text-white px-5 py-3 rounded-lg font-semibold shadow-sm text-center"
-            >
-              Browse Products
-            </Link>
+          <div className="mt-6 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    Total Orders
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-slate-950">{orders.length}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    Active Orders
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-green-700">{summary.active}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    Total Spent
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-slate-950">
+                    {formatPrice(summary.spent)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    Special Orders
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-amber-600">
+                    {summary.bulk + summary.subscription + summary.bnpl}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+              <UserProfileCard />
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 shadow-sm">
-            <p className="text-xs text-slate-500">Total Orders</p>
-            <p className="text-xl font-bold text-slate-950">{orders.length}</p>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 shadow-sm">
-            <p className="text-xs text-slate-500">Active Orders</p>
-            <p className="text-xl font-bold text-green-700">{summary.active}</p>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 shadow-sm">
-            <p className="text-xs text-slate-500">Total Spent</p>
-            <p className="text-xl font-bold text-slate-950">
-              {formatPrice(summary.spent)}
-            </p>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 shadow-sm">
-            <p className="text-xs text-slate-500">Special Orders</p>
-            <p className="text-xl font-bold text-amber-600">
-                {summary.bulk + summary.subscription + summary.bnpl}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {quickActions.map((item) => (
             <div
               key={item.label}
-              className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm flex flex-col"
+              className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
-              <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-green-700">
                 {item.label}
               </p>
-              <h2 className="text-lg font-bold text-slate-950 mt-1 flex-1">
+              <h2 className="mt-2 flex-1 text-lg font-bold text-slate-950">
                 {item.title}
               </h2>
               <Link
                 href={item.href}
-                className="mt-5 border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-3 rounded-lg font-semibold text-center"
+                className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-white"
               >
                 {item.action}
               </Link>
@@ -392,34 +360,37 @@ const changePassword = async () => {
           ))}
         </div>
 
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-bold text-slate-950">Recent Orders</h2>
-            <span className="text-sm text-slate-500">{orders.length} orders</span>
+        <section className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm ring-1 ring-slate-100 backdrop-blur">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-slate-950">Recent Orders</h2>
+              <p className="mt-1 text-sm text-slate-500">Your latest activity at a glance.</p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600">
+              {orders.length} orders
+            </span>
           </div>
 
           {loading && orders.length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-lg p-8 text-center">
-              <p className="text-lg font-semibold text-slate-950">
-                Loading orders...
-              </p>
-              <p className="text-slate-500 mt-2">Fetching your order history.</p>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center">
+              <p className="text-lg font-semibold text-slate-950">Loading orders...</p>
+              <p className="mt-2 text-sm text-slate-500">Fetching your order history.</p>
             </div>
           ) : orders.length === 0 ? (
-            <div className="bg-white border border-dashed border-slate-300 rounded-lg p-8 text-center">
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
               <p className="text-lg font-semibold text-slate-950">No orders yet</p>
-              <p className="text-slate-500 mt-2">
+              <p className="mt-2 text-sm text-slate-500">
                 Start shopping and your order history will appear here.
               </p>
               <Link
                 href="/"
-                className="inline-flex mt-5 bg-green-700 hover:bg-green-800 text-white px-5 py-3 rounded-lg font-semibold shadow-sm"
+                className="mt-5 inline-flex rounded-xl bg-green-700 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-800"
               >
                 Start Shopping
               </Link>
             </div>
           ) : (
-            <div className="grid lg:grid-cols-2 gap-4">
+            <div className="grid gap-4 lg:grid-cols-2">
               {orders.map((order) => {
                 const status = normalizeStatus(order.status);
                 const step = getStatusStep(order.status);
@@ -429,11 +400,11 @@ const changePassword = async () => {
                 return (
                   <div
                     key={order.id}
-                    className="bg-white border border-slate-200 p-5 rounded-lg shadow-sm"
+                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-green-700">
                           {order.is_bulk
                             ? "Bulk order"
                             : order.is_escrow
@@ -444,16 +415,16 @@ const changePassword = async () => {
                               ? "Subscription order"
                               : "Order"}
                         </p>
-                        <h3 className="text-lg font-bold text-slate-950 mt-1">
+                        <h3 className="mt-1 text-lg font-bold text-slate-950">
                           Order #{order.id}
                         </h3>
-                        <p className="text-sm text-slate-500 mt-1">
+                        <p className="mt-1 text-sm text-slate-500">
                           {formatDate(order.created_at)}
                         </p>
                       </div>
 
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${statusClass}`}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}
                       >
                         {formatStatus(order.status)}
                       </span>
@@ -475,7 +446,7 @@ const changePassword = async () => {
                     </div>
 
                     <div className="mt-5">
-                      <div className="flex justify-between items-start gap-2">
+                      <div className="flex items-start justify-between gap-2">
                         {steps.map((label, index) => (
                           <div key={label} className="flex-1 text-center">
                             <div
@@ -483,17 +454,17 @@ const changePassword = async () => {
                                 index <= step ? "bg-green-700" : "bg-slate-200"
                               }`}
                             />
-                            <p className="text-xs text-slate-500 mt-2">{label}</p>
+                            <p className="mt-2 text-[11px] text-slate-500">{label}</p>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    <div className="mt-5 grid sm:grid-cols-4 gap-2">
+                    <div className="mt-5 grid gap-2 sm:grid-cols-4">
                       {!order.is_escrow && (
                         <button
                           onClick={() => holdEscrow(order)}
-                          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-3 rounded-lg font-semibold"
+                          className="rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-700"
                         >
                           Use Escrow
                         </button>
@@ -502,14 +473,14 @@ const changePassword = async () => {
                       {status !== "delivered" ? (
                         <Link
                           href={`/track/${order.id}`}
-                          className="bg-green-700 hover:bg-green-800 text-white px-4 py-3 rounded-lg font-semibold text-center"
+                          className="rounded-xl bg-green-700 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-green-800"
                         >
                           Track
                         </Link>
                       ) : (
                         <button
                           disabled
-                          className="bg-slate-200 text-slate-500 px-4 py-3 rounded-lg font-semibold"
+                          className="rounded-xl bg-slate-200 px-4 py-3 text-sm font-semibold text-slate-500"
                         >
                           Delivered
                         </button>
@@ -518,14 +489,14 @@ const changePassword = async () => {
                       <button
                         onClick={() => reorder(order)}
                         disabled={reorderingId === order.id}
-                        className="bg-slate-950 hover:bg-slate-800 disabled:bg-slate-300 text-white px-4 py-3 rounded-lg font-semibold"
+                        className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                       >
                         {reorderingId === order.id ? "Adding..." : "Reorder"}
                       </button>
 
                       <button
                         onClick={() => openInvoice(order.id)}
-                        className="border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-3 rounded-lg font-semibold"
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
                       >
                         Invoice
                       </button>

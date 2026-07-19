@@ -142,6 +142,18 @@ const getStatusStep = (status) => {
 export default function Dashboard() {
   const [orders, setOrders] = useState([]);
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState({
+  name: "",
+  email: "",
+  phone: "",
+  address: "",
+});
+
+const [password, setPassword] = useState({
+  currentPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+});
   const [loading, setLoading] = useState(false);
   const [reorderingId, setReorderingId] = useState(null);
 
@@ -157,6 +169,45 @@ export default function Dashboard() {
       const parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
       fetchOrders(parsedUser.id);
+      fetchProfile();
+      const fetchProfile = async () => {
+  try {
+    const res = await API.get("/users/profile");
+    setProfile(res.data);
+  } catch (err) {
+    console.error(err);
+    toast.error("Failed to load profile");
+  }
+};
+const saveProfile = async () => {
+  try {
+    await API.put("/users/profile", profile);
+
+    toast.success("Profile updated");
+  } catch (err) {
+    toast.error("Update failed");
+  }
+};
+const changePassword = async () => {
+  if (password.newPassword !== password.confirmPassword) {
+    return toast.error("Passwords do not match");
+  }
+
+  try {
+    await API.put("/users/change-password", password);
+
+    toast.success("Password updated");
+
+    setPassword({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+
+  } catch (err) {
+    toast.error(err.response?.data?.error || "Failed");
+  }
+};
     } catch (err) {
       console.error(err);
       toast.error("Failed to read user session");

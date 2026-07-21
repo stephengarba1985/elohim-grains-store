@@ -1,14 +1,18 @@
 const nodemailer = require("nodemailer");
 
-    // Debug - remove after testing
+// Debug - remove after testing
 console.log("EMAIL_HOST =", process.env.EMAIL_HOST);
 console.log("EMAIL_PORT =", process.env.EMAIL_PORT);
 console.log("EMAIL_USER =", process.env.EMAIL_USER);
 
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: Number(process.env.EMAIL_PORT),
-  secure: false,
+  host: "smtp.gmail.com",
+  port: Number(process.env.EMAIL_PORT) || 587,
+  secure: false, // true only if using port 465
+  family: 4, // Prefer IPv4
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -16,42 +20,62 @@ const transporter = nodemailer.createTransport({
 });
 
 const sendPasswordResetEmail = async (email, resetLink) => {
-  await transporter.sendMail({
-    from: `"Elohim Grains Store" <${process.env.EMAIL_USER}>`,
-    to: email,
-    subject: "Reset Your Elohim Grains Password",
-    html: `
-      <h2>Password Reset Request</h2>
+  try {
+    console.log("==================================");
+    console.log("Sending reset email...");
+    console.log("To:", email);
+    console.log("From:", process.env.EMAIL_USER);
+    console.log("Link:", resetLink);
 
-      <p>You requested to reset your password.</p>
+    const info = await transporter.sendMail({
+      from: `"Elohim Grains Store" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Reset Your Elohim Grains Password",
+      html: `
+        <h2>Password Reset Request</h2>
 
-      <p>Click the button below to create a new password:</p>
+        <p>You requested to reset your password.</p>
 
-      <p>
-        <a href="${resetLink}"
-           style="
-             background:#15803d;
-             color:white;
-             padding:12px 20px;
-             text-decoration:none;
-             border-radius:6px;
-             display:inline-block;
-           ">
-           Reset Password
-        </a>
-      </p>
+        <p>Click the button below to create a new password:</p>
 
-      <p>If the button doesn't work, copy this link:</p>
+        <p>
+          <a href="${resetLink}"
+             style="
+               background:#15803d;
+               color:white;
+               padding:12px 20px;
+               text-decoration:none;
+               border-radius:6px;
+               display:inline-block;
+             ">
+             Reset Password
+          </a>
+        </p>
 
-      <p>${resetLink}</p>
+        <p>If the button doesn't work, copy this link:</p>
 
-      <p>This link expires in 1 hour.</p>
+        <p>${resetLink}</p>
 
-      <hr/>
+        <p>This link expires in 1 hour.</p>
 
-      <small>Elohim Grains Store</small>
-    `,
-  });
+        <hr/>
+
+        <small>Elohim Grains Store</small>
+      `,
+    });
+
+    console.log("Email sent successfully!");
+    console.log("Message ID:", info.messageId);
+    console.log("==================================");
+
+    return info;
+  } catch (err) {
+    console.error("==================================");
+    console.error("EMAIL SEND FAILED");
+    console.error(err);
+    console.error("==================================");
+    throw err;
+  }
 };
 
 module.exports = {

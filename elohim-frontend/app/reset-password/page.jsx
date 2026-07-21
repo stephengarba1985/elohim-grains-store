@@ -1,12 +1,11 @@
 "use client";
 
+import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState } from "react";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
 
-export default function ResetPasswordPage() {
-
+function ResetPasswordForm() {
   const params = useSearchParams();
   const router = useRouter();
 
@@ -14,11 +13,9 @@ export default function ResetPasswordPage() {
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
-
     e.preventDefault();
 
     if (password !== confirmPassword) {
@@ -26,7 +23,6 @@ export default function ResetPasswordPage() {
     }
 
     try {
-
       setLoading(true);
 
       await API.post("/users/reset-password", {
@@ -35,15 +31,9 @@ export default function ResetPasswordPage() {
       });
 
       toast.success("Password reset successfully");
-
       router.push("/login");
-
     } catch (err) {
-
-      toast.error(
-        err.response?.data?.error || "Reset failed"
-      );
-
+      toast.error(err.response?.data?.error || "Reset failed");
     } finally {
       setLoading(false);
     }
@@ -51,24 +41,18 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100 p-6">
-
       <div className="bg-white w-full max-w-md rounded-xl shadow-lg p-8">
-
         <h1 className="text-2xl font-bold text-center mb-6">
           Reset Password
         </h1>
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4"
-        >
-
+        <form onSubmit={handleSubmit} className="space-y-4">
           <input
             type="password"
             placeholder="New Password"
             required
             value={password}
-            onChange={(e)=>setPassword(e.target.value)}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full border rounded-lg p-3"
           />
 
@@ -77,7 +61,7 @@ export default function ResetPasswordPage() {
             placeholder="Confirm Password"
             required
             value={confirmPassword}
-            onChange={(e)=>setConfirmPassword(e.target.value)}
+            onChange={(e) => setConfirmPassword(e.target.value)}
             className="w-full border rounded-lg p-3"
           />
 
@@ -87,11 +71,16 @@ export default function ResetPasswordPage() {
           >
             {loading ? "Updating..." : "Update Password"}
           </button>
-
         </form>
-
       </div>
-
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }

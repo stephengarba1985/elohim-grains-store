@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import API from "../../lib/api";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -93,16 +94,27 @@ export default function AuthPage() {
           />
 
           <input
-            type="password"
-            placeholder="Password"
-            className="border p-2 w-full rounded"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
+  type="password"
+  placeholder="Password"
+  className="border p-2 w-full rounded"
+  value={form.password}
+  onChange={(e) => setForm({ ...form, password: e.target.value })}
+/>
 
-          <button className="bg-green-600 hover:bg-green-700 text-white w-full py-2 rounded">
-            {isLogin ? "Login" : "Register"}
-          </button>
+{isLogin && (
+  <div className="flex justify-end">
+    <Link
+      href="/forgot-password"
+      className="text-sm text-green-600 hover:underline"
+    >
+      Forgot Password?
+    </Link>
+  </div>
+)}
+
+<button className="bg-green-600 hover:bg-green-700 text-white w-full py-2 rounded">
+  {isLogin ? "Login" : "Register"}
+</button>
         </form>
 
         <p className="text-center mt-4 text-sm">

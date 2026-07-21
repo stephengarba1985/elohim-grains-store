@@ -1,5 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
+const { sendPasswordResetEmail } = require("../utils/mail");
 const pool = require("../config/db");
 const { verifyToken } = require("../middleware/auth");
 
@@ -131,6 +133,112 @@ router.put("/change-password", verifyToken, async (req, res) => {
     console.error(err);
     res.status(500).json({
       error: "Password update failed",
+    });
+  }
+});
+/* =========================
+   FORGOT PASSWORD
+========================= */
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    console.log("1. Request received");
+
+    const result = await pool.query(
+      "SELECT id, email FROM users WHERE email=$1",
+      [email]
+    );
+
+    console.log("2. User lookup OK");
+
+    if (result.rows.length === 0) {
+      return res.json({ message: "Done" });
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiry = new Date(Date.now() + 3600000);
+
+    console.log("3. Token created");
+
+    await pool.query(
+      `UPDATE users
+       SET reset_token=$1,
+           reset_token_expiry=$2
+       WHERE email=$3`,
+      [token, expiry, email]
+    );
+
+    console.log("4. Database updated");
+
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+    console.log("5. Sending email");
+
+    await sendPasswordResetEmail(email, resetLink);
+
+    console.log("6. Email sent");
+
+    res.json({ message: "Success" });
+
+  } catch (err) {
+    console.error("FULL ERROR:");
+    console.error(err);
+    console.error(err.message);
+    console.error(err.stack);
+
+    res.status(500).json({
+      error: err.message,
+    });
+  }
+});
+/* =========================
+   RESET PASSWORD
+========================= */
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({
+        error: "Token and password are required",
+      });
+    }
+
+    const result = await pool.query(
+      `SELECT id
+       FROM users
+       WHERE reset_token=$1
+       AND reset_token_expiry > NOW()`,
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({
+        error: "Invalid or expired reset token",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await pool.query(
+      `UPDATE users
+       SET password=$1,
+           reset_token=NULL,
+           reset_token_expiry=NULL
+       WHERE id=$2`,
+      [hashedPassword, result.rows[0].id]
+    );
+
+    res.json({
+      message: "Password reset successfully",
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      error: "Password reset failed",
     });
   }
 });

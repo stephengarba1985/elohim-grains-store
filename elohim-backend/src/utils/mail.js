@@ -7,16 +7,21 @@ console.log("EMAIL_USER =", process.env.EMAIL_USER);
 
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: Number(process.env.EMAIL_PORT) || 587,
-  secure: false, // true only if using port 465
-  family: 4, // Prefer IPv4
-  connectionTimeout: 30000,
-  greetingTimeout: 30000,
-  socketTimeout: 30000,
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+});
+
+transporter.verify(function (error, success) {
+  if (error) {
+    console.error("SMTP VERIFY FAILED:");
+    console.error(error);
+  } else {
+    console.log("SMTP SERVER IS READY");
+  }
 });
 
 const sendPasswordResetEmail = async (email, resetLink) => {

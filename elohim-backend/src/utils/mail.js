@@ -15,6 +15,15 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+const dns = require("dns");
+
+dns.lookup(process.env.EMAIL_HOST, (err, address, family) => {
+  if (err) {
+    console.error("DNS lookup failed:", err);
+  } else {
+    console.log(`SMTP resolves to ${address} (IPv${family})`);
+  }
+});
 transporter.verify(function (error, success) {
   if (error) {
     console.error("SMTP VERIFY FAILED:");

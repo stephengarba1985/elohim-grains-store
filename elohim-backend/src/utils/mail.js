@@ -17,11 +17,11 @@ const transporter = nodemailer.createTransport({
 
 const dns = require("dns");
 
-dns.lookup(process.env.EMAIL_HOST, (err, address, family) => {
+dns.resolve4(process.env.EMAIL_HOST, (err, addresses) => {
   if (err) {
-    console.error("DNS lookup failed:", err);
+    console.error("DNS resolve4 failed:", err);
   } else {
-    console.log(`SMTP resolves to ${address} (IPv${family})`);
+    console.log("SMTP IPv4 addresses:", addresses);
   }
 });
 transporter.verify(function (error, success) {

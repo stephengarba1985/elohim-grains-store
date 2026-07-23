@@ -1,94 +1,58 @@
-const nodemailer = require("nodemailer");
+const brevo = require("@getbrevo/brevo");
 
-// Debug - remove after testing
-console.log("EMAIL_HOST =", process.env.EMAIL_HOST);
-console.log("EMAIL_PORT =", process.env.EMAIL_PORT);
-console.log("EMAIL_USER =", process.env.EMAIL_USER);
+const apiInstance = new brevo.TransactionalEmailsApi();
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: Number(process.env.EMAIL_PORT),
-  secure: false, // STARTTLS on port 587
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-const dns = require("dns");
-
-dns.resolve4(process.env.EMAIL_HOST, (err, addresses) => {
-  if (err) {
-    console.error("DNS resolve4 failed:", err);
-  } else {
-    console.log("SMTP IPv4 addresses:", addresses);
-  }
-});
-transporter.verify(function (error, success) {
-  if (error) {
-    console.error("SMTP VERIFY FAILED:");
-    console.error(error);
-  } else {
-    console.log("SMTP SERVER IS READY");
-  }
-});
+apiInstance.setApiKey(
+  brevo.TransactionalEmailsApiApiKeys.apiKey,
+  process.env.BREVO_API_KEY
+);
 
 const sendPasswordResetEmail = async (email, resetLink) => {
   try {
-    console.log("==================================");
-    console.log("Sending reset email...");
-    console.log("To:", email);
-    console.log("From:", process.env.EMAIL_USER);
-    console.log("Link:", resetLink);
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
 
-    const info = await transporter.sendMail({
-      from: `"Elohim Grains Store" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "Reset Your Elohim Grains Password",
-      html: `
-        <h2>Password Reset Request</h2>
+    sendSmtpEmail.subject = "Reset Your Elohim Grains Password";
 
-        <p>You requested to reset your password.</p>
+    sendSmtpEmail.sender = {
+      name: "Elohim Grains Store",
+      email: process.env.EMAIL_FROM,
+    };
 
-        <p>Click the button below to create a new password:</p>
+    sendSmtpEmail.to = [
+      {
+        email,
+      },
+    ];
 
-        <p>
-          <a href="${resetLink}"
-             style="
-               background:#15803d;
-               color:white;
-               padding:12px 20px;
-               text-decoration:none;
-               border-radius:6px;
-               display:inline-block;
-             ">
-             Reset Password
-          </a>
-        </p>
+    sendSmtpEmail.htmlContent = `
+      <h2>Password Reset Request</h2>
 
-        <p>If the button doesn't work, copy this link:</p>
+      <p>You requested to reset your password.</p>
 
-        <p>${resetLink}</p>
+      <p>
+        <a href="${resetLink}"
+           style="background:#15803d;color:#fff;padding:12px 20px;text-decoration:none;border-radius:6px;">
+          Reset Password
+        </a>
+      </p>
 
-        <p>This link expires in 1 hour.</p>
+      <p>Or copy this link:</p>
 
-        <hr/>
+      <p>${resetLink}</p>
 
-        <small>Elohim Grains Store</small>
-      `,
-    });
+      <p>This link expires in 1 hour.</p>
+    `;
 
-    console.log("Email sent successfully!");
-    console.log("Message ID:", info.messageId);
-    console.log("==================================");
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
 
-    return info;
-  } catch (err) {
-    console.error("==================================");
-    console.error("EMAIL SEND FAILED");
-    console.error(err);
-    console.error("==================================");
-    throw err;
+    console.log("Email sent successfully");
+    console.log(result.body);
+
+    return result;
+  } catch (error) {
+    console.error("BREVO API ERROR");
+    console.error(error);
+    throw error;
   }
 };
 

@@ -1,12 +1,10 @@
 const axios = require("axios");
 
+/* =========================
+   PASSWORD RESET EMAIL
+========================= */
 const sendPasswordResetEmail = async (email, resetLink) => {
   try {
-    console.log("==================================");
-    console.log("Sending reset email...");
-    console.log("To:", email);
-    console.log("From:", process.env.EMAIL_FROM);
-
     const response = await axios.post(
       "https://api.brevo.com/v3/smtp/email",
       {
@@ -14,11 +12,7 @@ const sendPasswordResetEmail = async (email, resetLink) => {
           name: "Elohim Grains Store",
           email: process.env.EMAIL_FROM,
         },
-        to: [
-          {
-            email,
-          },
-        ],
+        to: [{ email }],
         subject: "Reset Your Elohim Grains Password",
         htmlContent: `
           <h2>Password Reset Request</h2>
@@ -29,13 +23,13 @@ const sendPasswordResetEmail = async (email, resetLink) => {
             <a href="${resetLink}"
                style="
                  background:#15803d;
-                 color:#ffffff;
+                 color:white;
                  padding:12px 20px;
                  text-decoration:none;
                  border-radius:6px;
                  display:inline-block;
                ">
-              Reset Password
+               Reset Password
             </a>
           </p>
 
@@ -54,29 +48,87 @@ const sendPasswordResetEmail = async (email, resetLink) => {
         headers: {
           "api-key": process.env.BREVO_API_KEY,
           "Content-Type": "application/json",
-          Accept: "application/json",
         },
       }
     );
 
-    console.log("==================================");
-    console.log("Email sent successfully!");
-    console.log(response.data);
-    console.log("==================================");
-
+    console.log("Password reset email sent.");
     return response.data;
   } catch (error) {
-    console.error("==================================");
-    console.error("BREVO API ERROR");
+    console.error("Password reset email failed.");
 
     if (error.response) {
-      console.error(error.response.status);
       console.error(error.response.data);
     } else {
       console.error(error.message);
     }
 
-    console.error("==================================");
+    throw error;
+  }
+};
+
+/* =========================
+   EMAIL VERIFICATION
+========================= */
+const sendVerificationEmail = async (email, verifyLink) => {
+  try {
+    const response = await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      {
+        sender: {
+          name: "Elohim Grains Store",
+          email: process.env.EMAIL_FROM,
+        },
+        to: [{ email }],
+        subject: "Verify Your Elohim Grains Account",
+        htmlContent: `
+          <h2>Welcome to Elohim Grains Store 🎉</h2>
+
+          <p>Thank you for creating an account.</p>
+
+          <p>Please verify your email address by clicking the button below.</p>
+
+          <p>
+            <a href="${verifyLink}"
+               style="
+                 background:#16a34a;
+                 color:white;
+                 padding:12px 20px;
+                 text-decoration:none;
+                 border-radius:6px;
+                 display:inline-block;
+               ">
+               Verify Email
+            </a>
+          </p>
+
+          <p>If the button doesn't work, copy this link:</p>
+
+          <p>${verifyLink}</p>
+
+          <hr>
+
+          <small>Elohim Grains Store</small>
+        `,
+      },
+      {
+        headers: {
+          "api-key": process.env.BREVO_API_KEY,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("Verification email sent.");
+    return response.data;
+  } catch (error) {
+    console.error("Verification email failed.");
+
+    if (error.response) {
+      console.error(error.response.data);
+    } else {
+      console.error(error.message);
+    }
 
     throw error;
   }
@@ -84,4 +136,5 @@ const sendPasswordResetEmail = async (email, resetLink) => {
 
 module.exports = {
   sendPasswordResetEmail,
+  sendVerificationEmail,
 };

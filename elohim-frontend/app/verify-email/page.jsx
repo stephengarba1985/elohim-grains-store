@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import API from "@/lib/api";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -12,7 +12,6 @@ export default function VerifyEmailPage() {
   const [message, setMessage] = useState("Verifying your email...");
   const [verified, setVerified] = useState(false);
 
-  // Verify email
   useEffect(() => {
     const verifyEmail = async () => {
       const token = searchParams.get("token");
@@ -43,7 +42,6 @@ export default function VerifyEmailPage() {
     verifyEmail();
   }, [searchParams]);
 
-  // Auto redirect after successful verification
   useEffect(() => {
     if (!verified) return;
 
@@ -128,5 +126,27 @@ export default function VerifyEmailPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            maxWidth: "500px",
+            margin: "80px auto",
+            padding: "40px",
+            textAlign: "center",
+          }}
+        >
+          <h2>Loading...</h2>
+          <p>Please wait while we prepare your verification page.</p>
+        </div>
+      }
+    >
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

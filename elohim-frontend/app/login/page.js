@@ -8,7 +8,10 @@ import toast from "react-hot-toast";
 
 export default function AuthPage() {
   const router = useRouter();
+
   const [isLogin, setIsLogin] = useState(true);
+  const [registrationComplete, setRegistrationComplete] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   const [form, setForm] = useState({
     name: "",
@@ -42,14 +45,78 @@ export default function AuthPage() {
       } else {
         await API.post("/auth/register", form);
 
-        toast.success("Registration successful");
-        setIsLogin(true);
+        toast.success("Verification email sent!");
+
+        setRegisteredEmail(form.email);
+        setRegistrationComplete(true);
+
+        setForm({
+          name: "",
+          email: "",
+          phone: "",
+          password: "",
+          role: "retail",
+        });
       }
     } catch (err) {
       console.error(err);
-      toast.error(isLogin ? "Login failed" : "Registration failed");
+
+      toast.error(
+        err.response?.data?.error ||
+          (isLogin ? "Login failed" : "Registration failed")
+      );
     }
   };
+
+  // Success screen after registration
+  if (registrationComplete) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="text-6xl mb-4">📧</div>
+
+          <h1 className="text-3xl font-bold text-green-700 mb-4">
+            Verify Your Email
+          </h1>
+
+          <p className="text-gray-700 mb-4">
+            Your account has been created successfully.
+          </p>
+
+          <p className="text-gray-700">
+            A verification email has been sent to:
+          </p>
+
+          <p className="font-bold text-lg text-green-700 mt-2 mb-4 break-all">
+            {registeredEmail}
+          </p>
+
+          <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 text-left mb-6">
+            <p className="font-semibold text-yellow-700 mb-2">
+              Next Steps:
+            </p>
+
+            <ul className="list-disc list-inside text-sm text-gray-700 space-y-2">
+              <li>Open your email inbox.</li>
+              <li>Click the verification link.</li>
+              <li>If you can't find the email, check your Spam/Junk folder.</li>
+              <li>After verifying your email, return here and log in.</li>
+            </ul>
+          </div>
+
+          <button
+            onClick={() => {
+              setRegistrationComplete(false);
+              setIsLogin(true);
+            }}
+            className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -65,20 +132,28 @@ export default function AuthPage() {
                 placeholder="Name"
                 className="border p-2 w-full rounded"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, name: e.target.value })
+                }
+                required
               />
 
               <input
                 placeholder="Phone"
                 className="border p-2 w-full rounded"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, phone: e.target.value })
+                }
+                required
               />
 
               <select
                 className="border p-2 w-full rounded"
                 value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, role: e.target.value })
+                }
               >
                 <option value="retail">Retail User</option>
                 <option value="bulk">Bulk Buyer</option>
@@ -87,34 +162,41 @@ export default function AuthPage() {
           )}
 
           <input
+            type="email"
             placeholder="Email"
             className="border p-2 w-full rounded"
             value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            onChange={(e) =>
+              setForm({ ...form, email: e.target.value })
+            }
+            required
           />
 
           <input
-  type="password"
-  placeholder="Password"
-  className="border p-2 w-full rounded"
-  value={form.password}
-  onChange={(e) => setForm({ ...form, password: e.target.value })}
-/>
+            type="password"
+            placeholder="Password"
+            className="border p-2 w-full rounded"
+            value={form.password}
+            onChange={(e) =>
+              setForm({ ...form, password: e.target.value })
+            }
+            required
+          />
 
-{isLogin && (
-  <div className="flex justify-end">
-    <Link
-      href="/forgot-password"
-      className="text-sm text-green-600 hover:underline"
-    >
-      Forgot Password?
-    </Link>
-  </div>
-)}
+          {isLogin && (
+            <div className="flex justify-end">
+              <Link
+                href="/forgot-password"
+                className="text-sm text-green-600 hover:underline"
+              >
+                Forgot Password?
+              </Link>
+            </div>
+          )}
 
-<button className="bg-green-600 hover:bg-green-700 text-white w-full py-2 rounded">
-  {isLogin ? "Login" : "Register"}
-</button>
+          <button className="bg-green-600 hover:bg-green-700 text-white w-full py-2 rounded">
+            {isLogin ? "Login" : "Register"}
+          </button>
         </form>
 
         <p className="text-center mt-4 text-sm">

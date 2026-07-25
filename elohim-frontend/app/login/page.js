@@ -184,15 +184,22 @@ export default function AuthPage() {
           />
 
           {isLogin && (
-            <div className="flex justify-end">
-              <Link
-                href="/forgot-password"
-                className="text-sm text-green-600 hover:underline"
-              >
-                Forgot Password?
-              </Link>
-            </div>
-          )}
+  <div className="flex flex-col items-end gap-2">
+    <Link
+      href="/forgot-password"
+      className="text-sm text-green-600 hover:underline"
+    >
+      Forgot Password?
+    </Link>
+
+    <Link
+      href="/resend-verification"
+      className="text-sm text-blue-600 hover:underline"
+    >
+      Didn't receive the verification email?
+    </Link>
+  </div>
+)}
 
           <button className="bg-green-600 hover:bg-green-700 text-white w-full py-2 rounded">
             {isLogin ? "Login" : "Register"}

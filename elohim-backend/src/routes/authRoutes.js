@@ -145,6 +145,75 @@ router.get("/verify-email", async (req, res) => {
 });
 
 /* =========================
+   RESEND VERIFICATION EMAIL
+========================= */
+router.post("/resend-verification", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        error: "Email is required.",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const result = await pool.query(
+      `
+      SELECT id, email, email_verified
+      FROM users
+      WHERE LOWER(email) = LOWER($1)
+      `,
+      [normalizedEmail]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "No account found with this email.",
+      });
+    }
+
+    const user = result.rows[0];
+
+    if (user.email_verified) {
+      return res.status(400).json({
+        error: "This email has already been verified.",
+      });
+    }
+
+    // Generate a new verification token
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+
+    await pool.query(
+      `
+      UPDATE users
+      SET verification_token = $1
+      WHERE id = $2
+      `,
+      [verificationToken, user.id]
+    );
+
+    const verifyLink =
+      `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+
+    await sendVerificationEmail(user.email, verifyLink);
+
+    return res.json({
+      success: true,
+      message: "A new verification email has been sent.",
+    });
+
+  } catch (err) {
+    console.error("RESEND VERIFICATION ERROR:", err);
+
+    return res.status(500).json({
+      error: "Unable to resend verification email.",
+    });
+  }
+});
+
+/* =========================
    LOGIN
 ========================= */
 router.post("/login", async (req, res) => {

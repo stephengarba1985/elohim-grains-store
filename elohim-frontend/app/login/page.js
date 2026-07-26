@@ -26,6 +26,11 @@ export default function AuthPage() {
 
     try {
       if (isLogin) {
+        // Clear any previous session
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.dispatchEvent(new Event("auth:changed"));
+
         const res = await API.post("/auth/login", {
           email: form.email,
           password: form.password,
@@ -60,6 +65,10 @@ export default function AuthPage() {
       }
     } catch (err) {
       console.error(err);
+
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.dispatchEvent(new Event("auth:changed"));
 
       toast.error(
         err.response?.data?.error ||

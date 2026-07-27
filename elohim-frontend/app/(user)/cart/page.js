@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
 import { useCartStore } from "@/lib/cartStore";
+import { PaystackPop } from "@paystack/inline-js";
 
 export default function CartPage() {
   const {
@@ -162,6 +163,63 @@ export default function CartPage() {
     }
   };
 
+  const payWithPaystack = async () => {
+    if (paymentLoading) return;
+
+    if (!user) {
+      toast.error("Please login");
+      return;
+    }
+
+    if (!total || total <= 0) {
+      toast.error("Your cart is empty");
+      return;
+    }
+
+    setPaymentLoading(true);
+
+    try {
+      const popup = new PaystackPop();
+
+      popup.newTransaction({
+        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY,
+        email: user.email,
+        amount: Math.round(total * 100),
+        currency: "NGN",
+        metadata: {
+          user_id: user.id,
+        },
+        onSuccess: async (transaction) => {
+          try {
+            await API.post("/payment/verify", {
+              reference: transaction.reference,
+              user_id: user.id,
+            });
+
+            const order = await API.post("/orders/create", {
+              reference: transaction.reference,
+              user_id: user.id,
+            });
+
+            toast.success("Payment successful!");
+            window.location.href = `/order/${order.data.orderId}`;
+          } catch (err) {
+            console.error(err);
+            toast.error("Payment succeeded but order creation failed.");
+          }
+        },
+        onCancel: () => {
+          toast("Payment cancelled");
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error("Unable to start Paystack");
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
   const verifyPayment = async () => {
     if (!paymentInstructions?.reference) {
       return toast.error("Initialize payment first");
@@ -300,11 +358,11 @@ export default function CartPage() {
             </button>
 
             <button
-              onClick={initializePayment}
-              disabled={!user || paymentLoading}
+              onClick={payWithPaystack}
+              disabled={paymentLoading}
               className="bg-green-600 text-white px-4 py-2 rounded disabled:bg-gray-400"
             >
-              {paymentLoading ? "Processing..." : "Initialize Payment"}
+              {paymentLoading ? "Opening..." : "Pay with Paystack"}
             </button>
 
             {paymentInstructions && (

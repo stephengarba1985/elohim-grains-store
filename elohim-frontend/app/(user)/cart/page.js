@@ -35,7 +35,7 @@ export default function CartPage() {
     setUser(parsedUser);
 
     fetchCart();
-  }, []);
+  }, [fetchCart]);
 
   /* =========================
      REMOVE ITEM

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
 import { useCartStore } from "@/lib/cartStore";
-import { PaystackPop } from "@paystack/inline-js";
 
 export default function CartPage() {
   const {
@@ -164,6 +163,10 @@ export default function CartPage() {
   };
 
   const payWithPaystack = async () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
     if (paymentLoading) return;
 
     if (!user) {
@@ -179,6 +182,8 @@ export default function CartPage() {
     setPaymentLoading(true);
 
     try {
+      const { PaystackPop } = await import("@paystack/inline-js");
+
       const popup = new PaystackPop();
 
       popup.newTransaction({

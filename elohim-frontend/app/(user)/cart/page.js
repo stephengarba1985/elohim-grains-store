@@ -163,9 +163,7 @@ export default function CartPage() {
   };
 
   const payWithPaystack = async () => {
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (typeof window === "undefined") return;
 
     if (paymentLoading) return;
 
@@ -182,44 +180,79 @@ export default function CartPage() {
     setPaymentLoading(true);
 
     try {
-      const { PaystackPop } = await import("@paystack/inline-js");
+      // Step 1: Initialize payment on backend
+      const init = await API.post("/payment-gateways/initialize", {
+        user_id: user.id,
+        provider: "paystack",
+        channel: "card",
+        amount: total,
+      });
+
+      const paymentInfo = init.data.instructions;
+
+      if (!paymentInfo?.reference) {
+        throw new Error("Payment reference not returned");
+      }
+
+      // Step 2: Load Paystack SDK
+      const PaystackModule = await import("@paystack/inline-js");
+      const PaystackPop = PaystackModule.default;
 
       const popup = new PaystackPop();
 
+      // Step 3: Open popup
       popup.newTransaction({
         key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY,
         email: user.email,
         amount: Math.round(total * 100),
         currency: "NGN",
+
+        // IMPORTANT: Use the backend-generated reference
+        reference: paymentInfo.reference,
+
         metadata: {
           user_id: user.id,
         },
+
         onSuccess: async (transaction) => {
           try {
+            // Verify payment
             await API.post("/payment/verify", {
               reference: transaction.reference,
               user_id: user.id,
             });
 
+            // Create order
             const order = await API.post("/orders/create", {
               reference: transaction.reference,
               user_id: user.id,
             });
 
             toast.success("Payment successful!");
+
             window.location.href = `/order/${order.data.orderId}`;
           } catch (err) {
-            console.error(err);
-            toast.error("Payment succeeded but order creation failed.");
+            console.error(err.response?.data || err);
+
+            toast.error(
+              err.response?.data?.error ||
+              "Payment verified but order creation failed."
+            );
           }
         },
+
         onCancel: () => {
           toast("Payment cancelled");
         },
       });
     } catch (err) {
-      console.error(err);
-      toast.error("Unable to start Paystack");
+      console.error(err.response?.data || err);
+
+      toast.error(
+        err.response?.data?.error ||
+        err.message ||
+        "Unable to start payment."
+      );
     } finally {
       setPaymentLoading(false);
     }

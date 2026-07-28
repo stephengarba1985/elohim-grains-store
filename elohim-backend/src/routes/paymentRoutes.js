@@ -1,17 +1,24 @@
 const express = require("express");
 const axios = require("axios");
 const pool = require("../config/db");
+const { ensurePaymentGatewayTables } = require("./paymentGatewayRoutes");
 
 const router = express.Router();
 
 router.post("/verify", async (req, res) => {
   const { reference, user_id } = req.body;
 
+  if (!reference || !user_id) {
+    return res.status(400).json({
+      error: "Reference and user_id are required",
+    });
+  }
+
   try {
-    /* =========================
-       VERIFY PAYMENT
-    ========================= */
-    const verify = await axios.get(
+    await ensurePaymentGatewayTables();
+
+    // Verify transaction with Paystack
+    const response = await axios.get(
       `https://api.paystack.co/transaction/verify/${reference}`,
       {
         headers: {
@@ -20,76 +27,64 @@ router.post("/verify", async (req, res) => {
       }
     );
 
-    const data = verify.data.data;
+    const payment = response.data.data;
 
-    if (data.status !== "success") {
+    if (!payment || payment.status !== "success") {
       return res.status(400).json({
-        error: "Payment not successful",
+        error: "Payment was not successful",
       });
     }
 
-    /* =========================
-       GET USER CART
-    ========================= */
-    const cartRes = await pool.query(
-      "SELECT * FROM cart WHERE user_id = $1",
-      [user_id]
+    // Find existing payment transaction
+    const existing = await pool.query(
+      `SELECT * FROM payment_transactions
+       WHERE reference = $1 AND user_id = $2`,
+      [reference, user_id]
     );
 
-    const cartItems = cartRes.rows;
-
-    if (cartItems.length === 0) {
-      return res.status(400).json({
-        error: "Cart is empty",
+    if (existing.rows.length === 0) {
+      return res.status(404).json({
+        error: "Payment transaction not found",
       });
     }
 
-    /* =========================
-       CREATE ORDER
-    ========================= */
-    const orderResult = await pool.query(
-      "INSERT INTO orders (user_id, status, reference) VALUES ($1, $2, $3) RETURNING id",
-      [user_id, "Paid", reference]
+    // Update transaction
+    const updated = await pool.query(
+      `UPDATE payment_transactions
+       SET
+         status='verified',
+         verified_at=NOW(),
+         metadata = COALESCE(metadata,'{}'::jsonb) ||
+           jsonb_build_object(
+             'gateway','paystack',
+             'gateway_status',$2,
+             'paid_at',$3,
+             'channel',$4,
+             'authorization',$5
+           )
+       WHERE reference=$1
+       RETURNING *`,
+      [
+        reference,
+        payment.status,
+        payment.paid_at,
+        payment.channel,
+        JSON.stringify(payment.authorization || {}),
+      ]
     );
 
-    const orderId = orderResult.rows[0].id;
-
-    /* =========================
-       INSERT ORDER ITEMS
-    ========================= */
-    for (const item of cartItems) {
-      await pool.query(
-        `INSERT INTO order_items (order_id, product_id, quantity, price)
-         VALUES ($1, $2, $3, $4)`,
-        [
-          orderId,
-          item.product_id,
-          item.quantity,
-          item.price,
-        ]
-      );
-    }
-
-    /* =========================
-       CLEAR CART
-    ========================= */
-    await pool.query(
-      "DELETE FROM cart WHERE user_id = $1",
-      [user_id]
-    );
-
-    /* =========================
-       DONE
-    ========================= */
-    res.json({
+    return res.json({
       success: true,
-      orderId,
+      transaction: updated.rows[0],
     });
 
   } catch (err) {
-    console.error("❌ PAYMENT ERROR:", err.response?.data || err.message);
+    console.error(
+      "PAYSTACK VERIFY ERROR:",
+      err.response?.data || err.message
+    );
 
-    res.status(500).json({
+    return res.status(500).json({
       error: "Payment verification failed",
     });
   }

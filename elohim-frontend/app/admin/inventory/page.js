@@ -124,12 +124,18 @@ export default function InventoryPage() {
 
   const normalizeImagePath = (imageUrl) => {
     if (!imageUrl) return "";
-    if (imageUrl.startsWith("http") || imageUrl.startsWith("/")) return imageUrl;
 
-    const cleaned = imageUrl.replace(/^grains[\\/]/i, "");
+    const normalized = String(imageUrl).replace(/\\/g, "/");
+
+    if (normalized.startsWith("http")) return normalized;
+    if (normalized.startsWith("/")) {
+      return normalized.replace(/\/grains\/([^/]+)$/i, (_, name) => `/grains/${name.toLowerCase()}`);
+    }
+
+    const cleaned = normalized.replace(/^grains\//i, "");
     const hasExtension = /\.[a-z0-9]+$/i.test(cleaned);
 
-    return `/grains/${hasExtension ? cleaned : `${cleaned}.jpg`}`;
+    return `/grains/${hasExtension ? cleaned.toLowerCase() : `${cleaned.toLowerCase()}.jpg`}`;
   };
 
   const getTotalStock = (product) => {

@@ -7,9 +7,19 @@ import toast from "react-hot-toast";
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
 const normalizeImagePath = (imageUrl) => {
-  if (!imageUrl) return "/grains/Rice.jpg";
-  if (imageUrl.startsWith("http") || imageUrl.startsWith("/")) return imageUrl;
-  return `/grains/${imageUrl}`;
+  if (!imageUrl) return "/grains/rice.jpg";
+
+  const normalized = String(imageUrl).replace(/\\/g, "/");
+
+  if (normalized.startsWith("http")) return normalized;
+  if (normalized.startsWith("/")) {
+    return normalized.replace(/\/grains\/([^/]+)$/i, (_, name) => `/grains/${name.toLowerCase()}`);
+  }
+
+  const cleaned = normalized.replace(/^grains\//i, "");
+  const hasExtension = /\.[a-z0-9]+$/i.test(cleaned);
+
+  return `/grains/${hasExtension ? cleaned.toLowerCase() : `${cleaned.toLowerCase()}.jpg`}`;
 };
 
 export default function VendorMarketplacePage() {

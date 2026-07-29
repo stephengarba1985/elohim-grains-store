@@ -10,7 +10,7 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-const heroImage = "/grains/Rice.jpg";
+const heroImage = "/grains/rice.jpg";
 
 const financeProducts = [
   {
@@ -91,12 +91,18 @@ const getProductPrice = (product) => {
 
 const normalizeImagePath = (imageUrl) => {
   if (!imageUrl) return "";
-  if (imageUrl.startsWith("http") || imageUrl.startsWith("/")) return imageUrl;
 
-  const cleaned = imageUrl.replace(/^grains[\\/]/i, "");
+  const normalized = String(imageUrl).replace(/\\/g, "/");
+
+  if (normalized.startsWith("http")) return normalized;
+  if (normalized.startsWith("/")) {
+    return normalized.replace(/\/grains\/([^/]+)$/i, (_, name) => `/grains/${name.toLowerCase()}`);
+  }
+
+  const cleaned = normalized.replace(/^grains\//i, "");
   const hasExtension = /\.[a-z0-9]+$/i.test(cleaned);
 
-  return `/grains/${hasExtension ? cleaned : `${cleaned}.jpg`}`;
+  return `/grains/${hasExtension ? cleaned.toLowerCase() : `${cleaned.toLowerCase()}.jpg`}`;
 };
 
 const getProductImage = (product) => {
@@ -107,7 +113,7 @@ const getProductImage = (product) => {
     .replace(/\s+/g, "-")
     .replace(/[^\w().-]/g, "");
 
-  return `/grains/${fileName}.jpg`;
+  return normalizeImagePath(fileName);
 };
 
 const getProductStock = (product) => {

@@ -218,7 +218,7 @@ export default async function Home() {
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.92),rgba(15,23,42,0.72),rgba(15,23,42,0.35))]" />
         </div>
 
-        <div className="relative mx-auto grid min-h-[560px] max-w-6xl items-center gap-8 px-4 py-14 md:px-6 lg:grid-cols-[1fr_420px]">
+        <div className="relative mx-auto grid min-h-140 max-w-6xl items-center gap-8 px-4 py-14 md:px-6 lg:grid-cols-[1fr_420px]">
           <div className="max-w-3xl text-white">
             <p className="text-sm font-bold uppercase tracking-wide text-green-200">
               Elohim Grains Store
@@ -374,7 +374,7 @@ export default async function Home() {
                   sizes="(min-width: 1024px) 260px, 100vw"
                   className="object-cover"
                 />
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/85 to-transparent p-4">
+                <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-slate-950/85 to-transparent p-4">
                   <p className="text-xs font-bold uppercase tracking-wide text-green-200">
                     Business supply
                   </p>

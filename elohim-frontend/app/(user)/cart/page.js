@@ -208,7 +208,9 @@ export default function CartPage() {
       console.log("PaystackPop:", PaystackPop);
       console.log("Type:", typeof PaystackPop);
 
-      const paystackKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
+      const paystackKey =
+        process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ||
+        "pk_test_cb3837ca458c1f78520ead3c69b2cef9e228b41e";
 
       if (!paystackKey) {
         throw new Error("Paystack public key is missing");

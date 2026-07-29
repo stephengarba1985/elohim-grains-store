@@ -368,7 +368,7 @@ export default async function Home() {
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid lg:grid-cols-[260px_1fr]">
               <div className="relative min-h-44">
                 <Image
-                  src="/grains/Maize.jpg"
+                  src="/grains/maize.jpg"
                   alt="Maize grains"
                   fill
                   sizes="(min-width: 1024px) 260px, 100vw"

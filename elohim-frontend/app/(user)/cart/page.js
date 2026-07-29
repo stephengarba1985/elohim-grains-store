@@ -208,17 +208,29 @@ export default function CartPage() {
       console.log("PaystackPop:", PaystackPop);
       console.log("Type:", typeof PaystackPop);
 
+      const paystackKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
+
+      if (!paystackKey) {
+        throw new Error("Paystack public key is missing");
+      }
+
+      const amountInKobo = Math.round(Number(total) * 100);
+
+      if (!Number.isFinite(amountInKobo) || amountInKobo <= 0) {
+        throw new Error("Invalid payment amount");
+      }
+
       const popup = new PaystackPop();
 
       // Step 3: Open popup
       popup.newTransaction({
-        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY,
+        key: paystackKey,
         email: user.email,
-        amount: Math.round(total * 100),
+        amount: amountInKobo,
         currency: "NGN",
 
         // IMPORTANT: Use the backend-generated reference
-        reference: paymentInfo.reference,
+        reference: String(paymentInfo.reference),
 
         metadata: {
           user_id: user.id,

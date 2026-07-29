@@ -162,6 +162,52 @@ export default function CartPage() {
     }
   };
 
+  const loadPaystackPopup = () =>
+    new Promise((resolve, reject) => {
+      if (typeof window === "undefined") {
+        reject(new Error("Window is unavailable"));
+        return;
+      }
+
+      if (window.PaystackPop) {
+        resolve(window.PaystackPop);
+        return;
+      }
+
+      const existingScript = document.querySelector(
+        'script[src="https://js.paystack.co/v2/inline.js"]'
+      );
+
+      if (existingScript) {
+        existingScript.addEventListener("load", () => {
+          if (window.PaystackPop) {
+            resolve(window.PaystackPop);
+          } else {
+            reject(new Error("Paystack script loaded but PaystackPop is unavailable"));
+          }
+        });
+        existingScript.addEventListener("error", () => {
+          reject(new Error("Failed to load Paystack script"));
+        });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://js.paystack.co/v2/inline.js";
+      script.async = true;
+      script.onload = () => {
+        if (window.PaystackPop) {
+          resolve(window.PaystackPop);
+        } else {
+          reject(new Error("Paystack script loaded but PaystackPop is unavailable"));
+        }
+      };
+      script.onerror = () => {
+        reject(new Error("Failed to load Paystack script"));
+      };
+      document.body.appendChild(script);
+    });
+
   const payWithPaystack = async () => {
     if (typeof window === "undefined") return;
 
@@ -194,19 +240,8 @@ export default function CartPage() {
         throw new Error("Payment reference not returned");
       }
 
-      // Step 2: Load Paystack SDK
-      const PaystackModule = await import("@paystack/inline-js");
-
-      console.log("PaystackModule:", PaystackModule);
-
-      if (!PaystackModule.default) {
-        throw new Error("No default export found");
-      }
-
-      const PaystackPop = PaystackModule.default;
-
-      console.log("PaystackPop:", PaystackPop);
-      console.log("Type:", typeof PaystackPop);
+      // Step 2: Load Paystack SDK from the browser
+      const PaystackPop = await loadPaystackPopup();
 
       const paystackKey =
         process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ||
@@ -230,43 +265,38 @@ export default function CartPage() {
         email: user.email,
         amount: amountInKobo,
         currency: "NGN",
-
-        // IMPORTANT: Use the backend-generated reference
         reference: String(paymentInfo.reference),
-
         metadata: {
           user_id: user.id,
         },
-
         onSuccess: async (transaction) => {
           try {
-            // Verify payment
             await API.post("/payment/verify", {
               reference: transaction.reference,
               user_id: user.id,
             });
 
-            // Create order
             const order = await API.post("/orders/create", {
               reference: transaction.reference,
               user_id: user.id,
             });
 
             toast.success("Payment successful!");
-
             window.location.href = `/order/${order.data.orderId}`;
           } catch (err) {
             console.error(err.response?.data || err);
-
             toast.error(
               err.response?.data?.error ||
               "Payment verified but order creation failed."
             );
           }
         },
-
         onCancel: () => {
           toast("Payment cancelled");
+        },
+        onError: (err) => {
+          console.error("Paystack error:", err);
+          toast.error(err?.message || "Paystack checkout failed");
         },
       });
     } catch (err) {

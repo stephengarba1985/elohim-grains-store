@@ -196,7 +196,17 @@ export default function CartPage() {
 
       // Step 2: Load Paystack SDK
       const PaystackModule = await import("@paystack/inline-js");
+
+      console.log("PaystackModule:", PaystackModule);
+
+      if (!PaystackModule.default) {
+        throw new Error("No default export found");
+      }
+
       const PaystackPop = PaystackModule.default;
+
+      console.log("PaystackPop:", PaystackPop);
+      console.log("Type:", typeof PaystackPop);
 
       const popup = new PaystackPop();
 

@@ -518,7 +518,7 @@ export default function FinancialAnalyticsPage() {
           </div>
 
           <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
-            <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+            <table className="w-full min-w-190 border-collapse text-left text-sm">
               <thead className="bg-slate-950 text-white">
                 <tr>
                   <th className="px-4 py-3">Plan</th>

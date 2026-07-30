@@ -10,7 +10,8 @@ export default function CartPage() {
     cart,
     fetchCart,
     removeFromCart,
-    clearCart
+    clearCart,
+    setUser: setCartUser,
   } = useCartStore();
 
   const [user, setUser] = useState(null);
@@ -31,11 +32,16 @@ export default function CartPage() {
       return;
     }
 
-    const parsedUser = JSON.parse(storedUser);
-    setUser(parsedUser);
-
-    fetchCart();
-  }, [fetchCart]);
+    try {
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      setCartUser(parsedUser);
+      fetchCart();
+    } catch (err) {
+      console.error("Invalid stored user payload:", err);
+      toast.error("Please login again");
+    }
+  }, [fetchCart, setCartUser]);
 
   /* =========================
      REMOVE ITEM
@@ -208,6 +214,25 @@ export default function CartPage() {
       document.body.appendChild(script);
     });
 
+  const verifyReferenceForCheckout = async (reference, userId) => {
+    try {
+      await API.post("/payment/verify", {
+        reference,
+        user_id: userId,
+      });
+      return;
+    } catch (primaryErr) {
+      console.warn(
+        "Primary payment verify failed, trying gateway fallback:",
+        primaryErr.response?.data || primaryErr.message
+      );
+    }
+
+    await API.post("/payment-gateways/verify", {
+      reference,
+    });
+  };
+
   const payWithPaystack = async () => {
     if (typeof window === "undefined") return;
 
@@ -271,24 +296,17 @@ export default function CartPage() {
         },
         onSuccess: async (transaction) => {
           try {
-            await API.post("/payment/verify", {
-              reference: transaction.reference,
-              user_id: user.id,
-            });
-
-            const order = await API.post("/orders/create", {
-              reference: transaction.reference,
-              user_id: user.id,
-            });
-
-            toast.success("Payment successful!");
-            window.location.href = `/order/${order.data.orderId}`;
+            setPaymentLoading(true);
+            await verifyReferenceForCheckout(transaction.reference, user.id);
+            await createOrderFromReference(transaction.reference);
           } catch (err) {
             console.error(err.response?.data || err);
             toast.error(
               err.response?.data?.error ||
               "Payment verified but order creation failed."
             );
+          } finally {
+            setPaymentLoading(false);
           }
         },
         onCancel: () => {

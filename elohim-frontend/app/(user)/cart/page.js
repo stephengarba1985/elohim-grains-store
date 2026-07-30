@@ -283,18 +283,35 @@ export default function CartPage() {
       }
 
       const popup = new PaystackPop();
+      const allowedPaystackChannels = ["card", "bank_transfer", "ussd"];
+      const selectedChannel = allowedPaystackChannels.includes(channel)
+        ? channel
+        : "card";
 
       // Step 3: Open popup
-      popup.newTransaction({
+      const checkoutOptions = {
         key: paystackKey,
         email: user.email,
         amount: amountInKobo,
         currency: "NGN",
+        channels: [selectedChannel],
         reference: String(paymentInfo.reference),
         metadata: {
-          user_id: user.id,
+          user_id: String(user.id),
+          custom_fields: [
+            {
+              display_name: "User ID",
+              variable_name: "user_id",
+              value: String(user.id),
+            },
+          ],
         },
         onSuccess: async (transaction) => {
+          if (!transaction?.reference) {
+            toast.error("Payment callback is missing a reference. Please retry.");
+            return;
+          }
+
           try {
             setPaymentLoading(true);
             await verifyReferenceForCheckout(transaction.reference, user.id);
@@ -310,13 +327,21 @@ export default function CartPage() {
           }
         },
         onCancel: () => {
+          setPaymentLoading(false);
           toast("Payment cancelled");
         },
         onError: (err) => {
           console.error("Paystack error:", err);
+          setPaymentLoading(false);
           toast.error(err?.message || "Paystack checkout failed");
         },
-      });
+      };
+
+      if (typeof popup.checkout === "function") {
+        await popup.checkout(checkoutOptions);
+      } else {
+        popup.newTransaction(checkoutOptions);
+      }
     } catch (err) {
       console.error(err.response?.data || err);
 

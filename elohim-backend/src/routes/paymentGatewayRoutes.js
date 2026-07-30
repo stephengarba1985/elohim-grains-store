@@ -247,28 +247,39 @@ router.post("/verify", async (req, res) => {
     );
     const transaction = result.rows[0];
 
+    let notificationQueued = false;
+
     if (transaction.user_id) {
-      await queueMobileNotification({
-        userId: transaction.user_id,
-        type: "payment_reminder",
-        title: "Payment verified",
-        body: `Your payment of NGN ${Number(transaction.amount || 0).toLocaleString()} has been verified.`,
-        data: {
-          payment_transaction_id: transaction.id,
-          reference: transaction.reference,
-          status: transaction.status,
-        },
-      });
+      try {
+        await queueMobileNotification({
+          userId: transaction.user_id,
+          type: "payment_reminder",
+          title: "Payment verified",
+          body: `Your payment of NGN ${Number(transaction.amount || 0).toLocaleString()} has been verified.`,
+          data: {
+            payment_transaction_id: transaction.id,
+            reference: transaction.reference,
+            status: transaction.status,
+          },
+        });
+        notificationQueued = true;
+      } catch (notifyErr) {
+        console.error("PAYMENT VERIFY NOTIFICATION ERROR:", notifyErr.message);
+      }
     }
 
     res.json({
       success: true,
       transaction,
+      notification_queued: notificationQueued,
       note: "Simulated verification complete. Replace this with provider webhook/API verification in production.",
     });
   } catch (err) {
     console.error("PAYMENT VERIFY ERROR:", err);
-    res.status(500).json({ error: "Failed to verify payment" });
+    res.status(500).json({
+      error: "Failed to verify payment",
+      detail: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
   }
 });
 

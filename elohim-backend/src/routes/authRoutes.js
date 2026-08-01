@@ -6,6 +6,24 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { sendVerificationEmail } = require("../utils/mail");
 
+const resolveFrontendBaseUrl = (req) => {
+  const configuredUrl = String(process.env.FRONTEND_URL || "").trim();
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, "");
+  }
+
+  const forwardedHost = req.get("x-forwarded-host");
+  const host = forwardedHost || req.get("host");
+  const forwardedProto = req.get("x-forwarded-proto");
+  const proto = (forwardedProto || req.protocol || "https").split(",")[0].trim();
+
+  if (host) {
+    return `${proto}://${host}`;
+  }
+
+  return "http://localhost:3000";
+};
+
 /* =========================
    REGISTER
 ========================= */
@@ -70,8 +88,8 @@ router.post("/register", async (req, res) => {
     );
 
     // Build verification URL
-    const verifyLink =
-      `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+    const frontendBaseUrl = resolveFrontendBaseUrl(req);
+    const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
 
     // Send verification email
     await sendVerificationEmail(normalizedEmail, verifyLink);
@@ -194,8 +212,8 @@ router.post("/resend-verification", async (req, res) => {
       [verificationToken, user.id]
     );
 
-    const verifyLink =
-      `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+    const frontendBaseUrl = resolveFrontendBaseUrl(req);
+    const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
 
     await sendVerificationEmail(user.email, verifyLink);
 

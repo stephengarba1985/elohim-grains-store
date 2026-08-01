@@ -7,6 +7,24 @@ const { verifyToken } = require("../middleware/auth");
 
 const router = express.Router();
 
+const resolveFrontendBaseUrl = (req) => {
+  const configuredUrl = String(process.env.FRONTEND_URL || "").trim();
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, "");
+  }
+
+  const forwardedHost = req.get("x-forwarded-host");
+  const host = forwardedHost || req.get("host");
+  const forwardedProto = req.get("x-forwarded-proto");
+  const proto = (forwardedProto || req.protocol || "https").split(",")[0].trim();
+
+  if (host) {
+    return `${proto}://${host}`;
+  }
+
+  return "http://localhost:3000";
+};
+
 const getUserColumns = async () => {
   const { rows } = await pool.query(
     `SELECT column_name
@@ -171,7 +189,8 @@ router.post("/forgot-password", async (req, res) => {
 
     console.log("4. Database updated");
 
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    const frontendBaseUrl = resolveFrontendBaseUrl(req);
+    const resetLink = `${frontendBaseUrl}/reset-password?token=${token}`;
 
     console.log("5. Sending email");
 

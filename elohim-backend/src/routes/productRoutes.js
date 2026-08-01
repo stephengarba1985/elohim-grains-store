@@ -225,19 +225,49 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
    DELETE PRODUCT
 ========================= */
 router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
+  const client = await pool.connect();
+
   try {
-    const { id } = req.params
-    const productId = Number(id)
+    const productId = Number(req.params.id);
 
-    await pool.query(
-      'DELETE FROM products WHERE id = $1',
+    await client.query("BEGIN");
+
+    // Delete variants first
+    await client.query(
+      "DELETE FROM product_variants WHERE product_id = $1",
       [productId]
-    )
+    );
 
-    res.json({ message: "Product deleted" })
+    // Delete stock history
+    await client.query(
+      "DELETE FROM stock_history WHERE product_id = $1",
+      [productId]
+    );
+
+    // Delete product
+    await client.query(
+      "DELETE FROM products WHERE id = $1",
+      [productId]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: "Product deleted successfully",
+    });
+
   } catch (err) {
-    console.error("DELETE ERROR:", err)
-    res.status(500).json({ error: err.message })
+    await client.query("ROLLBACK");
+
+    console.error("DELETE PRODUCT ERROR:", err);
+
+    res.status(500).json({
+      error: "Failed to delete product",
+    });
+
+  } finally {
+    client.release();
   }
 })
 

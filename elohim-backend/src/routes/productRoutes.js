@@ -408,21 +408,30 @@ router.put('/variants/:variant_id', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// DELETE VARIANT
-router.delete("/:productId/variants/:variantId", async (req, res) => {
-  const { productId, variantId } = req.params;
+router.delete(
+  "/:productId/variants/:variantId",
+  verifyToken,
+  isAdmin,
+  async (req, res) => {
+    const { productId, variantId } = req.params;
 
-  try {
-    await pool.query(
-      "DELETE FROM product_variants WHERE id = $1 AND product_id = $2",
-      [variantId, productId]
-    );
+    try {
+      await pool.query(
+        "DELETE FROM product_variants WHERE id = $1 AND product_id = $2",
+        [variantId, productId]
+      );
 
-    res.json({ message: "Variant deleted successfully" });
+      res.json({
+        message: "Variant deleted successfully",
+      });
 
-  } catch (err) {
-    console.error("❌ DELETE VARIANT ERROR:", err.message);
-    res.status(500).json({ error: "Failed to delete variant" });
+    } catch (err) {
+      console.error("DELETE VARIANT ERROR:", err);
+
+      res.status(500).json({
+        error: "Failed to delete variant",
+      });
+    }
   }
-});
+);
 module.exports = router;

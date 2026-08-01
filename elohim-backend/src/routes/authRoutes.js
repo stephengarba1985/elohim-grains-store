@@ -264,7 +264,11 @@ router.post("/login", async (req, res) => {
     const user = result.rows[0];
 
     // Email verification check
-    if (!user.email_verified) {
+    // Admin accounts are often seeded manually and may not carry a verification flag.
+    const isAdmin = Boolean(user.is_admin);
+    const isEmailVerified = user.email_verified === true;
+
+    if (!isAdmin && !isEmailVerified) {
       return res.status(403).json({
         error: "Please verify your email before logging in.",
       });

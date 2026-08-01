@@ -24,6 +24,11 @@ export default function InventoryPage() {
 
   const router = useRouter();
 
+  const getBackendRootUrl = () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    return apiUrl.replace(/\/api\/?$/, "");
+  };
+
   const [form, setForm] = useState({
     name: "",
     price: "",
@@ -130,12 +135,16 @@ export default function InventoryPage() {
     if (imageUrl.startsWith("http")) return imageUrl;
 
     if (imageUrl.startsWith("/uploads")) {
-      return `${process.env.NEXT_PUBLIC_API_URL}${imageUrl}`;
+      return `${getBackendRootUrl()}${imageUrl}`;
     }
+
+    if (imageUrl.startsWith("/grains/")) return imageUrl;
 
     if (imageUrl.startsWith("/")) return imageUrl;
 
-    return `/grains/${imageUrl}`;
+    const normalized = String(imageUrl).replace(/^grains\//i, "");
+
+    return `/grains/${normalized}`;
   };
 
   const getTotalStock = (product) => {
@@ -372,7 +381,7 @@ export default function InventoryPage() {
 
             {previewImage && (
               <img
-                src={`${process.env.NEXT_PUBLIC_API_URL}${previewImage}`}
+                src={`${getBackendRootUrl()}${previewImage}`}
                 alt="Preview"
                 className="mt-3 h-32 rounded border object-cover"
               />

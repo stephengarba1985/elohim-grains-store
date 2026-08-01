@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 const app = require('./src/app');
-const uploadRoutes = require("./src/routes/uploadRoutes");
 
 const PORT = process.env.PORT || 5000;
 
@@ -18,8 +17,6 @@ try {
 } catch (err) {
   console.error("❌ Failed to load subscriptionJob:", err.message);
 }
-
-app.use("/api/upload", uploadRoutes);
 
 /* =========================
    START SERVER FIRST

@@ -12,6 +12,8 @@ export default function InventoryPage() {
   const [user, setUser] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [previewImage, setPreviewImage] = useState("");
 
   const [history, setHistory] = useState([]);
   const [showModal, setShowModal] = useState(false);

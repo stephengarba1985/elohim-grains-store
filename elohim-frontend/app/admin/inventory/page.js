@@ -125,19 +125,17 @@ export default function InventoryPage() {
     `₦${Number(price || 0).toLocaleString()}`;
 
   const normalizeImagePath = (imageUrl) => {
-    if (!imageUrl) return "";
+    if (!imageUrl) return "/placeholder.jpg";
 
-    const normalized = String(imageUrl).replace(/\\/g, "/");
+    if (imageUrl.startsWith("http")) return imageUrl;
 
-    if (normalized.startsWith("http")) return normalized;
-    if (normalized.startsWith("/")) {
-      return normalized.replace(/\/grains\/([^/]+)$/i, (_, name) => `/grains/${name.toLowerCase()}`);
+    if (imageUrl.startsWith("/uploads")) {
+      return `${process.env.NEXT_PUBLIC_API_URL}${imageUrl}`;
     }
 
-    const cleaned = normalized.replace(/^grains\//i, "");
-    const hasExtension = /\.[a-z0-9]+$/i.test(cleaned);
+    if (imageUrl.startsWith("/")) return imageUrl;
 
-    return `/grains/${hasExtension ? cleaned.toLowerCase() : `${cleaned.toLowerCase()}.jpg`}`;
+    return `/grains/${imageUrl}`;
   };
 
   const getTotalStock = (product) => {

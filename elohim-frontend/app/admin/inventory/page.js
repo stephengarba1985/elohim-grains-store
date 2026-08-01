@@ -255,6 +255,25 @@ export default function InventoryPage() {
     }
   };
 
+  const deleteProduct = async (id) => {
+    if (!confirm("Delete this product?")) return;
+
+    try {
+      await API.delete(`/products/${id}`);
+
+      toast.success("Product deleted");
+
+      fetchProducts();
+
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err.response?.data?.error || "Delete failed"
+      );
+    }
+  };
+
   /* ========================= ADD PRODUCT ========================= */
   const handleAddProduct = async (e) => {
     e.preventDefault();
@@ -386,16 +405,23 @@ export default function InventoryPage() {
               <div className="flex gap-2 mt-3">
                 <button
                   onClick={() => editProduct(product)}
-                  className="flex-1 bg-yellow-500 text-white py-1 rounded text-sm"
+                  className="flex-1 bg-yellow-500 text-white py-1 rounded"
                 >
                   Edit
                 </button>
 
                 <button
                   onClick={() => openHistory(product)}
-                  className="flex-1 bg-gray-500 text-white py-1 rounded text-sm"
+                  className="flex-1 bg-gray-500 text-white py-1 rounded"
                 >
                   History
+                </button>
+
+                <button
+                  onClick={() => deleteProduct(product.id)}
+                  className="flex-1 bg-red-600 text-white py-1 rounded"
+                >
+                  Delete
                 </button>
               </div>
 

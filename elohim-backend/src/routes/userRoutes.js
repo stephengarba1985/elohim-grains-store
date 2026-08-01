@@ -8,6 +8,11 @@ const { verifyToken } = require("../middleware/auth");
 const router = express.Router();
 
 const resolveFrontendBaseUrl = (req) => {
+  const requestOrigin = String(req.get("origin") || "").trim();
+  if (/^https?:\/\//i.test(requestOrigin)) {
+    return requestOrigin.replace(/\/+$/, "");
+  }
+
   const configuredUrl = String(process.env.FRONTEND_URL || "").trim();
   if (configuredUrl) {
     return configuredUrl.replace(/\/+$/, "");

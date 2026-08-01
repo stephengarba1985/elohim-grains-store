@@ -7,6 +7,11 @@ const crypto = require("crypto");
 const { sendVerificationEmail } = require("../utils/mail");
 
 const resolveFrontendBaseUrl = (req) => {
+  const requestOrigin = String(req.get("origin") || "").trim();
+  if (/^https?:\/\//i.test(requestOrigin)) {
+    return requestOrigin.replace(/\/+$/, "");
+  }
+
   const configuredUrl = String(process.env.FRONTEND_URL || "").trim();
   if (configuredUrl) {
     return configuredUrl.replace(/\/+$/, "");
@@ -24,11 +29,28 @@ const resolveFrontendBaseUrl = (req) => {
   return "http://localhost:3000";
 };
 
+const ensureAuthColumns = async () => {
+  await pool.query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS email_verified BOOLEAN,
+      ADD COLUMN IF NOT EXISTS verification_token TEXT
+  `);
+
+  // Preserve access for legacy rows from older schemas.
+  await pool.query(`
+    UPDATE users
+    SET email_verified = TRUE
+    WHERE email_verified IS NULL
+  `);
+};
+
 /* =========================
    REGISTER
 ========================= */
 router.post("/register", async (req, res) => {
   try {
+    await ensureAuthColumns();
+
     const { name, email, phone, password, role } = req.body;
 
     // Validate required fields
@@ -43,13 +65,38 @@ router.post("/register", async (req, res) => {
 
     // Check if email already exists
     const existingUser = await pool.query(
-      "SELECT id FROM users WHERE LOWER(email) = LOWER($1)",
+      "SELECT id, email_verified FROM users WHERE LOWER(email) = LOWER($1)",
       [normalizedEmail]
     );
 
     if (existingUser.rows.length > 0) {
-      return res.status(400).json({
-        error: "Email already registered.",
+      const foundUser = existingUser.rows[0];
+
+      if (foundUser.email_verified) {
+        return res.status(400).json({
+          error: "Email already registered.",
+        });
+      }
+
+      const verificationToken = crypto.randomBytes(32).toString("hex");
+
+      await pool.query(
+        `
+        UPDATE users
+        SET verification_token = $1
+        WHERE id = $2
+        `,
+        [verificationToken, foundUser.id]
+      );
+
+      const frontendBaseUrl = resolveFrontendBaseUrl(req);
+      const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
+      await sendVerificationEmail(normalizedEmail, verifyLink);
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "This email is already registered but not verified. A new verification email has been sent.",
       });
     }
 
@@ -114,6 +161,8 @@ router.post("/register", async (req, res) => {
 ========================= */
 router.get("/verify-email", async (req, res) => {
   try {
+    await ensureAuthColumns();
+
     const { token } = req.query;
 
     if (!token) {
@@ -133,7 +182,7 @@ router.get("/verify-email", async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(400).json({
-        error: "Invalid or expired verification link.",
+        error: "Invalid, expired, or already-used verification link.",
       });
     }
 
@@ -167,6 +216,8 @@ router.get("/verify-email", async (req, res) => {
 ========================= */
 router.post("/resend-verification", async (req, res) => {
   try {
+    await ensureAuthColumns();
+
     const { email } = req.body;
 
     if (!email) {
@@ -236,6 +287,8 @@ router.post("/resend-verification", async (req, res) => {
 ========================= */
 router.post("/login", async (req, res) => {
   try {
+    await ensureAuthColumns();
+
     const { email, password } = req.body;
 
     if (!email || !password) {

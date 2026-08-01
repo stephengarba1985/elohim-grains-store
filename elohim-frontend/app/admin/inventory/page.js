@@ -265,11 +265,7 @@ export default function InventoryPage() {
       const res = await API.post(
         "/upload/product-image",
         formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
+        {}
       );
 
       setPreviewImage(res.data.image_url);

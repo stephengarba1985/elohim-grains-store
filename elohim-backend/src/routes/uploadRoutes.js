@@ -1,12 +1,17 @@
 const express = require("express");
+const fs = require("fs");
 const multer = require("multer");
 const path = require("path");
 
 const router = express.Router();
 
+const uploadRoot = path.resolve(__dirname, "../../uploads/products");
+
+fs.mkdirSync(uploadRoot, { recursive: true });
+
 const storage = multer.diskStorage({
   destination(req, file, cb) {
-    cb(null, "uploads/products");
+    cb(null, uploadRoot);
   },
 
   filename(req, file, cb) {
@@ -46,11 +51,30 @@ router.post(
   "/product-image",
   upload.single("image"),
   (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: "No image file was uploaded",
+      });
+    }
+
     res.json({
       success: true,
       image_url: `/uploads/products/${req.file.filename}`,
     });
   }
 );
+
+router.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError || err.message) {
+    console.error("Upload error:", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Image upload failed",
+    });
+  }
+
+  next(err);
+});
 
 module.exports = router;

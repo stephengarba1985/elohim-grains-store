@@ -245,6 +245,44 @@ export default function InventoryPage() {
       toast.error(err.response?.data?.error || "Failed to add variant");
     }
   };
+  
+  const uploadImage = async (file) => {
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+      setUploading(true);
+
+      const res = await API.post(
+        "/upload/product-image",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      setPreviewImage(res.data.image_url);
+
+      setNewProduct((prev) => ({
+        ...prev,
+        image_url: res.data.image_url,
+      }));
+
+      toast.success("Image uploaded");
+
+    } catch (err) {
+      console.error(err);
+
+      toast.error("Image upload failed");
+
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const deleteVariant = async (productId, variantId) => {
     try {
@@ -320,12 +358,28 @@ export default function InventoryPage() {
             value={newProduct.name}
             onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
           />
-          <input
-            placeholder="Choose Image"
-            className="border p-2 rounded flex-1"
-            value={newProduct.image_url}
-            onChange={(e) => setNewProduct({ ...newProduct, image_url: e.target.value })}
-          />
+          <div className="flex-1">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => uploadImage(e.target.files[0])}
+              className="border p-2 rounded w-full"
+            />
+
+            {uploading && (
+              <p className="text-blue-600 text-sm mt-2">
+                Uploading image...
+              </p>
+            )}
+
+            {previewImage && (
+              <img
+                src={`${process.env.NEXT_PUBLIC_API_URL}${previewImage}`}
+                alt="Preview"
+                className="mt-3 h-32 rounded border object-cover"
+              />
+            )}
+          </div>
           <button
             type="submit"
             disabled={loading}
@@ -344,7 +398,6 @@ export default function InventoryPage() {
         onChange={(e) => setSearch(e.target.value)}
       />
 
-      {/* PRODUCT LIST */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((product) => (
           <div

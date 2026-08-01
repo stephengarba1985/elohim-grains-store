@@ -146,7 +146,7 @@ export default function AdminKycPage() {
                   <td className="p-3"><StatusPill status={record.email_status} /></td>
                   <td className="p-3"><StatusPill status={record.overall_status} /></td>
                   <td className="p-3">
-                    <div className="grid min-w-[220px] gap-2">
+                    <div className="grid min-w-55 gap-2">
                       <button
                         onClick={() =>
                           updateRecord(record, {

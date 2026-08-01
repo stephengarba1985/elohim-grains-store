@@ -18,6 +18,19 @@ import {
 
 export default function AdminDashboard() {
   const [user, setUser] = useState(null);
+  const [stats, setStats] = useState({
+    revenue: 0,
+    orders: 0,
+    users: 0,
+    products: 0,
+    riders: 0,
+    subscriptions: 0,
+    pendingOrders: 0,
+    processingOrders: 0,
+    deliveredOrders: 0,
+    lowStockProducts: 0,
+    monthlySales: 0,
+  });
   const [orders, setOrders] = useState([]);
   const [riders, setRiders] = useState([]);
 
@@ -44,8 +57,12 @@ export default function AdminDashboard() {
 
     fetchOrders();
     fetchRiders();
+    fetchStats();
 
-    const interval = setInterval(fetchOrders, 30000);
+    const interval = setInterval(() => {
+      fetchOrders();
+      fetchStats();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -66,6 +83,28 @@ export default function AdminDashboard() {
       setRiders(Array.isArray(res.data) ? res.data : []);
     } catch {
       toast.error("Failed to load riders");
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const res = await API.get("/admin/stats");
+      setStats({
+        revenue: Number(res.data?.revenue || 0),
+        orders: Number(res.data?.orders || 0),
+        users: Number(res.data?.users || 0),
+        products: Number(res.data?.products || 0),
+        riders: Number(res.data?.riders || 0),
+        subscriptions: Number(res.data?.subscriptions || 0),
+        pendingOrders: Number(res.data?.pendingOrders || 0),
+        processingOrders: Number(res.data?.processingOrders || 0),
+        deliveredOrders: Number(res.data?.deliveredOrders || 0),
+        lowStockProducts: Number(res.data?.lowStockProducts || 0),
+        monthlySales: Number(res.data?.monthlySales || 0),
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load dashboard statistics");
     }
   };
 
@@ -106,10 +145,7 @@ export default function AdminDashboard() {
     `₦${Number(price || 0).toLocaleString()}`;
 
   /* ========================= STATS ========================= */
-  const totalRevenue = orders.reduce(
-    (sum, order) => sum + Number(order.total_amount || 0),
-    0
-  );
+  const totalRevenue = stats.revenue;
 
   const deliveryStats = {
     pending: orders.filter(o => o.status === "pending").length,
@@ -165,7 +201,7 @@ export default function AdminDashboard() {
 
           <div className="bg-white p-4 rounded shadow">
             <p className="text-gray-500">Orders</p>
-            <h2 className="text-xl font-bold">{orders.length}</h2>
+            <h2 className="text-xl font-bold">{stats.orders}</h2>
           </div>
 
           <div className="bg-white p-4 rounded shadow">
@@ -175,14 +211,39 @@ export default function AdminDashboard() {
 
           <div className="bg-white p-4 rounded shadow">
             <p className="text-gray-500">Riders</p>
-            <h2 className="text-xl font-bold">{riders.length}</h2>
+            <h2 className="text-xl font-bold">{stats.riders}</h2>
           </div>
 
           <div className="bg-white p-4 rounded shadow">
             <p className="text-gray-500">Delivered</p>
             <h2 className="text-xl font-bold text-green-600">
-              {deliveryStats.delivered}
+              {stats.deliveredOrders}
             </h2>
+          </div>
+
+          <div className="bg-white p-4 rounded shadow">
+            <p className="text-gray-500">Monthly Sales</p>
+            <h2 className="text-xl font-bold text-emerald-700">{formatPrice(stats.monthlySales)}</h2>
+          </div>
+
+          <div className="bg-white p-4 rounded shadow">
+            <p className="text-gray-500">Low Stock Products</p>
+            <h2 className="text-xl font-bold text-red-600">{stats.lowStockProducts}</h2>
+          </div>
+
+          <div className="bg-white p-4 rounded shadow">
+            <p className="text-gray-500">Active Subscriptions</p>
+            <h2 className="text-xl font-bold text-indigo-700">{stats.subscriptions}</h2>
+          </div>
+
+          <div className="bg-white p-4 rounded shadow">
+            <p className="text-gray-500">Total Users</p>
+            <h2 className="text-xl font-bold">{stats.users}</h2>
+          </div>
+
+          <div className="bg-white p-4 rounded shadow">
+            <p className="text-gray-500">Products</p>
+            <h2 className="text-xl font-bold">{stats.products}</h2>
           </div>
 
         </div>
@@ -190,16 +251,16 @@ export default function AdminDashboard() {
         {/* ========================= DELIVERY STATS ========================= */}
         <div className="grid md:grid-cols-4 gap-4 mb-6">
           <div className="bg-yellow-100 p-3 rounded text-center">
-            Pending: {deliveryStats.pending}
+            Pending: {stats.pendingOrders}
+          </div>
+          <div className="bg-blue-100 p-3 rounded text-center">
+            Processing: {stats.processingOrders}
           </div>
           <div className="bg-purple-100 p-3 rounded text-center">
             Assigned: {deliveryStats.assigned}
           </div>
           <div className="bg-orange-100 p-3 rounded text-center">
             Transit: {deliveryStats.in_transit}
-          </div>
-          <div className="bg-green-100 p-3 rounded text-center">
-            Delivered: {deliveryStats.delivered}
           </div>
         </div>
 

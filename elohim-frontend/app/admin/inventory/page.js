@@ -319,7 +319,7 @@ export default function InventoryPage() {
             onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
           />
           <input
-            placeholder="Image URL"
+            placeholder="Choose Image"
             className="border p-2 rounded flex-1"
             value={newProduct.image_url}
             onChange={(e) => setNewProduct({ ...newProduct, image_url: e.target.value })}
@@ -609,7 +609,7 @@ export default function InventoryPage() {
                 onChange={(e) => setForm({ ...form, weight: e.target.value })}
               />
               <input
-                placeholder="Image URL"
+                placeholder="Choose Image"
                 className="border p-2 w-full mb-4 rounded"
                 value={form.image_url}
                 onChange={(e) => setForm({ ...form, image_url: e.target.value })}

@@ -124,13 +124,9 @@ export default function AdminPaymentsPage() {
       case "verified":
         return "bg-green-100 text-green-700";
       case "pending":
-        return "bg-amber-100 text-amber-700";
+        return "bg-yellow-100 text-yellow-700";
       case "failed":
         return "bg-red-100 text-red-700";
-      case "refunded":
-        return "bg-slate-200 text-slate-700";
-      case "escrow":
-        return "bg-purple-100 text-purple-700";
       default:
         return "bg-gray-100 text-gray-700";
     }
@@ -304,6 +300,48 @@ export default function AdminPaymentsPage() {
         </div>
       </div>
 
+      <div className="grid md:grid-cols-4 gap-3 mb-6">
+
+        <input
+          type="text"
+          placeholder="Search reference, customer or email..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="border rounded-lg p-3"
+        />
+
+        <select
+          value={gatewayFilter}
+          onChange={(e) => setGatewayFilter(e.target.value)}
+          className="border rounded-lg p-3"
+        >
+          <option value="all">All Gateways</option>
+          <option value="paystack">Paystack</option>
+          <option value="flutterwave">Flutterwave</option>
+          <option value="monnify">Monnify</option>
+          <option value="opay">OPay</option>
+        </select>
+
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="border rounded-lg p-3"
+        >
+          <option value="all">All Status</option>
+          <option value="verified">Verified</option>
+          <option value="pending">Pending</option>
+          <option value="failed">Failed</option>
+        </select>
+
+        <button
+          onClick={fetchPayments}
+          className="bg-slate-900 text-white rounded-lg"
+        >
+          Refresh
+        </button>
+
+      </div>
+
       <div className="grid lg:grid-cols-2 gap-6">
         <section className="bg-white p-5 rounded shadow">
           <h2 className="font-bold text-lg mb-4">Revenue Trend</h2>
@@ -356,40 +394,6 @@ export default function AdminPaymentsPage() {
           <span className="text-sm text-gray-500">{filteredTransactions.length} recent</span>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-3 mb-4">
-          <input
-            placeholder="Search Reference, Customer or Email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border rounded-lg p-3 w-full md:col-span-2"
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <select
-              value={gatewayFilter}
-              onChange={(e) => setGatewayFilter(e.target.value)}
-              className="border rounded-lg p-3"
-            >
-              <option value="all">All</option>
-              <option value="paystack">Paystack</option>
-              <option value="flutterwave">Flutterwave</option>
-              <option value="monnify">Monnify</option>
-              <option value="opay">Opay</option>
-            </select>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="border rounded-lg p-3"
-            >
-              <option value="all">Status</option>
-              <option value="verified">Verified</option>
-              <option value="pending">Pending</option>
-              <option value="failed">Failed</option>
-            </select>
-          </div>
-        </div>
-
         {filteredTransactions.length === 0 ? (
           <p className="text-gray-500">No gateway transactions yet.</p>
         ) : (
@@ -405,16 +409,16 @@ export default function AdminPaymentsPage() {
                     <p className="text-xs font-semibold text-green-700 uppercase">
                       {formatLabel(transaction.provider)} • {formatLabel(transaction.channel)}
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <h3 className="font-bold text-lg">{transaction.reference}</h3>
+                    <h3 className="font-bold text-lg mt-1">{transaction.reference}</h3>
+                    <div className="flex gap-2 mt-2">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           copyReference(transaction.reference);
                         }}
-                        className="text-xs bg-slate-100 px-2 py-1 rounded"
+                        className="text-xs bg-gray-100 px-2 py-1 rounded"
                       >
-                        Copy
+                        Copy Reference
                       </button>
                     </div>
                     <p className="text-sm text-gray-600">
@@ -425,7 +429,7 @@ export default function AdminPaymentsPage() {
                   <div className="lg:text-right">
                     <p className="text-xl font-bold">{formatPrice(transaction.amount)}</p>
                     <span
-                      className={`inline-block mt-1 px-2 py-1 rounded text-xs font-semibold ${
+                      className={`inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold ${
                         statusBadgeClass(transaction.status)
                       }`}
                     >

@@ -77,9 +77,8 @@ export default function AdminPaymentsPage() {
     try {
       await navigator.clipboard.writeText(reference || "");
       toast.success("Reference copied");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to copy reference");
+    } catch {
+      toast.error("Unable to copy");
     }
   };
 
@@ -300,48 +299,6 @@ export default function AdminPaymentsPage() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-4 gap-3 mb-6">
-
-        <input
-          type="text"
-          placeholder="Search reference, customer or email..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="border rounded-lg p-3"
-        />
-
-        <select
-          value={gatewayFilter}
-          onChange={(e) => setGatewayFilter(e.target.value)}
-          className="border rounded-lg p-3"
-        >
-          <option value="all">All Gateways</option>
-          <option value="paystack">Paystack</option>
-          <option value="flutterwave">Flutterwave</option>
-          <option value="monnify">Monnify</option>
-          <option value="opay">OPay</option>
-        </select>
-
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="border rounded-lg p-3"
-        >
-          <option value="all">All Status</option>
-          <option value="verified">Verified</option>
-          <option value="pending">Pending</option>
-          <option value="failed">Failed</option>
-        </select>
-
-        <button
-          onClick={fetchPayments}
-          className="bg-slate-900 text-white rounded-lg"
-        >
-          Refresh
-        </button>
-
-      </div>
-
       <div className="grid lg:grid-cols-2 gap-6">
         <section className="bg-white p-5 rounded shadow">
           <h2 className="font-bold text-lg mb-4">Revenue Trend</h2>
@@ -389,6 +346,60 @@ export default function AdminPaymentsPage() {
       </div>
 
       <section className="bg-white p-5 rounded shadow">
+
+        <div className="grid md:grid-cols-4 gap-3 mb-5">
+
+          <input
+            type="text"
+            placeholder="Search reference, customer or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="border rounded-lg p-3"
+          />
+
+          <select
+            value={gatewayFilter}
+            onChange={(e) => setGatewayFilter(e.target.value)}
+            className="border rounded-lg p-3"
+          >
+            <option value="all">All Gateways</option>
+            <option value="paystack">Paystack</option>
+            <option value="flutterwave">Flutterwave</option>
+            <option value="monnify">Monnify</option>
+            <option value="opay">OPay</option>
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border rounded-lg p-3"
+          >
+            <option value="all">All Status</option>
+            <option value="verified">Verified</option>
+            <option value="pending">Pending</option>
+            <option value="failed">Failed</option>
+          </select>
+
+          <div className="flex gap-2">
+
+            <button
+              onClick={exportExcel}
+              className="flex-1 bg-green-700 text-white rounded-lg"
+            >
+              Export Excel
+            </button>
+
+            <button
+              onClick={exportPdf}
+              className="flex-1 bg-red-700 text-white rounded-lg"
+            >
+              Export PDF
+            </button>
+
+          </div>
+
+        </div>
+
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-lg">Gateway Transactions</h2>
           <span className="text-sm text-gray-500">{filteredTransactions.length} recent</span>
@@ -401,8 +412,7 @@ export default function AdminPaymentsPage() {
             {filteredTransactions.map((transaction) => (
               <div
                 key={transaction.id}
-                className="border rounded p-4 cursor-pointer hover:border-green-300 transition"
-                onClick={() => setSelectedTransaction(transaction)}
+                className="border rounded p-4 hover:border-green-300 transition"
               >
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div>
@@ -413,12 +423,18 @@ export default function AdminPaymentsPage() {
                     <div className="flex gap-2 mt-2">
                       <button
                         onClick={(e) => {
-                          e.stopPropagation();
                           copyReference(transaction.reference);
                         }}
                         className="text-xs bg-gray-100 px-2 py-1 rounded"
                       >
                         Copy Reference
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedTransaction(transaction)}
+                        className="text-blue-600 underline text-sm"
+                      >
+                        View Details
                       </button>
                     </div>
                     <p className="text-sm text-gray-600">
@@ -442,7 +458,6 @@ export default function AdminPaymentsPage() {
                   <div className="mt-4 flex gap-2">
                     <button
                       onClick={(e) => {
-                        e.stopPropagation();
                         verifyTransaction(transaction);
                       }}
                       className="bg-green-700 text-white px-3 py-2 rounded text-sm font-semibold"
@@ -452,7 +467,6 @@ export default function AdminPaymentsPage() {
 
                     <button
                       onClick={(e) => {
-                        e.stopPropagation();
                         toast("Refund action coming soon");
                       }}
                       className="bg-purple-700 text-white px-3 py-2 rounded text-sm font-semibold"
@@ -469,28 +483,51 @@ export default function AdminPaymentsPage() {
 
       {selectedTransaction && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">Transaction Details</h2>
+          <div className="bg-white rounded-xl p-6 w-full max-w-xl">
+
+            <h2 className="text-xl font-bold mb-4">
+              Payment Details
+            </h2>
+
+            <p><b>Reference:</b> {selectedTransaction.reference}</p>
+
+            <p><b>Gateway:</b> {formatLabel(selectedTransaction.provider)}</p>
+
+            <p><b>Channel:</b> {formatLabel(selectedTransaction.channel)}</p>
+
+            <p><b>Customer:</b> {selectedTransaction.user_name}</p>
+
+            <p><b>Email:</b> {selectedTransaction.user_email}</p>
+
+            <p><b>Amount:</b> {formatPrice(selectedTransaction.amount)}</p>
+
+            <p><b>Status:</b> {selectedTransaction.status}</p>
+
+            <p><b>Created:</b> {formatDate(selectedTransaction.created_at)}</p>
+
+            {selectedTransaction.verified_at && (
+
+              <p>
+
+                <b>Verified:</b> {formatDate(selectedTransaction.verified_at)}
+
+              </p>
+
+            )}
+
+            <div className="flex justify-end mt-6">
+
               <button
                 onClick={() => setSelectedTransaction(null)}
-                className="text-gray-500 hover:text-gray-700"
+                className="bg-gray-700 text-white px-4 py-2 rounded"
               >
+
                 Close
+
               </button>
+
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4 text-sm">
-              <p><b>Reference:</b> {selectedTransaction.reference || "-"}</p>
-              <p><b>Customer:</b> {selectedTransaction.user_name || "Unknown"}</p>
-              <p><b>Order:</b> {selectedTransaction.order_id || "-"}</p>
-              <p><b>Gateway:</b> {formatLabel(selectedTransaction.provider)}</p>
-              <p><b>Authorization:</b> {selectedTransaction.authorization || selectedTransaction.authorization_code || "-"}</p>
-              <p><b>Fees:</b> {formatPrice(selectedTransaction.fees)}</p>
-              <p><b>Net Amount:</b> {formatPrice(selectedTransaction.net_amount ?? (toNumber(selectedTransaction.amount) - toNumber(selectedTransaction.fees)))}</p>
-              <p><b>Payment Date:</b> {formatDate(selectedTransaction.created_at)}</p>
-              <p><b>Verification Date:</b> {formatDate(selectedTransaction.verified_at)}</p>
-            </div>
           </div>
         </div>
       )}

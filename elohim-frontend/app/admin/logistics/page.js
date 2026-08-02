@@ -184,6 +184,45 @@ export default function LogisticsPage() {
     return "bg-gray-200 text-gray-700";
   };
 
+  const formatDateInputValue = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const applyDatePreset = (preset) => {
+    const now = new Date();
+
+    if (preset === "today") {
+      const today = formatDateInputValue(now);
+      setStartDate(today);
+      setEndDate(today);
+      return;
+    }
+
+    if (preset === "last7") {
+      const end = formatDateInputValue(now);
+      const startDateObj = new Date(now);
+      startDateObj.setDate(now.getDate() - 6);
+      const start = formatDateInputValue(startDateObj);
+      setStartDate(start);
+      setEndDate(end);
+      return;
+    }
+
+    if (preset === "month") {
+      const end = formatDateInputValue(now);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      setStartDate(formatDateInputValue(monthStart));
+      setEndDate(end);
+      return;
+    }
+
+    setStartDate("");
+    setEndDate("");
+  };
+
   /* =========================
      UI
   ========================= */
@@ -263,6 +302,33 @@ export default function LogisticsPage() {
           onChange={(e) => setEndDate(e.target.value)}
           className="w-full border rounded-lg p-3"
         />
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-6">
+        <button
+          onClick={() => applyDatePreset("today")}
+          className="px-3 py-2 rounded text-sm bg-slate-100 text-slate-700 hover:bg-slate-200"
+        >
+          Today
+        </button>
+        <button
+          onClick={() => applyDatePreset("last7")}
+          className="px-3 py-2 rounded text-sm bg-slate-100 text-slate-700 hover:bg-slate-200"
+        >
+          Last 7 Days
+        </button>
+        <button
+          onClick={() => applyDatePreset("month")}
+          className="px-3 py-2 rounded text-sm bg-slate-100 text-slate-700 hover:bg-slate-200"
+        >
+          This Month
+        </button>
+        <button
+          onClick={() => applyDatePreset("clear")}
+          className="px-3 py-2 rounded text-sm bg-red-50 text-red-700 hover:bg-red-100"
+        >
+          Clear Dates
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-6">

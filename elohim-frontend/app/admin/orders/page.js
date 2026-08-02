@@ -12,6 +12,38 @@ export default function OrdersPage() {
   const [riders, setRiders] = useState([]);
   const [selectedRiders, setSelectedRiders] = useState({});
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const today = new Date().toDateString();
+
+  const todayOrders = orders.filter(
+    (o) => new Date(o.created_at).toDateString() === today
+  );
+
+  const pendingOrders = orders.filter(
+    (o) => o.status === "pending"
+  );
+
+  const processingOrders = orders.filter(
+    (o) => o.status === "processing"
+  );
+
+  const deliveredOrders = orders.filter(
+    (o) => o.status === "delivered"
+  );
+
+  const cancelledOrders = orders.filter(
+    (o) => o.status === "cancelled"
+  );
+
+  const todayRevenue = todayOrders.reduce(
+    (sum, order) => sum + Number(order.total_amount || 0),
+    0
+  );
+
+  const formatPrice = (amount) =>
+    `₦${Number(amount || 0).toLocaleString()}`;
 
   useEffect(() => {
     fetchOrders();
@@ -115,6 +147,54 @@ export default function OrdersPage() {
         Logistics Dashboard 🚚
       </h1>
 
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+
+        <div className="bg-white rounded-lg shadow p-4">
+          <p className="text-gray-500 text-sm">Today's Orders</p>
+          <h2 className="text-2xl font-bold">
+            {todayOrders.length}
+          </h2>
+        </div>
+
+        <div className="bg-yellow-50 rounded-lg shadow p-4">
+          <p className="text-yellow-700 text-sm">Pending</p>
+          <h2 className="text-2xl font-bold">
+            {pendingOrders.length}
+          </h2>
+        </div>
+
+        <div className="bg-blue-50 rounded-lg shadow p-4">
+          <p className="text-blue-700 text-sm">Processing</p>
+          <h2 className="text-2xl font-bold">
+            {processingOrders.length}
+          </h2>
+        </div>
+
+        <div className="bg-green-50 rounded-lg shadow p-4">
+          <p className="text-green-700 text-sm">Delivered</p>
+          <h2 className="text-2xl font-bold">
+            {deliveredOrders.length}
+          </h2>
+        </div>
+
+        <div className="bg-red-50 rounded-lg shadow p-4">
+          <p className="text-red-700 text-sm">Cancelled</p>
+          <h2 className="text-2xl font-bold">
+            {cancelledOrders.length}
+          </h2>
+        </div>
+
+        <div className="bg-emerald-50 rounded-lg shadow p-4">
+          <p className="text-emerald-700 text-sm">
+            Today's Revenue
+          </p>
+          <h2 className="text-xl font-bold">
+            {formatPrice(todayRevenue)}
+          </h2>
+        </div>
+
+      </div>
+
       {/* DEBUG PANEL */}
       <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
         <p><b>Orders:</b> {orders.length}</p>
@@ -123,8 +203,50 @@ export default function OrdersPage() {
 
       {loading && <p>Loading orders...</p>}
 
+      <div className="flex flex-col md:flex-row gap-3 mb-5">
+
+        <input
+          type="text"
+          placeholder="Search Order, Customer, Email..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 border rounded-lg p-3"
+        />
+
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="border rounded-lg p-3"
+        >
+          <option value="all">All Orders</option>
+          <option value="pending">Pending</option>
+          <option value="processing">Processing</option>
+          <option value="assigned">Assigned</option>
+          <option value="in_transit">In Transit</option>
+          <option value="delivered">Delivered</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+
+      </div>
+
       <div className="grid gap-4">
-        {orders.map((order) => (
+        {orders
+          .filter((order) => {
+            const keyword = search.toLowerCase();
+
+            const matchesSearch = (
+              String(order.id).includes(keyword) ||
+              order.name?.toLowerCase().includes(keyword) ||
+              order.email?.toLowerCase().includes(keyword) ||
+              order.phone?.includes(keyword)
+            );
+
+            const matchesStatus =
+              statusFilter === "all" || order.status === statusFilter;
+
+            return matchesSearch && matchesStatus;
+          })
+          .map((order) => (
           <div
             key={order.id}
             className={`p-4 rounded shadow ${
@@ -170,11 +292,50 @@ export default function OrdersPage() {
 
               <div className="text-right">
                 <p className="font-bold text-green-700">
-                  ₦{Number(order.total_amount || 0).toLocaleString()}
+                    {formatPrice(order.total_amount)}
                 </p>
-                <span className="text-sm bg-gray-200 px-2 py-1 rounded">
-                  {order.status}
+
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-semibold
+                    ${
+                      order.status === "pending"
+                        ? "bg-yellow-100 text-yellow-700"
+                      : order.status === "processing"
+                        ? "bg-blue-100 text-blue-700"
+                      : order.status === "assigned"
+                        ? "bg-purple-100 text-purple-700"
+                      : order.status === "in_transit"
+                        ? "bg-orange-100 text-orange-700"
+                      : order.status === "delivered"
+                        ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
+                    }`}
+                >
+                  {order.status.replace("_", " ").toUpperCase()}
                 </span>
+
+                <div className="mt-2 flex gap-2 flex-wrap">
+
+                  {order.payment_status === "paid" && (
+                    <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">
+                      PAID
+                    </span>
+                  )}
+
+                  {order.payment_status === "pending" && (
+                    <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs">
+                      PENDING PAYMENT
+                    </span>
+                  )}
+
+                  {order.payment_gateway && (
+                    <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
+                      {order.payment_gateway.toUpperCase()}
+                    </span>
+                  )}
+
+                </div>
+
               </div>
             </div>
 
@@ -253,14 +414,176 @@ export default function OrdersPage() {
 
             {/* ORDER DETAILS */}
             {selected === order.id && (
-              <div className="mt-3 border-t pt-3">
-                {items.length === 0 && <p>No items</p>}
+              <div className="mt-4 border-t pt-4 bg-gray-50 rounded-lg p-4">
 
-                {items.map((item) => (
-                  <p key={item.id}>
-                    {item.name} × {item.quantity}
-                  </p>
-                ))}
+                <div className="grid md:grid-cols-2 gap-6">
+
+                  {/* CUSTOMER */}
+                  <div>
+                    <h3 className="font-bold mb-2">
+                      Customer Information
+                    </h3>
+
+                    <p><b>Name:</b> {order.name}</p>
+
+                    <p><b>Email:</b> {order.email}</p>
+
+                    <p><b>Phone:</b> {order.phone || "-"}</p>
+
+                    <p><b>Address:</b> {order.address || "-"}</p>
+                  </div>
+
+                  {/* PAYMENT */}
+                  <div>
+                    <h3 className="font-bold mb-2">
+                      Payment
+                    </h3>
+
+                    <p>
+                      <b>Status:</b> {order.payment_status || "Pending"}
+                    </p>
+
+                    <p>
+                      <b>Gateway:</b> {order.payment_gateway || "-"}
+                    </p>
+
+                    <p>
+                      <b>Reference:</b> {order.reference || "-"}
+                    </p>
+
+                    <p>
+                      <b>Total:</b> ₦{Number(order.total_amount || 0).toLocaleString()}
+                    </p>
+
+                    <div className="flex flex-wrap gap-2 mt-5">
+
+                      <button
+                        className="bg-green-600 text-white px-3 py-2 rounded"
+                      >
+                        Print Invoice
+                      </button>
+
+                      <button
+                        className="bg-blue-600 text-white px-3 py-2 rounded"
+                      >
+                        Copy Reference
+                      </button>
+
+                      <button
+                        className="bg-purple-600 text-white px-3 py-2 rounded"
+                      >
+                        Notify Customer
+                      </button>
+
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="mt-6">
+
+                  <h3 className="font-bold mb-3">
+                    Ordered Items
+                  </h3>
+
+                  <table className="w-full border">
+
+                    <thead className="bg-gray-200">
+
+                      <tr>
+
+                        <th className="p-2 border text-left">
+                          Product
+                        </th>
+
+                        <th className="p-2 border">
+                          Qty
+                        </th>
+
+                        <th className="p-2 border">
+                          Price
+                        </th>
+
+                        <th className="p-2 border">
+                          Total
+                        </th>
+
+                      </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                      {items.map((item) => (
+
+                        <tr key={item.id}>
+
+                          <td className="border p-2">
+                            {item.name}
+                          </td>
+
+                          <td className="border p-2 text-center">
+                            {item.quantity}
+                          </td>
+
+                          <td className="border p-2 text-center">
+                            ₦{Number(item.price).toLocaleString()}
+                          </td>
+
+                          <td className="border p-2 text-center">
+                            ₦{(
+                              Number(item.price) *
+                              Number(item.quantity)
+                            ).toLocaleString()}
+                          </td>
+
+                        </tr>
+
+                      ))}
+
+                    </tbody>
+
+                  </table>
+
+                  {items.length === 0 && <p className="mt-3">No items</p>}
+
+                </div>
+
+                <div className="mt-6">
+
+                  <h3 className="font-bold mb-3">
+                    Order Progress
+                  </h3>
+
+                  <div className="space-y-2">
+
+                    <div>✅ Order Created</div>
+
+                    {order.payment_status === "paid" &&
+                      <div>✅ Payment Received</div>}
+
+                    {(order.status === "processing" ||
+                      order.status === "assigned" ||
+                      order.status === "in_transit" ||
+                      order.status === "delivered") &&
+                      <div>✅ Processing</div>}
+
+                    {(order.status === "assigned" ||
+                      order.status === "in_transit" ||
+                      order.status === "delivered") &&
+                      <div>✅ Rider Assigned</div>}
+
+                    {(order.status === "in_transit" ||
+                      order.status === "delivered") &&
+                      <div>🚚 Out for Delivery</div>}
+
+                    {order.status === "delivered" &&
+                      <div>🎉 Delivered</div>}
+
+                  </div>
+
+                </div>
+
               </div>
             )}
 

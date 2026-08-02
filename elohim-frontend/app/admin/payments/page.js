@@ -3,6 +3,19 @@
 import { useEffect, useState } from "react";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  CartesianGrid,
+} from "recharts";
 
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
@@ -26,6 +39,10 @@ export default function AdminPaymentsPage() {
   const [totals, setTotals] = useState({});
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [gatewayFilter, setGatewayFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
 
   useEffect(() => {
     fetchPayments();
@@ -56,6 +73,164 @@ export default function AdminPaymentsPage() {
     }
   };
 
+  const copyReference = async (reference) => {
+    try {
+      await navigator.clipboard.writeText(reference || "");
+      toast.success("Reference copied");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to copy reference");
+    }
+  };
+
+  const exportExcel = () => {
+    const rows = [
+      ["Reference", "Customer", "Email", "Gateway", "Channel", "Status", "Amount", "Date"],
+      ...filteredTransactions.map((t) => [
+        t.reference || "",
+        t.user_name || "",
+        t.user_email || "",
+        t.provider || "",
+        t.channel || "",
+        t.status || "",
+        Number(t.amount || 0),
+        formatDate(t.created_at),
+      ]),
+    ];
+
+    const csvContent = rows
+      .map((row) => row.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `payments-${Date.now()}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPdf = () => {
+    window.print();
+  };
+
+  const printPage = () => {
+    window.print();
+  };
+
+  const statusBadgeClass = (status) => {
+    switch (String(status || "").toLowerCase()) {
+      case "verified":
+        return "bg-green-100 text-green-700";
+      case "pending":
+        return "bg-amber-100 text-amber-700";
+      case "failed":
+        return "bg-red-100 text-red-700";
+      case "refunded":
+        return "bg-slate-200 text-slate-700";
+      case "escrow":
+        return "bg-purple-100 text-purple-700";
+      default:
+        return "bg-gray-100 text-gray-700";
+    }
+  };
+
+  const today = new Date();
+  const toNumber = (value) => Number(value || 0);
+
+  const computed = {
+    revenueToday: transactions
+      .filter((t) => new Date(t.created_at).toDateString() === today.toDateString())
+      .reduce((sum, t) => sum + toNumber(t.amount), 0),
+    revenueThisMonth: transactions
+      .filter((t) => {
+        const d = new Date(t.created_at);
+        return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+      })
+      .reduce((sum, t) => sum + toNumber(t.amount), 0),
+    verifiedAmount: transactions
+      .filter((t) => String(t.status).toLowerCase() === "verified")
+      .reduce((sum, t) => sum + toNumber(t.amount), 0),
+    pendingAmount: transactions
+      .filter((t) => String(t.status).toLowerCase() === "pending")
+      .reduce((sum, t) => sum + toNumber(t.amount), 0),
+    transactions: transactions.length,
+    verified: transactions.filter((t) => String(t.status).toLowerCase() === "verified").length,
+    pending: transactions.filter((t) => String(t.status).toLowerCase() === "pending").length,
+    failed: transactions.filter((t) => String(t.status).toLowerCase() === "failed").length,
+  };
+
+  const summary = {
+    revenueToday: toNumber(totals.revenue_today ?? computed.revenueToday),
+    revenueThisMonth: toNumber(totals.revenue_this_month ?? computed.revenueThisMonth),
+    verifiedAmount: toNumber(totals.verified_amount ?? computed.verifiedAmount),
+    pendingAmount: toNumber(totals.pending_amount ?? computed.pendingAmount),
+    transactions: toNumber(totals.transactions ?? computed.transactions),
+    verified: toNumber(totals.verified ?? computed.verified),
+    pending: toNumber(totals.pending ?? computed.pending),
+    failed: toNumber(totals.failed ?? computed.failed),
+  };
+
+  const filteredTransactions = transactions.filter((transaction) => {
+    const keyword = search.toLowerCase();
+    const gateway = String(transaction.provider || "").toLowerCase();
+    const status = String(transaction.status || "").toLowerCase();
+
+    const matchesSearch =
+      String(transaction.reference || "").toLowerCase().includes(keyword) ||
+      String(transaction.user_name || "").toLowerCase().includes(keyword) ||
+      String(transaction.user_email || "").toLowerCase().includes(keyword) ||
+      gateway.includes(keyword);
+
+    const matchesGateway = gatewayFilter === "all" || gateway === gatewayFilter;
+    const matchesStatus = statusFilter === "all" || status === statusFilter;
+
+    return matchesSearch && matchesGateway && matchesStatus;
+  });
+
+  const weekdayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const weekdayRevenue = {
+    Monday: 0,
+    Tuesday: 0,
+    Wednesday: 0,
+    Thursday: 0,
+    Friday: 0,
+    Saturday: 0,
+    Sunday: 0,
+  };
+
+  transactions.forEach((t) => {
+    const day = new Date(t.created_at).toLocaleDateString("en-US", { weekday: "long" });
+    if (weekdayRevenue[day] !== undefined) {
+      weekdayRevenue[day] += toNumber(t.amount);
+    }
+  });
+
+  const revenueTrendData = weekdayOrder.map((day) => ({
+    day,
+    revenue: weekdayRevenue[day],
+  }));
+
+  const gatewayCounts = {
+    Paystack: 0,
+    Flutterwave: 0,
+    Monnify: 0,
+    Opay: 0,
+  };
+
+  transactions.forEach((t) => {
+    const provider = String(t.provider || "").toLowerCase();
+    if (provider === "paystack") gatewayCounts.Paystack += 1;
+    if (provider === "flutterwave") gatewayCounts.Flutterwave += 1;
+    if (provider === "monnify") gatewayCounts.Monnify += 1;
+    if (provider === "opay") gatewayCounts.Opay += 1;
+  });
+
+  const totalGatewayTx = Object.values(gatewayCounts).reduce((sum, value) => sum + value, 0);
+  const gatewayPieData = Object.entries(gatewayCounts).map(([name, value]) => ({ name, value }));
+  const pieColors = ["#16a34a", "#2563eb", "#9333ea", "#f97316"];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -65,52 +240,183 @@ export default function AdminPaymentsPage() {
             Monitor Paystack, Flutterwave, Monnify, Opay transfer, virtual account, bank transfer, and USSD payments.
           </p>
         </div>
-        <button
-          onClick={fetchPayments}
-          disabled={loading}
-          className="bg-green-700 disabled:bg-green-300 text-white px-4 py-2 rounded font-semibold"
-        >
-          {loading ? "Refreshing..." : "Refresh"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportExcel}
+            className="bg-emerald-700 text-white px-4 py-2 rounded font-semibold"
+          >
+            Export Excel
+          </button>
+          <button
+            onClick={exportPdf}
+            className="bg-sky-700 text-white px-4 py-2 rounded font-semibold"
+          >
+            Export PDF
+          </button>
+          <button
+            onClick={printPage}
+            className="bg-slate-700 text-white px-4 py-2 rounded font-semibold"
+          >
+            Print
+          </button>
+          <button
+            onClick={fetchPayments}
+            disabled={loading}
+            className="bg-green-700 disabled:bg-green-300 text-white px-4 py-2 rounded font-semibold"
+          >
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
       </div>
 
-      <div className="grid md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+        <div className="bg-white p-4 rounded shadow">
+          <p className="text-gray-500 text-sm">Revenue Today</p>
+          <h2 className="text-xl font-bold text-green-700">{formatPrice(summary.revenueToday)}</h2>
+        </div>
+        <div className="bg-white p-4 rounded shadow">
+          <p className="text-gray-500 text-sm">Revenue This Month</p>
+          <h2 className="text-xl font-bold text-emerald-700">{formatPrice(summary.revenueThisMonth)}</h2>
+        </div>
         <div className="bg-white p-4 rounded shadow">
           <p className="text-gray-500 text-sm">Verified Amount</p>
-          <h2 className="text-xl font-bold text-green-700">{formatPrice(totals.verified_amount)}</h2>
+          <h2 className="text-xl font-bold text-green-700">{formatPrice(summary.verifiedAmount)}</h2>
         </div>
         <div className="bg-white p-4 rounded shadow">
           <p className="text-gray-500 text-sm">Pending Amount</p>
-          <h2 className="text-xl font-bold text-amber-600">{formatPrice(totals.pending_amount)}</h2>
+          <h2 className="text-xl font-bold text-amber-600">{formatPrice(summary.pendingAmount)}</h2>
+        </div>
+        <div className="bg-white p-4 rounded shadow">
+          <p className="text-gray-500 text-sm">Transactions</p>
+          <h2 className="text-2xl font-bold">{summary.transactions}</h2>
         </div>
         <div className="bg-white p-4 rounded shadow">
           <p className="text-gray-500 text-sm">Verified</p>
-          <h2 className="text-xl font-bold">{totals.verified || 0}</h2>
+          <h2 className="text-xl font-bold">{summary.verified}</h2>
         </div>
         <div className="bg-white p-4 rounded shadow">
           <p className="text-gray-500 text-sm">Pending</p>
-          <h2 className="text-xl font-bold">{totals.pending || 0}</h2>
+          <h2 className="text-xl font-bold">{summary.pending}</h2>
         </div>
+        <div className="bg-white p-4 rounded shadow">
+          <p className="text-gray-500 text-sm">Failed</p>
+          <h2 className="text-xl font-bold text-red-700">{summary.failed}</h2>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        <section className="bg-white p-5 rounded shadow">
+          <h2 className="font-bold text-lg mb-4">Revenue Trend</h2>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={revenueTrendData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="day" />
+              <YAxis />
+              <Tooltip formatter={(value) => formatPrice(value)} />
+              <Line type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={3} />
+            </LineChart>
+          </ResponsiveContainer>
+        </section>
+
+        <section className="bg-white p-5 rounded shadow">
+          <h2 className="font-bold text-lg mb-4">Gateway Share</h2>
+          <div className="grid md:grid-cols-2 gap-4 items-center">
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={gatewayPieData} dataKey="value" nameKey="name" outerRadius={90}>
+                  {gatewayPieData.map((entry, index) => (
+                    <Cell key={entry.name} fill={pieColors[index % pieColors.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+
+            <div className="space-y-2 text-sm">
+              {gatewayPieData.map((item) => {
+                const percent = totalGatewayTx === 0
+                  ? 0
+                  : Math.round((item.value / totalGatewayTx) * 100);
+
+                return (
+                  <p key={item.name} className="text-gray-700">
+                    {item.name} {percent}%
+                  </p>
+                );
+              })}
+            </div>
+          </div>
+        </section>
       </div>
 
       <section className="bg-white p-5 rounded shadow">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-lg">Gateway Transactions</h2>
-          <span className="text-sm text-gray-500">{transactions.length} recent</span>
+          <span className="text-sm text-gray-500">{filteredTransactions.length} recent</span>
         </div>
 
-        {transactions.length === 0 ? (
+        <div className="grid md:grid-cols-3 gap-3 mb-4">
+          <input
+            placeholder="Search Reference, Customer or Email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="border rounded-lg p-3 w-full md:col-span-2"
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              value={gatewayFilter}
+              onChange={(e) => setGatewayFilter(e.target.value)}
+              className="border rounded-lg p-3"
+            >
+              <option value="all">All</option>
+              <option value="paystack">Paystack</option>
+              <option value="flutterwave">Flutterwave</option>
+              <option value="monnify">Monnify</option>
+              <option value="opay">Opay</option>
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="border rounded-lg p-3"
+            >
+              <option value="all">Status</option>
+              <option value="verified">Verified</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+        </div>
+
+        {filteredTransactions.length === 0 ? (
           <p className="text-gray-500">No gateway transactions yet.</p>
         ) : (
           <div className="grid gap-4">
-            {transactions.map((transaction) => (
-              <div key={transaction.id} className="border rounded p-4">
+            {filteredTransactions.map((transaction) => (
+              <div
+                key={transaction.id}
+                className="border rounded p-4 cursor-pointer hover:border-green-300 transition"
+                onClick={() => setSelectedTransaction(transaction)}
+              >
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div>
                     <p className="text-xs font-semibold text-green-700 uppercase">
                       {formatLabel(transaction.provider)} • {formatLabel(transaction.channel)}
                     </p>
-                    <h3 className="font-bold text-lg mt-1">{transaction.reference}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <h3 className="font-bold text-lg">{transaction.reference}</h3>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyReference(transaction.reference);
+                        }}
+                        className="text-xs bg-slate-100 px-2 py-1 rounded"
+                      >
+                        Copy
+                      </button>
+                    </div>
                     <p className="text-sm text-gray-600">
                       {transaction.user_name || "Unknown user"} ({transaction.user_email || "No email"})
                     </p>
@@ -120,43 +426,70 @@ export default function AdminPaymentsPage() {
                     <p className="text-xl font-bold">{formatPrice(transaction.amount)}</p>
                     <span
                       className={`inline-block mt-1 px-2 py-1 rounded text-xs font-semibold ${
-                        transaction.status === "verified"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-amber-100 text-amber-700"
+                        statusBadgeClass(transaction.status)
                       }`}
                     >
-                      {transaction.status}
+                      {formatLabel(transaction.status)}
                     </span>
                   </div>
                 </div>
 
-                {(transaction.account_number || transaction.ussd_code) && (
-                  <div className="mt-4 grid md:grid-cols-3 gap-3 text-sm bg-slate-50 rounded p-3">
-                    {transaction.bank_name && (
-                      <p>Bank: <b>{transaction.bank_name}</b></p>
-                    )}
-                    {transaction.account_number && (
-                      <p>Account: <b>{transaction.account_number}</b></p>
-                    )}
-                    {transaction.ussd_code && (
-                      <p>USSD: <b>{transaction.ussd_code}</b></p>
-                    )}
-                  </div>
-                )}
-
                 {transaction.status === "pending" && (
-                  <button
-                    onClick={() => verifyTransaction(transaction)}
-                    className="mt-4 bg-green-700 text-white px-3 py-2 rounded text-sm font-semibold"
-                  >
-                    Mark Verified
-                  </button>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        verifyTransaction(transaction);
+                      }}
+                      className="bg-green-700 text-white px-3 py-2 rounded text-sm font-semibold"
+                    >
+                      Mark Verified
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toast("Refund action coming soon");
+                      }}
+                      className="bg-purple-700 text-white px-3 py-2 rounded text-sm font-semibold"
+                    >
+                      Refund
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
           </div>
         )}
       </section>
+
+      {selectedTransaction && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">Transaction Details</h2>
+              <button
+                onClick={() => setSelectedTransaction(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4 text-sm">
+              <p><b>Reference:</b> {selectedTransaction.reference || "-"}</p>
+              <p><b>Customer:</b> {selectedTransaction.user_name || "Unknown"}</p>
+              <p><b>Order:</b> {selectedTransaction.order_id || "-"}</p>
+              <p><b>Gateway:</b> {formatLabel(selectedTransaction.provider)}</p>
+              <p><b>Authorization:</b> {selectedTransaction.authorization || selectedTransaction.authorization_code || "-"}</p>
+              <p><b>Fees:</b> {formatPrice(selectedTransaction.fees)}</p>
+              <p><b>Net Amount:</b> {formatPrice(selectedTransaction.net_amount ?? (toNumber(selectedTransaction.amount) - toNumber(selectedTransaction.fees)))}</p>
+              <p><b>Payment Date:</b> {formatDate(selectedTransaction.created_at)}</p>
+              <p><b>Verification Date:</b> {formatDate(selectedTransaction.verified_at)}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

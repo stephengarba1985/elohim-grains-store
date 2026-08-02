@@ -158,7 +158,7 @@ export default function AdminPaymentsPage() {
 
   const summary = {
     revenueToday: toNumber(totals.revenue_today ?? computed.revenueToday),
-    revenueThisMonth: toNumber(totals.revenue_this_month ?? computed.revenueThisMonth),
+    revenueThisMonth: toNumber(totals.revenue_month ?? totals.revenue_this_month ?? computed.revenueThisMonth),
     verifiedAmount: toNumber(totals.verified_amount ?? computed.verifiedAmount),
     pendingAmount: toNumber(totals.pending_amount ?? computed.pendingAmount),
     transactions: toNumber(totals.transactions ?? computed.transactions),

@@ -110,28 +110,135 @@ router.get("/admin/overview", async (req, res) => {
   try {
     await ensurePaymentGatewayTables();
 
+    // =========================
+    // Recent Transactions
+    // =========================
     const transactions = await pool.query(`
-      SELECT pt.*, u.name AS user_name, u.email AS user_email
+      SELECT
+        pt.*,
+        u.name AS user_name,
+        u.email AS user_email
       FROM payment_transactions pt
-      LEFT JOIN users u ON pt.user_id = u.id
-      ORDER BY pt.id DESC
+      LEFT JOIN users u
+        ON pt.user_id = u.id
+      ORDER BY pt.created_at DESC
       LIMIT 100
     `);
 
+    // =========================
+    // Overall Totals
+    // =========================
     const totals = await pool.query(`
       SELECT
+
         COUNT(*)::int AS transactions,
-        COUNT(*) FILTER (WHERE status='verified')::int AS verified,
-        COUNT(*) FILTER (WHERE status='pending')::int AS pending,
-        COALESCE(SUM(CASE WHEN status='verified' THEN amount ELSE 0 END), 0) AS verified_amount,
-        COALESCE(SUM(CASE WHEN status='pending' THEN amount ELSE 0 END), 0) AS pending_amount
+
+        COUNT(*) FILTER (
+          WHERE status='verified'
+        )::int AS verified,
+
+        COUNT(*) FILTER (
+          WHERE status='pending'
+        )::int AS pending,
+
+        COUNT(*) FILTER (
+          WHERE status='failed'
+        )::int AS failed,
+
+        COALESCE(
+          SUM(
+            CASE
+              WHEN status='verified'
+              THEN amount
+              ELSE 0
+            END
+          ),0
+        ) AS verified_amount,
+
+        COALESCE(
+          SUM(
+            CASE
+              WHEN status='pending'
+              THEN amount
+              ELSE 0
+            END
+          ),0
+        ) AS pending_amount
+
       FROM payment_transactions
     `);
 
-    res.json({ totals: totals.rows[0], transactions: transactions.rows });
+    // =========================
+    // Revenue Today
+    // =========================
+    const revenueToday = await pool.query(`
+      SELECT
+
+      COALESCE(
+        SUM(amount),
+        0
+      ) AS revenue_today
+
+      FROM payment_transactions
+
+      WHERE status='verified'
+
+      AND DATE(created_at)=CURRENT_DATE
+    `);
+
+    // =========================
+    // Revenue This Month
+    // =========================
+    const revenueMonth = await pool.query(`
+      SELECT
+
+      COALESCE(
+        SUM(amount),
+        0
+      ) AS revenue_month
+
+      FROM payment_transactions
+
+      WHERE status='verified'
+
+      AND DATE_TRUNC(
+          'month',
+          created_at
+      )=
+
+      DATE_TRUNC(
+          'month',
+          CURRENT_DATE
+      )
+    `);
+
+    res.json({
+
+      totals:{
+
+        ...totals.rows[0],
+
+        revenue_today:
+          revenueToday.rows[0].revenue_today,
+
+        revenue_month:
+          revenueMonth.rows[0].revenue_month
+
+      },
+
+      transactions:
+        transactions.rows
+
+    });
+
   } catch (err) {
     console.error("PAYMENT ADMIN ERROR:", err);
-    res.status(500).json({ error: "Failed to load payment gateway overview" });
+    res.status(500).json({
+
+      error:
+      "Failed to load payment overview"
+
+    });
   }
 });
 

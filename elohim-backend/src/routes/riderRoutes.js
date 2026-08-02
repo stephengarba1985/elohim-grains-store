@@ -267,13 +267,29 @@ router.get("/", async (req, res) => {
 
 router.get("/stats/summary", async (req, res) => {
   try {
+    const columnsRes = await pool.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'riders'
+         AND column_name IN ('online', 'earnings')`
+    );
+
+    const availableColumns = new Set(columnsRes.rows.map((row) => row.column_name));
+    const onlineExpr = availableColumns.has("online")
+      ? "COUNT(*) FILTER (WHERE online=true)::int"
+      : "0::int";
+    const earningsExpr = availableColumns.has("earnings")
+      ? "COALESCE(SUM(earnings), 0)"
+      : "0::numeric";
+
     const stats = await pool.query(`
       SELECT
         COUNT(*)::int total,
         COUNT(*) FILTER (WHERE status='available')::int available,
         COUNT(*) FILTER (WHERE status='busy')::int busy,
-        COUNT(*) FILTER (WHERE online=true)::int online,
-        COALESCE(SUM(earnings), 0) earnings
+        ${onlineExpr} online,
+        ${earningsExpr} earnings
       FROM riders
     `);
 

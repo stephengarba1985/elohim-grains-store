@@ -269,6 +269,22 @@ export default function RidersPage() {
 
   const formatMoney = (amount) => `₦${Number(amount || 0).toLocaleString()}`;
 
+  const derivedStats = {
+    total: riders.length,
+    available: riders.filter((r) => r.status === "available").length,
+    busy: riders.filter((r) => r.status === "busy").length,
+    online: riders.filter((r) => r.online === true).length,
+    earnings: riders.reduce((sum, rider) => sum + getEarnings(rider), 0),
+  };
+
+  const effectiveStats = {
+    total: Number(stats?.total ?? derivedStats.total),
+    available: Number(stats?.available ?? derivedStats.available),
+    busy: Number(stats?.busy ?? derivedStats.busy),
+    online: Number(stats?.online ?? derivedStats.online),
+    earnings: Number(stats?.earnings ?? derivedStats.earnings),
+  };
+
   const toggleSelect = (id) => {
     setSelectedIds((prev) =>
       prev.includes(id)
@@ -340,27 +356,27 @@ export default function RidersPage() {
       <div className="grid md:grid-cols-5 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-xs text-gray-500">Total Riders</p>
-          <p className="text-3xl font-bold">{stats.total || 0}</p>
+          <p className="text-3xl font-bold">{effectiveStats.total}</p>
         </div>
 
         <div className="bg-green-50 rounded-lg shadow p-4">
           <p className="text-xs text-green-700">Available</p>
-          <p className="text-3xl font-bold text-green-700">{stats.available || 0}</p>
+          <p className="text-3xl font-bold text-green-700">{effectiveStats.available}</p>
         </div>
 
         <div className="bg-yellow-50 rounded-lg shadow p-4">
           <p className="text-xs text-yellow-700">Busy</p>
-          <p className="text-3xl font-bold text-yellow-700">{stats.busy || 0}</p>
+          <p className="text-3xl font-bold text-yellow-700">{effectiveStats.busy}</p>
         </div>
 
         <div className="bg-blue-50 rounded-lg shadow p-4">
           <p className="text-xs text-blue-700">Online</p>
-          <p className="text-3xl font-bold text-blue-700">{stats.online || 0}</p>
+          <p className="text-3xl font-bold text-blue-700">{effectiveStats.online}</p>
         </div>
 
         <div className="bg-purple-50 rounded-lg shadow p-4">
           <p className="text-sm text-purple-700">Rider Earnings</p>
-          <p className="text-2xl font-bold">₦{Number(stats.earnings || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold">₦{Number(effectiveStats.earnings || 0).toLocaleString()}</p>
         </div>
       </div>
 

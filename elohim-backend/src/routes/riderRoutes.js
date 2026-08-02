@@ -11,21 +11,58 @@ const {
 ========================= */
 router.post("/", async (req, res) => {
   try {
-    const { name, phone } = req.body;
+    const {
+      name,
+      phone,
+      email,
+      vehicle_type,
+      plate_number,
+      license_number,
+      avatar,
+      address,
+      emergency_contact,
+      emergency_phone,
+    } = req.body;
 
     if (!name || !phone) {
       return res.status(400).json({ error: "Name and phone are required" });
     }
 
     const result = await pool.query(
-      `INSERT INTO riders (name, phone, status)
-       VALUES ($1, $2, 'available')
-       RETURNING *`,
-      [name, phone]
+      `
+      INSERT INTO riders
+      (
+      name,
+      phone,
+      email,
+      vehicle_type,
+      plate_number,
+      license_number,
+      avatar,
+      address,
+      emergency_contact,
+      emergency_phone,
+      status
+      )
+      VALUES
+      ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'available')
+      RETURNING *
+      `,
+      [
+        name,
+        phone,
+        email,
+        vehicle_type,
+        plate_number,
+        license_number,
+        avatar,
+        address,
+        emergency_contact,
+        emergency_phone,
+      ]
     );
 
     res.json(result.rows[0]);
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create rider" });
@@ -84,7 +121,19 @@ router.delete("/:id", async (req, res) => {
 ========================= */
 router.put("/:id", async (req, res) => {
   try {
-    const { name, phone } = req.body;
+    const {
+      name,
+      phone,
+      email,
+      vehicle_type,
+      plate_number,
+      license_number,
+      avatar,
+      address,
+      emergency_contact,
+      emergency_phone,
+      status,
+    } = req.body;
     const { id } = req.params;
 
     if (!name || !phone) {
@@ -93,11 +142,34 @@ router.put("/:id", async (req, res) => {
 
     const result = await pool.query(
       `UPDATE riders
-       SET name = $1,
-           phone = $2
-       WHERE id = $3
+       SET
+       name=$1,
+       phone=$2,
+       email=$3,
+       vehicle_type=$4,
+       plate_number=$5,
+       license_number=$6,
+       avatar=$7,
+       address=$8,
+       emergency_contact=$9,
+       emergency_phone=$10,
+       status=$11
+       WHERE id=$12
        RETURNING *`,
-      [name, phone, id]
+      [
+        name,
+        phone,
+        email,
+        vehicle_type,
+        plate_number,
+        license_number,
+        avatar,
+        address,
+        emergency_contact,
+        emergency_phone,
+        status,
+        id,
+      ]
     );
 
     if (result.rows.length === 0) {
@@ -115,6 +187,41 @@ router.put("/:id", async (req, res) => {
 });
 
 /* =========================
+   UPDATE RIDER STATUS
+========================= */
+router.put("/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, online } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ error: "Status is required" });
+    }
+
+    const result = await pool.query(
+      `UPDATE riders
+       SET status = $1,
+           online = COALESCE($2, online)
+       WHERE id = $3
+       RETURNING *`,
+      [status, online, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Rider not found" });
+    }
+
+    res.json({
+      message: "Rider status updated",
+      rider: result.rows[0],
+    });
+  } catch (err) {
+    console.error("UPDATE RIDER STATUS ERROR:", err);
+    res.status(500).json({ error: "Failed to update rider status" });
+  }
+});
+
+/* =========================
    GET ALL RIDERS
 ========================= */
 router.get("/", async (req, res) => {
@@ -124,20 +231,56 @@ router.get("/", async (req, res) => {
     const result = await pool.query(`
       SELECT
         r.*,
-        COUNT(o.id) AS total_orders,
-        COUNT(CASE WHEN o.status = 'delivered' THEN 1 END) AS delivered_orders,
-        COUNT(CASE WHEN o.status != 'delivered' THEN 1 END) AS pending_orders
+        COUNT(o.id)::int total_orders,
+        COUNT(
+          CASE
+            WHEN o.status='delivered' THEN 1
+          END
+        )::int delivered_orders,
+        COUNT(
+          CASE
+            WHEN o.status!='delivered' THEN 1
+          END
+        )::int pending_orders,
+        COALESCE(
+          SUM(
+            CASE
+              WHEN o.status='delivered' THEN o.total_amount
+              ELSE 0
+            END
+          ),
+          0
+        ) revenue_generated
       FROM riders r
-      LEFT JOIN orders o ON o.rider_id = r.id
+      LEFT JOIN orders o
+      ON o.rider_id=r.id
       GROUP BY r.id
-      ORDER BY r.id DESC
+      ORDER BY r.name
     `);
 
     res.json(result.rows);
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch riders" });
+  }
+});
+
+router.get("/stats/summary", async (req, res) => {
+  try {
+    const stats = await pool.query(`
+      SELECT
+        COUNT(*)::int total,
+        COUNT(*) FILTER (WHERE status='available')::int available,
+        COUNT(*) FILTER (WHERE status='busy')::int busy,
+        COUNT(*) FILTER (WHERE online=true)::int online,
+        COALESCE(SUM(earnings), 0) earnings
+      FROM riders
+    `);
+
+    res.json(stats.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load rider statistics" });
   }
 });
 
@@ -166,10 +309,7 @@ router.put("/assign/:delivery_id", async (req, res) => {
       [delivery_id]
     );
 
-    await pool.query(
-      `UPDATE riders SET status='busy' WHERE id=$1`,
-      [rider_id]
-    );
+    await pool.query(`UPDATE riders SET status='busy' WHERE id=$1`, [rider_id]);
 
     if (deliveryRes.rows[0]) {
       await addDeliveryEvent(
@@ -181,7 +321,6 @@ router.put("/assign/:delivery_id", async (req, res) => {
     }
 
     res.json({ message: "Rider assigned 🚚" });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Assignment failed" });
@@ -228,14 +367,12 @@ router.put("/status/:delivery_id", async (req, res) => {
     );
 
     if (status === "delivered" && delivery.rider_id) {
-      await pool.query(
-        `UPDATE riders SET status='available' WHERE id=$1`,
-        [delivery.rider_id]
-      );
+      await pool.query(`UPDATE riders SET status='available' WHERE id=$1`, [
+        delivery.rider_id,
+      ]);
     }
 
     res.json({ message: "Status updated", status });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Status update failed" });
@@ -243,7 +380,7 @@ router.put("/status/:delivery_id", async (req, res) => {
 });
 
 /* =========================
-   🔥 UPDATE RIDER LOCATION (SAFE)
+   UPDATE RIDER LOCATION
 ========================= */
 router.put("/location/:id", async (req, res) => {
   try {
@@ -251,7 +388,6 @@ router.put("/location/:id", async (req, res) => {
 
     const { id } = req.params;
 
-    // prevent crash
     if (!req.body) {
       return res.status(400).json({ error: "No body" });
     }
@@ -283,7 +419,6 @@ router.put("/location/:id", async (req, res) => {
     );
 
     res.json({ message: "Location updated" });
-
   } catch (err) {
     console.error("LOCATION ERROR:", err);
     res.status(500).json({ error: "Location failed" });

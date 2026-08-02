@@ -36,6 +36,19 @@ const ensureDeliveryTrackingTables = async () => {
       )
     `);
 
+    // Ensure older production tables receive new tracking columns.
+    await pool.query(`
+      ALTER TABLE deliveries
+        ADD COLUMN IF NOT EXISTS eta_minutes INTEGER DEFAULT 30,
+        ADD COLUMN IF NOT EXISTS delivery_otp VARCHAR(10),
+        ADD COLUMN IF NOT EXISTS otp_confirmed BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS current_lat DECIMAL(10,7),
+        ADD COLUMN IF NOT EXISTS current_lng DECIMAL(10,7),
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS delivery_events (
         id SERIAL PRIMARY KEY,

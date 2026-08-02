@@ -1,60 +1,122 @@
 const express = require("express");
 const pool = require("../config/db");
-const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
-router.get("/stats", verifyToken, isAdmin, async (req, res) => {
+router.get("/stats", async (req, res) => {
   try {
     const [
       revenue,
+      todayRevenue,
       orders,
-      users,
+      todayOrders,
+      customers,
       products,
       riders,
+      lowStock,
+      delivered,
+      pending,
       subscriptions,
-      pendingOrders,
-      processingOrders,
-      deliveredOrders,
-      lowStockProducts,
-      monthlySales,
     ] = await Promise.all([
-      pool.query("SELECT COALESCE(SUM(total_amount),0) AS total FROM orders"),
-      pool.query("SELECT COUNT(*) AS total FROM orders"),
-      pool.query("SELECT COUNT(*) AS total FROM users"),
-      pool.query("SELECT COUNT(*) AS total FROM products"),
-      pool.query("SELECT COUNT(*) AS total FROM riders"),
-      pool.query("SELECT COUNT(*) AS total FROM subscriptions WHERE status='active'"),
-      pool.query("SELECT COUNT(*) AS total FROM orders WHERE status='pending'"),
-      pool.query("SELECT COUNT(*) AS total FROM orders WHERE status='processing'"),
-      pool.query("SELECT COUNT(*) AS total FROM orders WHERE status='delivered'"),
-      pool.query("SELECT COUNT(*) AS total FROM products WHERE stock_quantity <= 10"),
+
       pool.query(`
-        SELECT COALESCE(SUM(total_amount),0) AS total
+        SELECT COALESCE(SUM(total_amount),0) AS revenue
         FROM orders
-        WHERE DATE_TRUNC('month', created_at)=DATE_TRUNC('month', NOW())
       `),
+
+      pool.query(`
+        SELECT COALESCE(SUM(total_amount),0) AS revenue
+        FROM orders
+        WHERE DATE(created_at)=CURRENT_DATE
+      `),
+
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM orders
+      `),
+
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM orders
+        WHERE DATE(created_at)=CURRENT_DATE
+      `),
+
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM users
+        WHERE COALESCE(is_admin,false)=false
+      `),
+
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM products
+      `),
+
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM riders
+      `),
+
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM products
+        WHERE stock_quantity<=10
+      `),
+
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM orders
+        WHERE status='delivered'
+      `),
+
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM orders
+        WHERE status!='delivered'
+      `),
+
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM subscriptions
+        WHERE status='active'
+      `),
+
     ]);
 
     res.json({
-      revenue: Number(revenue.rows[0].total),
-      orders: Number(orders.rows[0].total),
-      users: Number(users.rows[0].total),
-      products: Number(products.rows[0].total),
-      riders: Number(riders.rows[0].total),
-      subscriptions: Number(subscriptions.rows[0].total),
-      pendingOrders: Number(pendingOrders.rows[0].total),
-      processingOrders: Number(processingOrders.rows[0].total),
-      deliveredOrders: Number(deliveredOrders.rows[0].total),
-      lowStockProducts: Number(lowStockProducts.rows[0].total),
-      monthlySales: Number(monthlySales.rows[0].total),
+
+      revenue: revenue.rows[0].revenue,
+
+      todayRevenue: todayRevenue.rows[0].revenue,
+
+      orders: orders.rows[0].total,
+
+      todayOrders: todayOrders.rows[0].total,
+
+      customers: customers.rows[0].total,
+
+      products: products.rows[0].total,
+
+      riders: riders.rows[0].total,
+
+      lowStock: lowStock.rows[0].total,
+
+      delivered: delivered.rows[0].total,
+
+      pending: pending.rows[0].total,
+
+      subscriptions: subscriptions.rows[0].total
+
     });
 
   } catch (err) {
+
     console.error(err);
+
     res.status(500).json({
-      error: "Failed to load dashboard statistics",
+      error: "Failed to load dashboard"
     });
+
   }
 });
 

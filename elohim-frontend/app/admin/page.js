@@ -18,21 +18,21 @@ import {
 
 export default function AdminDashboard() {
   const [user, setUser] = useState(null);
-  const [stats, setStats] = useState({
-    revenue: 0,
-    orders: 0,
-    users: 0,
-    products: 0,
-    riders: 0,
-    subscriptions: 0,
-    pendingOrders: 0,
-    processingOrders: 0,
-    deliveredOrders: 0,
-    lowStockProducts: 0,
-    monthlySales: 0,
-  });
   const [orders, setOrders] = useState([]);
   const [riders, setRiders] = useState([]);
+  const [stats, setStats] = useState({
+    revenue: 0,
+    todayRevenue: 0,
+    orders: 0,
+    todayOrders: 0,
+    customers: 0,
+    products: 0,
+    riders: 0,
+    lowStock: 0,
+    delivered: 0,
+    pending: 0,
+    subscriptions: 0,
+  });
 
   const router = useRouter();
 
@@ -89,19 +89,7 @@ export default function AdminDashboard() {
   const fetchStats = async () => {
     try {
       const res = await API.get("/admin/stats");
-      setStats({
-        revenue: Number(res.data?.revenue || 0),
-        orders: Number(res.data?.orders || 0),
-        users: Number(res.data?.users || 0),
-        products: Number(res.data?.products || 0),
-        riders: Number(res.data?.riders || 0),
-        subscriptions: Number(res.data?.subscriptions || 0),
-        pendingOrders: Number(res.data?.pendingOrders || 0),
-        processingOrders: Number(res.data?.processingOrders || 0),
-        deliveredOrders: Number(res.data?.deliveredOrders || 0),
-        lowStockProducts: Number(res.data?.lowStockProducts || 0),
-        monthlySales: Number(res.data?.monthlySales || 0),
-      });
+      setStats(res.data);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load dashboard statistics");
@@ -143,16 +131,6 @@ export default function AdminDashboard() {
 
   const formatPrice = (price) =>
     `₦${Number(price || 0).toLocaleString()}`;
-
-  /* ========================= STATS ========================= */
-  const totalRevenue = stats.revenue;
-
-  const deliveryStats = {
-    pending: orders.filter(o => o.status === "pending").length,
-    assigned: orders.filter(o => o.status === "assigned").length,
-    in_transit: orders.filter(o => o.status === "in_transit").length,
-    delivered: orders.filter(o => o.status === "delivered").length,
-  };
 
   /* ========================= CHART DATA ========================= */
   const grouped = {};
@@ -197,71 +175,78 @@ export default function AdminDashboard() {
         <h1 className="text-3xl font-bold mb-6">Dashboard 📊</h1>
 
         {/* ========================= STATS ========================= */}
-        <div className="grid md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
 
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-gray-500">Orders</p>
-            <h2 className="text-xl font-bold">{stats.orders}</h2>
-          </div>
-
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-gray-500">Revenue</p>
-            <h2 className="text-xl font-bold">{formatPrice(totalRevenue)}</h2>
-          </div>
-
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-gray-500">Riders</p>
-            <h2 className="text-xl font-bold">{stats.riders}</h2>
-          </div>
-
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-gray-500">Delivered</p>
-            <h2 className="text-xl font-bold text-green-600">
-              {stats.deliveredOrders}
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-gray-500 text-sm">Revenue</p>
+            <h2 className="text-2xl font-bold text-green-600">
+              {formatPrice(stats.revenue)}
             </h2>
           </div>
 
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-gray-500">Monthly Sales</p>
-            <h2 className="text-xl font-bold text-emerald-700">{formatPrice(stats.monthlySales)}</h2>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-gray-500 text-sm">Today's Revenue</p>
+            <h2 className="text-xl font-bold">
+              {formatPrice(stats.todayRevenue)}
+            </h2>
           </div>
 
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-gray-500">Low Stock Products</p>
-            <h2 className="text-xl font-bold text-red-600">{stats.lowStockProducts}</h2>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-gray-500 text-sm">Orders</p>
+            <h2 className="text-2xl font-bold">
+              {stats.orders}
+            </h2>
           </div>
 
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-gray-500">Active Subscriptions</p>
-            <h2 className="text-xl font-bold text-indigo-700">{stats.subscriptions}</h2>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-gray-500 text-sm">Today's Orders</p>
+            <h2 className="text-2xl font-bold">
+              {stats.todayOrders}
+            </h2>
           </div>
 
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-gray-500">Total Users</p>
-            <h2 className="text-xl font-bold">{stats.users}</h2>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-gray-500 text-sm">Customers</p>
+            <h2 className="text-2xl font-bold">
+              {stats.customers}
+            </h2>
           </div>
 
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-gray-500">Products</p>
-            <h2 className="text-xl font-bold">{stats.products}</h2>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-gray-500 text-sm">Products</p>
+            <h2 className="text-2xl font-bold">
+              {stats.products}
+            </h2>
           </div>
 
-        </div>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-gray-500 text-sm">Riders</p>
+            <h2 className="text-2xl font-bold">
+              {stats.riders}
+            </h2>
+          </div>
 
-        {/* ========================= DELIVERY STATS ========================= */}
-        <div className="grid md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-yellow-100 p-3 rounded text-center">
-            Pending: {stats.pendingOrders}
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-gray-500 text-sm">Low Stock</p>
+            <h2 className="text-2xl font-bold text-red-600">
+              {stats.lowStock}
+            </h2>
           </div>
-          <div className="bg-blue-100 p-3 rounded text-center">
-            Processing: {stats.processingOrders}
+
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-gray-500 text-sm">Delivered</p>
+            <h2 className="text-2xl font-bold text-green-600">
+              {stats.delivered}
+            </h2>
           </div>
-          <div className="bg-purple-100 p-3 rounded text-center">
-            Assigned: {deliveryStats.assigned}
+
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-gray-500 text-sm">Pending</p>
+            <h2 className="text-2xl font-bold text-orange-600">
+              {stats.pending}
+            </h2>
           </div>
-          <div className="bg-orange-100 p-3 rounded text-center">
-            Transit: {deliveryStats.in_transit}
-          </div>
+
         </div>
 
         {/* ========================= CHART ========================= */}

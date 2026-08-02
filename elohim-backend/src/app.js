@@ -32,6 +32,7 @@ const { router: mobileRoutes } = require("./routes/mobileRoutes");
 const userRoutes = require("./routes/userRoutes");
 const bulkRoutes = require("./routes/bulkRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
+const customerRoutes = require("./routes/customerRoutes");
 
 // ✅ PAYMENT ROUTE
 const paymentRoutes = require("./routes/paymentRoutes");
@@ -86,6 +87,7 @@ app.use("/api/kyc", kycRoutes);
 app.use("/api/ai-assistant", aiAssistantRoutes);
 app.use("/api/mobile", mobileRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/customers", customerRoutes);
 // ✅ KEEP ONLY THIS (MAIN BULK SYSTEM)
 // ✅ SINGLE BULK ENTRY POINT
 app.use("/api/bulk", bulkRoutes);

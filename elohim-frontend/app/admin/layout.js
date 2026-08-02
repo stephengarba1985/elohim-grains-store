@@ -31,27 +31,41 @@ export default function AdminLayout({ children }) {
         </h1>
 
         <div className="flex flex-col gap-2">
-          <p className="text-xs text-gray-400 mt-2">MANAGEMENT</p>
+          <p className="text-xs text-gray-400 mt-2">OPERATIONS</p>
 
           {navItem("Dashboard", "/admin")}
-          {navItem("Inventory", "/admin/inventory")}
           {navItem("Orders", "/admin/orders")}
+          {navItem("Inventory", "/admin/inventory")}
+          {navItem("Customers", "/admin/customers")}
           {navItem("Vendors", "/admin/vendors")}
+          {navItem("Riders", "/admin/riders")}
+          {navItem("Logistics", "/admin/logistics")}
+
+          <p className="text-xs text-gray-400 mt-4">FINANCE</p>
+
           {navItem("Payments", "/admin/payments")}
-          {navItem("Escrow", "/admin/escrow")}
-          {navItem("Price AI", "/admin/price-insights")}
-          {navItem("AI Assistant", "/admin/ai-assistant")}
-          {navItem("Mobile App", "/admin/mobile")}
           {navItem("Wallet", "/admin/wallet")}
+          {navItem("Escrow", "/admin/escrow")}
           {navItem("BNPL", "/admin/bnpl")}
           {navItem("Inventory Finance", "/admin/inventory-finance")}
-          {navItem("Smart Warehouse", "/admin/warehouse")}
-          {navItem("KYC Verification", "/admin/kyc")}
-          {navItem("Cooperatives", "/admin/cooperatives")}
-          {navItem("Grain Plans", "/admin/plans")}
+
+          <p className="text-xs text-gray-400 mt-4">AI & ANALYTICS</p>
+
+          {navItem("Price AI", "/admin/price-insights")}
+          {navItem("AI Assistant", "/admin/ai-assistant")}
+          {navItem("Sales Analytics", "/admin/analytics")}
+
+          <p className="text-xs text-gray-400 mt-4">SUPPLY CHAIN</p>
+
+          {navItem("Warehouse", "/admin/warehouse")}
           {navItem("Bulk Requests", "/admin/bulk")}
-          {navItem("Logistics", "/admin/logistics")}
-          {navItem("Riders", "/admin/riders")}
+          {navItem("Grain Plans", "/admin/plans")}
+          {navItem("Cooperatives", "/admin/cooperatives")}
+
+          <p className="text-xs text-gray-400 mt-4">SECURITY</p>
+
+          {navItem("KYC Verification", "/admin/kyc")}
+          {navItem("Mobile App", "/admin/mobile")}
 
           <button
             onClick={logout}

@@ -8,7 +8,8 @@ const DELIVERY_FEE = 2500;
 
 export default function RidersPage() {
   const [riders, setRiders] = useState([]);
-  const [riderStats, setRiderStats] = useState(null);
+  const [filteredRiders, setFilteredRiders] = useState([]);
+  const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -33,25 +34,48 @@ export default function RidersPage() {
 
   useEffect(() => {
     fetchRiders();
+    fetchStats();
   }, []);
+
+  useEffect(() => {
+    let list = [...riders];
+
+    if (search) {
+      list = list.filter((r) =>
+        r.name?.toLowerCase().includes(search.toLowerCase()) ||
+        r.phone?.includes(search) ||
+        r.plate_number?.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+
+    if (statusFilter !== "all") {
+      list = list.filter((r) => r.status === statusFilter);
+    }
+
+    setFilteredRiders(list);
+  }, [search, statusFilter, riders]);
 
   /* ========================= FETCH ========================= */
   const fetchRiders = async () => {
     try {
       setLoading(true);
-      const [ridersRes, statsRes] = await Promise.all([
-        API.get("/riders"),
-        API.get("/riders/stats/summary").catch(() => null),
-      ]);
-
+      const ridersRes = await API.get("/riders");
       const ridersData = Array.isArray(ridersRes.data) ? ridersRes.data : [];
       setRiders(ridersData);
-      setRiderStats(statsRes?.data || null);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load riders");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const res = await API.get("/riders/stats/summary");
+      setStats(res.data || {});
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -114,6 +138,7 @@ export default function RidersPage() {
       });
       setEditingId(null);
       fetchRiders();
+      fetchStats();
 
     } catch (err) {
       console.error(err.response?.data || err.message);
@@ -147,6 +172,7 @@ export default function RidersPage() {
       await API.delete(`/riders/${id}`);
       toast.success("Rider removed ❌");
       fetchRiders();
+      fetchStats();
     } catch (err) {
       console.error(err.response?.data || err.message);
       toast.error("Failed to delete rider");
@@ -243,68 +269,6 @@ export default function RidersPage() {
 
   const formatMoney = (amount) => `₦${Number(amount || 0).toLocaleString()}`;
 
-  const formatLastSeen = (value) => {
-    if (!value) return "Not available";
-
-    const last = new Date(value);
-    if (Number.isNaN(last.getTime())) return "Not available";
-
-    const diffMinutes = Math.max(0, Math.floor((Date.now() - last.getTime()) / 60000));
-    if (diffMinutes < 1) return "Just now";
-    if (diffMinutes < 60) return `${diffMinutes} minute(s) ago`;
-
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours} hour(s) ago`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays} day(s) ago`;
-  };
-
-  const filteredRiders = riders.filter((rider) => {
-    const keyword = search.toLowerCase();
-    const status = getNormalizedStatus(rider);
-
-    const matchesSearch =
-      String(rider.name || "").toLowerCase().includes(keyword) ||
-      String(rider.phone || "").toLowerCase().includes(keyword) ||
-      String(rider.plate_number || "").toLowerCase().includes(keyword);
-
-    let matchesStatus = true;
-
-    if (statusFilter === "available") {
-      matchesStatus = status === "available";
-    } else if (statusFilter === "busy") {
-      matchesStatus = isBusy(status);
-    } else if (statusFilter === "offline") {
-      matchesStatus = status === "offline";
-    }
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const derivedSummary = {
-    totalRiders: riders.length,
-    available: riders.filter((r) => getNormalizedStatus(r) === "available").length,
-    busy: riders.filter((r) => isBusy(getNormalizedStatus(r))).length,
-    offline: riders.filter((r) => getNormalizedStatus(r) === "offline").length,
-    deliveriesToday: riders.reduce((sum, rider) => sum + Number(rider.deliveries_today || 0), 0),
-    totalEarnings: riders.reduce((sum, rider) => sum + getEarnings(rider), 0),
-  };
-
-  const summary = {
-    totalRiders: Number(riderStats?.total ?? derivedSummary.totalRiders),
-    available: Number(riderStats?.available ?? derivedSummary.available),
-    busy: Number(riderStats?.busy ?? derivedSummary.busy),
-    offline: Math.max(
-      0,
-      Number(riderStats?.total ?? derivedSummary.totalRiders) -
-        Number(riderStats?.available ?? derivedSummary.available) -
-        Number(riderStats?.busy ?? derivedSummary.busy)
-    ),
-    deliveriesToday: derivedSummary.deliveriesToday,
-    totalEarnings: Number(riderStats?.earnings ?? derivedSummary.totalEarnings),
-  };
-
   const toggleSelect = (id) => {
     setSelectedIds((prev) =>
       prev.includes(id)
@@ -359,6 +323,7 @@ export default function RidersPage() {
 
       toast.success(mode === "activate" ? "Riders activated" : "Riders suspended");
       fetchRiders();
+      fetchStats();
     } catch (err) {
       console.error(err.response?.data || err.message);
       toast.error("Bulk status update failed");
@@ -372,30 +337,30 @@ export default function RidersPage() {
         Riders Management 🛵
       </h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <div className="bg-white p-4 rounded shadow">
+      <div className="grid md:grid-cols-5 gap-4 mb-6">
+        <div className="bg-white rounded-lg shadow p-4">
           <p className="text-xs text-gray-500">Total Riders</p>
-          <p className="text-2xl font-bold">{summary.totalRiders}</p>
+          <p className="text-3xl font-bold">{stats.total || 0}</p>
         </div>
-        <div className="bg-green-50 p-4 rounded shadow">
+
+        <div className="bg-green-50 rounded-lg shadow p-4">
           <p className="text-xs text-green-700">Available</p>
-          <p className="text-2xl font-bold text-green-700">{summary.available}</p>
+          <p className="text-3xl font-bold text-green-700">{stats.available || 0}</p>
         </div>
-        <div className="bg-blue-50 p-4 rounded shadow">
-          <p className="text-xs text-blue-700">Busy</p>
-          <p className="text-2xl font-bold text-blue-700">{summary.busy}</p>
+
+        <div className="bg-yellow-50 rounded-lg shadow p-4">
+          <p className="text-xs text-yellow-700">Busy</p>
+          <p className="text-3xl font-bold text-yellow-700">{stats.busy || 0}</p>
         </div>
-        <div className="bg-gray-100 p-4 rounded shadow">
-          <p className="text-xs text-gray-700">Offline</p>
-          <p className="text-2xl font-bold text-gray-700">{summary.offline}</p>
+
+        <div className="bg-blue-50 rounded-lg shadow p-4">
+          <p className="text-xs text-blue-700">Online</p>
+          <p className="text-3xl font-bold text-blue-700">{stats.online || 0}</p>
         </div>
-        <div className="bg-amber-50 p-4 rounded shadow">
-          <p className="text-xs text-amber-700">Deliveries Today</p>
-          <p className="text-2xl font-bold text-amber-700">{summary.deliveriesToday}</p>
-        </div>
-        <div className="bg-emerald-50 p-4 rounded shadow">
-          <p className="text-xs text-emerald-700">Total Earnings</p>
-          <p className="text-2xl font-bold text-emerald-700">{formatMoney(summary.totalEarnings)}</p>
+
+        <div className="bg-purple-50 rounded-lg shadow p-4">
+          <p className="text-sm text-purple-700">Rider Earnings</p>
+          <p className="text-2xl font-bold">₦{Number(stats.earnings || 0).toLocaleString()}</p>
         </div>
       </div>
 
@@ -538,35 +503,35 @@ export default function RidersPage() {
       {/* ========================= LIST ========================= */}
       {loading && <p>Loading riders...</p>}
 
+      <div className="flex gap-3 mb-5">
+        <input
+          className="border rounded-lg p-3 flex-1"
+          placeholder="Search rider..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+
+        <select
+          className="border rounded-lg p-3"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          <option value="all">All</option>
+          <option value="available">Available</option>
+          <option value="busy">Busy</option>
+          <option value="offline">Offline</option>
+        </select>
+      </div>
+
       <div className="bg-white p-4 rounded shadow mb-6 space-y-3">
-        <div className="grid md:grid-cols-3 gap-3">
-          <input
-            placeholder="Search Rider..."
-            className="border p-2 rounded"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-
-          <select
-            className="border p-2 rounded"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">All Riders</option>
-            <option value="available">Available</option>
-            <option value="busy">Busy</option>
-            <option value="offline">Offline</option>
-          </select>
-
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={toggleSelectAll}
             className="bg-gray-800 text-white px-4 py-2 rounded"
           >
             Select Visible
           </button>
-        </div>
 
-        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => bulkSetStatus("activate")}
             className="bg-green-600 text-white px-3 py-2 rounded text-sm"
@@ -587,10 +552,20 @@ export default function RidersPage() {
           >
             Delete
           </button>
+
+          <span className="text-xs text-gray-500 ml-auto">
+            Showing {filteredRiders.length} of {riders.length} riders
+          </span>
         </div>
       </div>
 
       <div className="grid gap-4">
+        {!loading && filteredRiders.length === 0 && (
+          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-600">
+            No riders match your current search/filter.
+          </div>
+        )}
+
         {filteredRiders.map((r) => (
           <div
             key={r.id}
@@ -612,9 +587,15 @@ export default function RidersPage() {
                 </div>
                 <h2 className="font-bold text-lg">{r.name}</h2>
                 <p className="text-sm text-gray-600">{r.phone}</p>
+                <p className="text-xs text-gray-500">Email: {r.email || "-"}</p>
+                <p className="text-xs text-gray-500">Vehicle: {r.vehicle_type || "-"}</p>
                 {r.plate_number && (
                   <p className="text-xs text-gray-500">Plate: {r.plate_number}</p>
                 )}
+                <p className="text-xs text-gray-500">Rating ⭐ {Number(r.rating || 0).toFixed(1)}</p>
+                <p className="text-xs text-emerald-700 font-medium">
+                  Revenue Generated ₦{Number(r.revenue_generated || 0).toLocaleString()}
+                </p>
 
                 <span
                   className={`text-xs px-2 py-1 rounded ${getStatusView(r).className}`}
@@ -729,83 +710,30 @@ export default function RidersPage() {
       </div>
 
       {selectedRider && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h2 className="text-2xl font-bold">{selectedRider.name || "Rider"}</h2>
-                <p className="text-amber-600">{"★".repeat(Math.round(getRating(selectedRider)))} ({getRating(selectedRider).toFixed(1)})</p>
-              </div>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-xl w-full max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold mb-4">{selectedRider.name}</h2>
+
+            <div className="grid md:grid-cols-2 gap-3 text-sm">
+              <p><b>Phone:</b> {selectedRider.phone}</p>
+              <p><b>Email:</b> {selectedRider.email}</p>
+              <p><b>Vehicle:</b> {selectedRider.vehicle_type}</p>
+              <p><b>Plate:</b> {selectedRider.plate_number}</p>
+              <p><b>License:</b> {selectedRider.license_number}</p>
+              <p><b>Status:</b> {selectedRider.status}</p>
+              <p><b>Rating:</b> ⭐ {Number(selectedRider.rating || 0).toFixed(1)}</p>
+              <p><b>Earnings:</b> ₦{Number(selectedRider.earnings || 0).toLocaleString()}</p>
+              <p><b>Completed:</b> {selectedRider.completed_deliveries || 0}</p>
+              <p><b>Cancelled:</b> {selectedRider.cancelled_deliveries || 0}</p>
+            </div>
+
+            <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setSelectedRider(null)}
-                className="bg-gray-700 text-white px-3 py-2 rounded"
+                className="bg-gray-700 text-white px-4 py-2 rounded"
               >
                 Close
               </button>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-6 text-sm">
-              <div className="space-y-1">
-                <p><b>Phone:</b> {selectedRider.phone || "-"}</p>
-                <p><b>Email:</b> {selectedRider.email || "-"}</p>
-                <p><b>Vehicle:</b> {selectedRider.vehicle_type || "-"}</p>
-                <p><b>Plate:</b> {selectedRider.plate_number || "-"}</p>
-                <p><b>License:</b> {selectedRider.license_number || "-"}</p>
-                <p><b>Status:</b> {getStatusView(selectedRider).label}</p>
-              </div>
-
-              <div className="space-y-1">
-                <p><b>Completed:</b> {getCompleted(selectedRider)}</p>
-                <p><b>Cancelled:</b> {getCancelled(selectedRider)}</p>
-                <p><b>Rating:</b> {getRating(selectedRider).toFixed(1)}★</p>
-                <p><b>Orders:</b> {getOrderCount(selectedRider.total_orders)}</p>
-                <p><b>Assigned Orders:</b> {getOrderCount(selectedRider.pending_orders)}</p>
-              </div>
-            </div>
-
-            <div className="mt-6 bg-gray-50 rounded p-4">
-              <h3 className="font-semibold mb-2">Current Location</h3>
-              <p><b>Lat:</b> {selectedRider.current_location?.latitude ?? "-"}</p>
-              <p><b>Lng:</b> {selectedRider.current_location?.longitude ?? "-"}</p>
-              <p><b>Last Seen:</b> {formatLastSeen(selectedRider.current_location?.updated_at || selectedRider.current_location?.timestamp)}</p>
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 text-center">
-              <div className="bg-gray-100 rounded p-2">
-                <p className="text-xs text-gray-500">Deliveries</p>
-                <p className="font-bold">{getOrderCount(selectedRider.total_orders)}</p>
-              </div>
-              <div className="bg-green-100 rounded p-2">
-                <p className="text-xs text-green-700">Completed</p>
-                <p className="font-bold text-green-700">{getCompleted(selectedRider)}</p>
-              </div>
-              <div className="bg-red-100 rounded p-2">
-                <p className="text-xs text-red-700">Cancelled</p>
-                <p className="font-bold text-red-700">{getCancelled(selectedRider)}</p>
-              </div>
-              <div className="bg-blue-100 rounded p-2">
-                <p className="text-xs text-blue-700">Completion Rate</p>
-                <p className="font-bold text-blue-700">
-                  {getOrderCount(selectedRider.total_orders)
-                    ? Math.round((getCompleted(selectedRider) / getOrderCount(selectedRider.total_orders)) * 100)
-                    : 0}%
-                </p>
-              </div>
-              <div className="bg-amber-100 rounded p-2">
-                <p className="text-xs text-amber-700">Rating</p>
-                <p className="font-bold text-amber-700">{getRating(selectedRider).toFixed(1)}★</p>
-              </div>
-              <div className="bg-emerald-100 rounded p-2">
-                <p className="text-xs text-emerald-700">Revenue</p>
-                <p className="font-bold text-emerald-700">{formatMoney(getEarnings(selectedRider))}</p>
-              </div>
-            </div>
-
-            <div className="mt-6 bg-emerald-50 rounded p-4">
-              <h3 className="font-semibold mb-2">Earnings</h3>
-              <p><b>Delivery Fee:</b> {formatMoney(DELIVERY_FEE)}</p>
-              <p><b>Completed:</b> {getCompleted(selectedRider)}</p>
-              <p><b>Total Earnings:</b> {formatMoney(getEarnings(selectedRider))}</p>
             </div>
           </div>
         </div>

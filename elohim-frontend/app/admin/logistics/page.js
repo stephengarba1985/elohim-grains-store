@@ -9,6 +9,24 @@ const RiderMap = dynamic(() => import("@/components/RiderMap"), {
   ssr: false,
 });
 
+const Progress = ({ status }) => {
+  const steps = ["pending", "assigned", "in_transit", "delivered"];
+  const current = steps.indexOf(status);
+
+  return (
+    <div className="flex gap-2 mt-3">
+      {steps.map((step, index) => (
+        <div
+          key={step}
+          className={`flex-1 h-2 rounded ${
+            index <= current ? "bg-green-600" : "bg-gray-200"
+          }`}
+        />
+      ))}
+    </div>
+  );
+};
+
 export default function LogisticsPage() {
   const [orders, setOrders] = useState([]);
   const [riders, setRiders] = useState([]);
@@ -33,8 +51,9 @@ export default function LogisticsPage() {
   ========================= */
   useEffect(() => {
     const interval = setInterval(() => {
+      fetchOrders();
       fetchRiders();
-    }, 30000);
+    }, 15000);
 
     return () => clearInterval(interval);
   }, []);
@@ -151,6 +170,19 @@ export default function LogisticsPage() {
   const deliveredOrders = orders.filter((o) => o.status === "delivered").length;
   const availableRiders = riders.filter((r) => r.status === "available").length;
   const busyRiders = riders.filter((r) => r.status === "busy").length;
+  const waitingOrders = orders.filter((o) => o.status === "pending").length;
+  const lateOrders = orders.filter((o) => {
+    if (!o.created_at) return false;
+
+    const minutes =
+      (Date.now() - new Date(o.created_at).getTime()) / 60000;
+
+    return (
+      o.status !== "delivered" &&
+      minutes > 60
+    );
+  }).length;
+  const offlineRiders = riders.filter((r) => r.status === "offline").length;
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
@@ -279,6 +311,29 @@ export default function LogisticsPage() {
 
       </div>
 
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+        <h2 className="font-bold text-amber-700 mb-3">
+          Dispatch Alerts
+        </h2>
+
+        <div className="space-y-2 text-sm">
+          <p>
+            ⚠️ Orders waiting assignment:
+            <b> {waitingOrders}</b>
+          </p>
+
+          <p>
+            ⚠️ Late deliveries:
+            <b> {lateOrders}</b>
+          </p>
+
+          <p>
+            ⚠️ Offline riders:
+            <b> {offlineRiders}</b>
+          </p>
+        </div>
+      </div>
+
       <div className="mb-5">
         <input
           type="text"
@@ -379,6 +434,44 @@ export default function LogisticsPage() {
         <RiderMap riders={riders} />
       </div>
 
+      <div className="bg-white rounded-lg shadow p-5 mb-6">
+        <h2 className="font-bold mb-4">
+          Live Riders
+        </h2>
+
+        <div className="grid md:grid-cols-3 gap-3">
+          {riders.map((r) => (
+            <div
+              key={r.id}
+              className="border rounded-lg p-3"
+            >
+              <h3 className="font-semibold">
+                {r.name}
+              </h3>
+
+              <p>{r.phone}</p>
+
+              <p>
+                Status:
+                <b>
+                  {" "}{r.status}
+                </b>
+              </p>
+
+              <p>
+                Latitude:
+                {" "}{r.latitude || "--"}
+              </p>
+
+              <p>
+                Longitude:
+                {" "}{r.longitude || "--"}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* ORDERS */}
       <div className="grid gap-4">
         {filteredOrders.length === 0 && (
@@ -417,6 +510,17 @@ export default function LogisticsPage() {
                 {order.status}
               </span>
             </div>
+
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              {order.eta_minutes && (
+                <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">
+                  ETA
+                  {" "}{order.eta_minutes} mins
+                </span>
+              )}
+            </div>
+
+            <Progress status={order.status} />
 
             {/* RIDER ASSIGN */}
             <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
@@ -496,28 +600,43 @@ export default function LogisticsPage() {
               </a>
             </div>
 
-            {/* STATUS BUTTONS */}
-            <div className="grid grid-cols-3 gap-2 mt-3">
-              <button
-                onClick={() => updateStatus(order.id, "assigned")}
-                className="bg-yellow-500 text-white px-2 py-2 rounded text-xs"
+            {/* STATUS CONTROL */}
+            <div className="mt-3">
+              <select
+                value={order.status}
+                onChange={(e) =>
+                  updateStatus(order.id, e.target.value)
+                }
+                className="border rounded p-2 w-full md:w-auto"
               >
-                Assigned
-              </button>
+                <option value="pending">
+                  Pending
+                </option>
 
-              <button
-                onClick={() => updateStatus(order.id, "in_transit")}
-                className="bg-blue-500 text-white px-2 py-2 rounded text-xs"
-              >
-                Transit
-              </button>
+                <option value="assigned">
+                  Assigned
+                </option>
 
-              <button
-                onClick={() => updateStatus(order.id, "delivered")}
-                className="bg-green-600 text-white px-2 py-2 rounded text-xs"
-              >
-                Delivered
-              </button>
+                <option value="processing">
+                  Processing
+                </option>
+
+                <option value="picked_up">
+                  Picked Up
+                </option>
+
+                <option value="in_transit">
+                  In Transit
+                </option>
+
+                <option value="near_customer">
+                  Near Customer
+                </option>
+
+                <option value="delivered">
+                  Delivered
+                </option>
+              </select>
             </div>
 
           </div>

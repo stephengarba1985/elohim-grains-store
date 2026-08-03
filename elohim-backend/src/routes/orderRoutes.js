@@ -541,7 +541,9 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
       "processing",
       "paid",
       "assigned",
+      "picked_up",
       "in_transit",
+      "near_customer",
       "delivered",
     ];
 

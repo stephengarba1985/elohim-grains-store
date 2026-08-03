@@ -50,10 +50,14 @@ app.use(cors({
 
 app.use(express.json());
 
-app.use(
-  "/uploads",
-  express.static(path.join(__dirname, "..", "uploads"))
-);
+const uploadStaticDirs = [
+  path.join(__dirname, "..", "uploads"),
+  path.resolve(process.cwd(), "uploads"),
+];
+
+Array.from(new Set(uploadStaticDirs)).forEach((dir) => {
+  app.use("/uploads", express.static(dir));
+});
 
 if (isDev) {
   app.use((req, res, next) => {

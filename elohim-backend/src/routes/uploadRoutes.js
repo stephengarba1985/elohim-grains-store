@@ -5,9 +5,28 @@ const path = require("path");
 
 const router = express.Router();
 
-const uploadRoot = path.resolve(__dirname, "../../uploads/products");
+const candidateUploadRoots = [
+  process.env.UPLOAD_PRODUCTS_DIR,
+  path.resolve(process.cwd(), "uploads/products"),
+  path.resolve(__dirname, "../../uploads/products"),
+].filter(Boolean);
 
-fs.mkdirSync(uploadRoot, { recursive: true });
+let uploadRoot = null;
+
+for (const candidate of candidateUploadRoots) {
+  try {
+    fs.mkdirSync(candidate, { recursive: true });
+    fs.accessSync(candidate, fs.constants.W_OK);
+    uploadRoot = candidate;
+    break;
+  } catch (err) {
+    // Try next candidate path.
+  }
+}
+
+if (!uploadRoot) {
+  throw new Error("No writable upload directory available for product images");
+}
 
 const storage = multer.diskStorage({
   destination(req, file, cb) {
@@ -55,6 +74,13 @@ router.post(
       return res.status(400).json({
         success: false,
         error: "No image file was uploaded",
+      });
+    }
+
+    if (!req.file?.path || !fs.existsSync(req.file.path)) {
+      return res.status(500).json({
+        success: false,
+        error: "Image upload saved file could not be found",
       });
     }
 

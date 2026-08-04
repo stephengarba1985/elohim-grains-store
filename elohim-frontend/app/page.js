@@ -58,6 +58,7 @@ const normalizeImagePath = (imageUrl) => {
 
   if (normalized.startsWith("http")) return normalized;
   if (normalized.startsWith("/uploads/")) return `${backendRootUrl}${normalized}`;
+  if (normalized.startsWith("uploads/")) return `${backendRootUrl}/${normalized}`;
   if (normalized.startsWith("/")) {
     return normalized.replace(/\/grains\/([^/]+)$/i, (_, name) => `/grains/${name.toLowerCase()}`);
   }

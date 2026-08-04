@@ -243,6 +243,7 @@ export default function ProductDetails() {
 
     if (normalized.startsWith("http")) return normalized;
     if (normalized.startsWith("/uploads/")) return `${getBackendRootUrl()}${normalized}`;
+    if (normalized.startsWith("uploads/")) return `${getBackendRootUrl()}/${normalized}`;
     if (normalized.startsWith("/")) {
       return normalized.replace(/\/grains\/([^/]+)$/i, (_, name) => `/grains/${name.toLowerCase()}`);
     }

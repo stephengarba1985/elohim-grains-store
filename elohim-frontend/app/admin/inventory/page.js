@@ -132,17 +132,23 @@ export default function InventoryPage() {
   const normalizeImagePath = (imageUrl) => {
     if (!imageUrl) return "/placeholder.jpg";
 
-    if (imageUrl.startsWith("http")) return imageUrl;
+    const normalizedUrl = String(imageUrl).replace(/\\/g, "/");
 
-    if (imageUrl.startsWith("/uploads")) {
-      return `${getBackendRootUrl()}${imageUrl}`;
+    if (normalizedUrl.startsWith("http")) return normalizedUrl;
+
+    if (normalizedUrl.startsWith("/uploads/")) {
+      return `${getBackendRootUrl()}${normalizedUrl}`;
     }
 
-    if (imageUrl.startsWith("/grains/")) return imageUrl;
+    if (normalizedUrl.startsWith("uploads/")) {
+      return `${getBackendRootUrl()}/${normalizedUrl}`;
+    }
 
-    if (imageUrl.startsWith("/")) return imageUrl;
+    if (normalizedUrl.startsWith("/grains/")) return normalizedUrl;
 
-    const normalized = String(imageUrl).replace(/^grains\//i, "");
+    if (normalizedUrl.startsWith("/")) return normalizedUrl;
+
+    const normalized = normalizedUrl.replace(/^grains\//i, "");
 
     return `/grains/${normalized}`;
   };

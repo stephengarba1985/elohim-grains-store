@@ -42,7 +42,11 @@ const paymentRoutes = require("./routes/paymentRoutes");
 
 const app = express();
 app.disable("x-powered-by");
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,

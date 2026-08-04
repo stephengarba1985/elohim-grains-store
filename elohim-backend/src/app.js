@@ -48,12 +48,26 @@ app.use(
   })
 );
 
-const limiter = rateLimit({
+const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
-app.use("/api", limiter);
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many login attempts. Please try again in 15 minutes.",
+  },
+});
+
+app.use("/api", apiLimiter);
+app.use("/api/auth", authLimiter);
 
 const isDev = process.env.NODE_ENV === "development";
 const uploadsRoot = process.env.UPLOADS_ROOT;

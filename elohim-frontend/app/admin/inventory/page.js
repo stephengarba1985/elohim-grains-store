@@ -108,7 +108,16 @@ export default function InventoryPage() {
 
     } catch (err) {
       console.error("Update error:", err.response?.data || err.message);
-      toast.error(err.response?.data?.error || "Update failed");
+      const offline =
+        err?.isOffline ||
+        err?.code === "ERR_NETWORK" ||
+        (typeof window !== "undefined" && !window.navigator.onLine);
+
+      toast.error(
+        offline
+          ? "No internet connection. Reconnect and try updating again."
+          : err.response?.data?.error || err.userMessage || "Update failed"
+      );
     } finally {
       setLoading(false);
     }

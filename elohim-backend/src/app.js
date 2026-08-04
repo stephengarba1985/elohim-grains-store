@@ -70,7 +70,9 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error("Not allowed by CORS"));
+      const corsError = new Error("Not allowed by CORS");
+      corsError.status = 403;
+      return callback(corsError);
     },
     credentials: true,
   })

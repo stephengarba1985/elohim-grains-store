@@ -40,6 +40,8 @@ const paymentRoutes = require("./routes/paymentRoutes");
 
 const app = express();
 const isDev = process.env.NODE_ENV === "development";
+const uploadsRoot = process.env.UPLOADS_ROOT;
+const railwayVolumeRoot = process.env.RAILWAY_VOLUME_MOUNT_PATH;
 
 /* =========================
    MIDDLEWARE
@@ -52,9 +54,12 @@ app.use(cors({
 app.use(express.json());
 
 const uploadStaticDirs = [
+  uploadsRoot,
+  railwayVolumeRoot ? path.resolve(railwayVolumeRoot, "uploads") : null,
+  path.resolve("/data/uploads"),
   path.join(__dirname, "..", "uploads"),
   path.resolve(process.cwd(), "uploads"),
-];
+].filter(Boolean);
 
 app.get("/uploads/products/:filename", (req, res, next) => {
   const { filename } = req.params;

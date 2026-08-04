@@ -5,7 +5,13 @@ const path = require("path");
 
 const router = express.Router();
 
+const uploadsRoot = process.env.UPLOADS_ROOT;
+const railwayVolumeRoot = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+
 const candidateUploadRoots = [
+  uploadsRoot ? path.resolve(uploadsRoot, "products") : null,
+  railwayVolumeRoot ? path.resolve(railwayVolumeRoot, "uploads/products") : null,
+  path.resolve("/data/uploads/products"),
   process.env.UPLOAD_PRODUCTS_DIR,
   path.resolve(process.cwd(), "uploads/products"),
   path.resolve(__dirname, "../../uploads/products"),

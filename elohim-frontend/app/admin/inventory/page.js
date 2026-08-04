@@ -287,6 +287,35 @@ export default function InventoryPage() {
     }
   };
 
+  const uploadEditImage = async (file) => {
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+      setUploading(true);
+
+      const res = await API.post(
+        "/upload/product-image",
+        formData,
+        {}
+      );
+
+      setForm((prev) => ({
+        ...prev,
+        image_url: res.data.image_url,
+      }));
+
+      toast.success("Product image uploaded");
+    } catch (err) {
+      console.error(err);
+      toast.error("Image upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const deleteVariant = async (productId, variantId) => {
     try {
       await API.delete(`/products/${productId}/variants/${variantId}`);
@@ -672,6 +701,28 @@ export default function InventoryPage() {
                 value={form.image_url}
                 onChange={(e) => setForm({ ...form, image_url: e.target.value })}
               />
+
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => uploadEditImage(e.target.files[0])}
+                className="border p-2 w-full mb-2 rounded"
+              />
+
+              {uploading && (
+                <p className="text-blue-600 text-sm mb-2">
+                  Uploading image...
+                </p>
+              )}
+
+              {form.image_url && (
+                <img
+                  src={normalizeImagePath(form.image_url)}
+                  alt="Product preview"
+                  className="w-full h-32 object-cover rounded border mb-4"
+                />
+              )}
+
               <div className="flex gap-2">
                 <button
                   type="submit"

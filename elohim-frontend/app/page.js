@@ -69,7 +69,21 @@ const normalizeImagePath = (imageUrl) => {
   return `/grains/${hasExtension ? cleaned.toLowerCase() : `${cleaned.toLowerCase()}.jpg`}`;
 };
 
+const getStableImageOverride = (productName) => {
+  const slug = String(productName || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+
+  if (slug === "chia-seeds") return "/grains/chia-seeds.jpg";
+
+  return null;
+};
+
 const getProductImage = (product) => {
+  const stableOverride = getStableImageOverride(product?.name);
+  if (stableOverride) return stableOverride;
+
   if (product?.image_url) return normalizeImagePath(product.image_url);
 
   const fileName = String(product?.name || "Rice")

@@ -254,6 +254,32 @@ export default function ProductDetails() {
     return `/grains/${hasExtension ? cleaned.toLowerCase() : `${cleaned.toLowerCase()}.jpg`}`;
   };
 
+  const getStableImageOverride = (productName) => {
+    const slug = String(productName || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-");
+
+    if (slug === "chia-seeds") return "/grains/chia-seeds.jpg";
+
+    return null;
+  };
+
+  const getProductImage = (item) => {
+    const stableOverride = getStableImageOverride(item?.name);
+    if (stableOverride) return stableOverride;
+
+    if (item?.image_url) return normalizeImagePath(item.image_url);
+
+    const fallbackName = String(item?.name || "rice")
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^\w().-]/g, "")
+      .toLowerCase();
+
+    return `/grains/${fallbackName}.jpg`;
+  };
+
   if (!product) {
     return <div className="p-6">Loading product...</div>;
   }
@@ -264,14 +290,7 @@ export default function ProductDetails() {
 
         {/* IMAGE */}
         <img
-          src={
-            product.image_url
-              ? normalizeImagePath(product.image_url)
-              : `/grains/${product.name
-                  .trim()
-                  .replace(/\s+/g, "-")
-                  .replace(/[^\w().-]/g, "")}.jpg`
-          }
+          src={getProductImage(product)}
           alt={product.name}
           onError={(e) => {
             e.target.onerror = null;

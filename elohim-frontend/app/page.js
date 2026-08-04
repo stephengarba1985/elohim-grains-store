@@ -44,6 +44,26 @@ const quickActions = [
   { label: "Track Prices", href: "/price-insights" },
 ];
 
+const STABLE_GRAIN_IMAGE_SLUGS = new Set([
+  "beans-(oloyin)",
+  "beans",
+  "chia-seeds",
+  "cowpea",
+  "garri",
+  "groundnut",
+  "kidney-beans",
+  "local-rice",
+  "maize",
+  "millet",
+  "ogbono",
+  "plantain-flour",
+  "rice",
+  "sorghum",
+  "soybeans",
+  "wheat",
+  "yam-flour(amala)",
+]);
+
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
 const getProductPrice = (product) => {
@@ -75,7 +95,7 @@ const getStableImageOverride = (productName) => {
     .toLowerCase()
     .replace(/\s+/g, "-");
 
-  if (slug === "chia-seeds") return "/grains/chia-seeds.jpg";
+  if (STABLE_GRAIN_IMAGE_SLUGS.has(slug)) return `/grains/${slug}.jpg`;
 
   return null;
 };

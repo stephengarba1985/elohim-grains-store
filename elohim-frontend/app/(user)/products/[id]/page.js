@@ -6,6 +6,26 @@ import { useParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { useCartStore } from "@/lib/cartStore";
 
+const STABLE_GRAIN_IMAGE_SLUGS = new Set([
+  "beans-(oloyin)",
+  "beans",
+  "chia-seeds",
+  "cowpea",
+  "garri",
+  "groundnut",
+  "kidney-beans",
+  "local-rice",
+  "maize",
+  "millet",
+  "ogbono",
+  "plantain-flour",
+  "rice",
+  "sorghum",
+  "soybeans",
+  "wheat",
+  "yam-flour(amala)",
+]);
+
 export default function ProductDetails() {
   const { id } = useParams();
   const router = useRouter();
@@ -260,7 +280,7 @@ export default function ProductDetails() {
       .toLowerCase()
       .replace(/\s+/g, "-");
 
-    if (slug === "chia-seeds") return "/grains/chia-seeds.jpg";
+    if (STABLE_GRAIN_IMAGE_SLUGS.has(slug)) return `/grains/${slug}.jpg`;
 
     return null;
   };

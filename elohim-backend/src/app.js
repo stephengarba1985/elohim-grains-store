@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const path = require("path");
 const fs = require("fs");
 require('dotenv').config(); // ✅ LOAD ENV VARIABLES
@@ -39,17 +41,40 @@ const customerRoutes = require("./routes/customerRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 
 const app = express();
+app.disable("x-powered-by");
+app.use(helmet());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+});
+
+app.use("/api", limiter);
+
 const isDev = process.env.NODE_ENV === "development";
 const uploadsRoot = process.env.UPLOADS_ROOT;
 const railwayVolumeRoot = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+const allowedOrigins = [
+  "https://elohimgrains.com",
+  "https://www.elohimgrains.com",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
 /* =========================
    MIDDLEWARE
 ========================= */
-app.use(cors({
-  origin: "*", // 🔥 Change to your frontend URL in production
-  credentials: true
-}));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 
@@ -176,14 +201,14 @@ app.use((req, res) => {
    GLOBAL ERROR HANDLER
 ========================= */
 app.use((err, req, res, next) => {
-  console.error("🔥 GLOBAL ERROR:", err.stack);
+  console.error(err);
 
-  res.status(500).json({
-    error: "Something went wrong",
-    detail:
+  res.status(err.status || 500).json({
+    success: false,
+    message:
       process.env.NODE_ENV === "development"
         ? err.message
-        : undefined
+        : "Internal server error",
   });
 });
 

@@ -5,6 +5,18 @@ const router = express.Router();
 
 router.get("/stats", async (req, res) => {
   try {
+    const paymentStatusColumnRes = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'orders'
+        AND column_name = 'payment_status'
+    `);
+
+    const hasPaymentStatusColumn = paymentStatusColumnRes.rows.length > 0;
+    const realizedRevenueFilter = hasPaymentStatusColumn
+      ? "(status IN ('paid', 'delivered') OR payment_status = 'verified')"
+      : "status IN ('paid', 'delivered')";
+
     const [
       revenue,
       todayRevenue,
@@ -22,12 +34,14 @@ router.get("/stats", async (req, res) => {
       pool.query(`
         SELECT COALESCE(SUM(total_amount),0) AS revenue
         FROM orders
+        WHERE ${realizedRevenueFilter}
       `),
 
       pool.query(`
         SELECT COALESCE(SUM(total_amount),0) AS revenue
         FROM orders
         WHERE DATE(created_at)=CURRENT_DATE
+          AND ${realizedRevenueFilter}
       `),
 
       pool.query(`

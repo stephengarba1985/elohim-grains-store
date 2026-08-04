@@ -59,8 +59,18 @@ router.get("/stats", async (req, res) => {
 
       pool.query(`
         SELECT COUNT(*)::int AS total
-        FROM products
-        WHERE stock_quantity<=10
+        FROM (
+          SELECT
+            p.id,
+            GREATEST(
+              COALESCE(p.stock_quantity, 0),
+              COALESCE(SUM(pv.stock), 0)
+            ) AS effective_stock
+          FROM products p
+          LEFT JOIN product_variants pv ON pv.product_id = p.id
+          GROUP BY p.id, p.stock_quantity
+        ) stock_view
+        WHERE effective_stock > 0 AND effective_stock <= 10
       `),
 
       pool.query(`

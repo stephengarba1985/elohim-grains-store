@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require("path");
+const fs = require("fs");
 require('dotenv').config(); // ✅ LOAD ENV VARIABLES
 
 const pool = require('./config/db');
@@ -54,6 +55,29 @@ const uploadStaticDirs = [
   path.join(__dirname, "..", "uploads"),
   path.resolve(process.cwd(), "uploads"),
 ];
+
+app.get("/uploads/products/:filename", (req, res, next) => {
+  const { filename } = req.params;
+
+  for (const uploadDir of uploadStaticDirs) {
+    const candidate = path.join(uploadDir, "products", filename);
+    if (fs.existsSync(candidate)) {
+      return res.sendFile(candidate);
+    }
+  }
+
+  const fallbackSvg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+      <rect width="800" height="600" fill="#f3f4f6"/>
+      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#6b7280" font-family="Arial, sans-serif" font-size="28">
+        Image not available
+      </text>
+    </svg>
+  `;
+
+  res.setHeader("Content-Type", "image/svg+xml");
+  return res.status(200).send(fallbackSvg);
+});
 
 Array.from(new Set(uploadStaticDirs)).forEach((dir) => {
   app.use("/uploads", express.static(dir));

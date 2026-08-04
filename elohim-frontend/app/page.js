@@ -213,10 +213,10 @@ export default async function Home() {
             alt="Bags of rice and grains"
             fill
             priority
-            className="object-cover opacity-50"
+            className="object-cover opacity-35"
             sizes="100vw"
           />
-          <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(2,6,23,0.95),rgba(15,23,42,0.8),rgba(20,83,45,0.45))]" />
+          <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(2,6,23,0.98),rgba(15,23,42,0.88),rgba(20,83,45,0.62))]" />
           <div className="absolute -left-10 top-10 h-44 w-44 rounded-full bg-green-400/20 blur-3xl" />
           <div className="absolute -right-10 bottom-10 h-52 w-52 rounded-full bg-amber-300/20 blur-3xl" />
         </div>
@@ -226,7 +226,7 @@ export default async function Home() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wide text-green-200 backdrop-blur">
               Agro Commerce + Fintech
             </div>
-            <h1 className="mt-4 text-4xl font-black leading-tight md:text-6xl">
+            <h1 className="mt-4 text-4xl font-black leading-tight text-white [text-shadow:0_3px_14px_rgba(0,0,0,0.55)] md:text-6xl">
               Buy grains, save for food goals, and pay with confidence.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-100">

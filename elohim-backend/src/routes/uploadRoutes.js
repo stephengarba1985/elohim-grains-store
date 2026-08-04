@@ -7,14 +7,33 @@ const router = express.Router();
 
 const uploadsRoot = process.env.UPLOADS_ROOT;
 const railwayVolumeRoot = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+const uploadProductsDir = process.env.UPLOAD_PRODUCTS_DIR;
+const isProduction = process.env.NODE_ENV === "production";
 
-const candidateUploadRoots = [
-  uploadsRoot ? path.resolve(uploadsRoot, "products") : null,
+const toProductsDir = (rootPath) => {
+  if (!rootPath) return null;
+
+  const resolved = path.resolve(rootPath);
+  return path.basename(resolved).toLowerCase() === "products"
+    ? resolved
+    : path.join(resolved, "products");
+};
+
+const persistentUploadRoots = [
+  toProductsDir(uploadProductsDir),
+  uploadsRoot ? toProductsDir(uploadsRoot) : null,
   railwayVolumeRoot ? path.resolve(railwayVolumeRoot, "uploads/products") : null,
   path.resolve("/data/uploads/products"),
-  process.env.UPLOAD_PRODUCTS_DIR,
+].filter(Boolean);
+
+const fallbackUploadRoots = [
   path.resolve(process.cwd(), "uploads/products"),
   path.resolve(__dirname, "../../uploads/products"),
+];
+
+const candidateUploadRoots = [
+  ...persistentUploadRoots,
+  ...fallbackUploadRoots,
 ].filter(Boolean);
 
 let uploadRoot = null;
@@ -32,6 +51,14 @@ for (const candidate of candidateUploadRoots) {
 
 if (!uploadRoot) {
   throw new Error("No writable upload directory available for product images");
+}
+
+const usingFallbackDir = fallbackUploadRoots.includes(uploadRoot);
+if (isProduction && usingFallbackDir) {
+  console.warn(
+    `[UPLOAD] Using fallback non-persistent directory in production: ${uploadRoot}. ` +
+      "Set UPLOADS_ROOT or RAILWAY_VOLUME_MOUNT_PATH for persistent storage."
+  );
 }
 
 const storage = multer.diskStorage({

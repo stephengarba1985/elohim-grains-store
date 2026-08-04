@@ -66,6 +66,39 @@ const authLimiter = rateLimit({
   },
 });
 
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many upload requests. Please try again in 15 minutes.",
+  },
+});
+
+const paymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many payment verification requests. Please try again in 15 minutes.",
+  },
+});
+
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many admin requests. Please try again in 15 minutes.",
+  },
+});
+
 app.use("/api", apiLimiter);
 app.use("/api/auth", authLimiter);
 
@@ -150,7 +183,7 @@ app.use('/api/orders', orderRoutes);
 app.use("/api/riders", riderRoutes);
 app.use("/api/tracking", trackingRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
-app.use("/api/admin", adminRoutes);
+app.use("/api/admin", adminLimiter, adminRoutes);
 app.use("/api/plans", plansRoute);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/bnpl", bnplRoutes);
@@ -169,10 +202,10 @@ app.use("/api/customers", customerRoutes);
 // ✅ KEEP ONLY THIS (MAIN BULK SYSTEM)
 // ✅ SINGLE BULK ENTRY POINT
 app.use("/api/bulk", bulkRoutes);
-app.use("/api/upload", uploadRoutes);
+app.use("/api/upload", uploadLimiter, uploadRoutes);
 
 // ✅ PAYMENT
-app.use("/api/payment", paymentRoutes);
+app.use("/api/payment", paymentLimiter, paymentRoutes);
 
 /* =========================
    HEALTH CHECK ROUTE

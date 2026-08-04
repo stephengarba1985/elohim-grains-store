@@ -6,12 +6,18 @@ import toast from "react-hot-toast";
 
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
+const getBackendRootUrl = () => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  return apiUrl.replace(/\/api\/?$/, "");
+};
+
 const normalizeImagePath = (imageUrl) => {
   if (!imageUrl) return "/grains/rice.jpg";
 
   const normalized = String(imageUrl).replace(/\\/g, "/");
 
   if (normalized.startsWith("http")) return normalized;
+  if (normalized.startsWith("/uploads/")) return `${getBackendRootUrl()}${normalized}`;
   if (normalized.startsWith("/")) {
     return normalized.replace(/\/grains\/([^/]+)$/i, (_, name) => `/grains/${name.toLowerCase()}`);
   }

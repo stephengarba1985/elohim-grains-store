@@ -19,6 +19,11 @@ export default function ProductDetails() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [quantity, setQuantity] = useState(1);
 
+  const getBackendRootUrl = () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    return apiUrl.replace(/\/api\/?$/, "");
+  };
+
   /* =========================
      INIT USER
   ========================= */
@@ -237,6 +242,7 @@ export default function ProductDetails() {
     const normalized = String(imageUrl).replace(/\\/g, "/");
 
     if (normalized.startsWith("http")) return normalized;
+    if (normalized.startsWith("/uploads/")) return `${getBackendRootUrl()}${normalized}`;
     if (normalized.startsWith("/")) {
       return normalized.replace(/\/grains\/([^/]+)$/i, (_, name) => `/grains/${name.toLowerCase()}`);
     }

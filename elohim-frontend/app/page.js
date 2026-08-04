@@ -12,6 +12,12 @@ export const dynamic = "force-dynamic";
 
 const heroImage = "/grains/rice.jpg";
 
+const backendRootUrl = (
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5000/api"
+).replace(/\/api\/?$/, "");
+
 const trustMetrics = [
   { label: "Fintech services", value: "8+" },
   { label: "Staple categories", value: "6" },
@@ -51,6 +57,7 @@ const normalizeImagePath = (imageUrl) => {
   const normalized = String(imageUrl).replace(/\\/g, "/");
 
   if (normalized.startsWith("http")) return normalized;
+  if (normalized.startsWith("/uploads/")) return `${backendRootUrl}${normalized}`;
   if (normalized.startsWith("/")) {
     return normalized.replace(/\/grains\/([^/]+)$/i, (_, name) => `/grains/${name.toLowerCase()}`);
   }

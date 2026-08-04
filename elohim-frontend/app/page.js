@@ -31,6 +31,13 @@ const bulkOrderBenefits = [
   "Escrow option for large supply orders",
 ];
 
+const quickActions = [
+  { label: "Fund Wallet", href: "/wallet" },
+  { label: "Start Savings", href: "/plans" },
+  { label: "Use BNPL", href: "/bnpl" },
+  { label: "Track Prices", href: "/price-insights" },
+];
+
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
 const getProductPrice = (product) => {
@@ -109,7 +116,7 @@ function ProductTile({ product }) {
   return (
     <Link
       href={`/products/${product.id}`}
-      className="group block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      className="group block overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
     >
       <div className="relative h-44 bg-slate-100">
         <Image
@@ -118,10 +125,13 @@ function ProductTile({ product }) {
           fill
           unoptimized
           sizes="(min-width: 1536px) 20vw, (min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-          className="object-cover transition duration-300 group-hover:scale-105"
+          className="object-cover transition duration-500 group-hover:scale-110"
         />
         <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm">
           {stock > 0 ? `${stock} in stock` : "Check stock"}
+        </div>
+        <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-slate-950/70 to-transparent p-3 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100">
+          Tap to view full product details
         </div>
       </div>
       <div className="p-4">
@@ -153,7 +163,7 @@ export default async function Home() {
   const products = await getProducts();
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#f0fdf4_0%,#f8fafc_40%,#f8fafc_100%)] text-slate-950">
       <section className="relative overflow-hidden bg-slate-950">
         <div className="absolute inset-0">
           <Image
@@ -161,17 +171,19 @@ export default async function Home() {
             alt="Bags of rice and grains"
             fill
             priority
-            className="object-cover opacity-55"
+            className="object-cover opacity-50"
             sizes="100vw"
           />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.92),rgba(15,23,42,0.72),rgba(15,23,42,0.35))]" />
+          <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(2,6,23,0.95),rgba(15,23,42,0.8),rgba(20,83,45,0.45))]" />
+          <div className="absolute -left-10 top-10 h-44 w-44 rounded-full bg-green-400/20 blur-3xl" />
+          <div className="absolute -right-10 bottom-10 h-52 w-52 rounded-full bg-amber-300/20 blur-3xl" />
         </div>
 
-        <div className="relative mx-auto grid min-h-140 max-w-6xl items-center gap-8 px-4 py-14 md:px-6 lg:grid-cols-[1fr_420px]">
+        <div className="relative mx-auto grid min-h-150 max-w-7xl items-center gap-8 px-4 py-14 md:px-6 lg:grid-cols-[1fr_420px]">
           <div className="max-w-3xl text-white">
-            <p className="text-sm font-bold uppercase tracking-wide text-green-200">
-              Elohim Grains Store
-            </p>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wide text-green-200 backdrop-blur">
+              Agro Commerce + Fintech
+            </div>
             <h1 className="mt-4 text-4xl font-black leading-tight md:text-6xl">
               Buy grains, save for food goals, and pay with confidence.
             </h1>
@@ -184,16 +196,28 @@ export default async function Home() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
                 href="#marketplace"
-                className="rounded-lg bg-green-700 px-6 py-3 text-center font-bold text-white shadow-sm transition hover:bg-green-800"
+                className="rounded-xl bg-green-700 px-6 py-3 text-center font-bold text-white shadow-sm transition hover:bg-green-800"
               >
                 Shop Grains
               </Link>
               <Link
                 href="/wallet"
-                className="rounded-lg bg-white px-6 py-3 text-center font-bold text-slate-950 shadow-sm transition hover:bg-slate-100"
+                className="rounded-xl bg-white px-6 py-3 text-center font-bold text-slate-950 shadow-sm transition hover:bg-slate-100"
               >
                 Open Wallet
               </Link>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {quickActions.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className="rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/20"
+                >
+                  {item.label}
+                </Link>
+              ))}
             </div>
 
             <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -215,7 +239,24 @@ export default async function Home() {
         </div>
       </section>
 
-      <section id="marketplace" className="mx-auto max-w-7xl px-4 py-10 md:px-6">
+      <section className="mx-auto max-w-7xl px-4 py-6 md:px-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          {marketSignals.map((signal) => (
+            <div
+              key={signal.crop}
+              className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm"
+            >
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                {signal.crop} signal
+              </p>
+              <p className="mt-1 text-2xl font-black text-slate-950">{signal.movement}</p>
+              <p className="mt-2 text-sm text-slate-600">{signal.note}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="marketplace" className="mx-auto max-w-7xl px-4 pb-10 md:px-6">
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-green-700">
@@ -225,7 +266,7 @@ export default async function Home() {
               Fresh grains ready for checkout
             </h2>
           </div>
-          <p className="text-sm font-medium text-slate-500">
+          <p className="rounded-full bg-white px-3 py-1 text-sm font-medium text-slate-500 shadow-sm">
             {products.length} product(s) available
           </p>
         </div>
@@ -248,7 +289,7 @@ export default async function Home() {
         )}
 
         <div className="mt-8 grid gap-4 lg:grid-cols-[1fr_1.4fr]">
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-bold uppercase tracking-wide text-green-700">
               Smart buying
             </p>
@@ -275,7 +316,7 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-bold uppercase tracking-wide text-green-700">
               Vendor marketplace
             </p>
@@ -294,7 +335,7 @@ export default async function Home() {
             </Link>
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid lg:grid-cols-[260px_1fr]">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid lg:grid-cols-[260px_1fr]">
               <div className="relative min-h-44">
                 <Image
                   src="/grains/maize.jpg"

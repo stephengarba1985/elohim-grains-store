@@ -15,6 +15,11 @@ export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  const getBackendRootUrl = () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    return apiUrl.replace(/\/api\/?$/, "");
+  };
+
   const today = new Date().toDateString();
 
   const todayOrders = orders.filter(
@@ -137,6 +142,35 @@ export default function OrdersPage() {
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.error || "Escrow release failed");
+    }
+  };
+
+  const printInvoice = (orderId) => {
+    const invoiceUrl = `${getBackendRootUrl()}/api/orders/${orderId}/invoice`;
+    window.open(invoiceUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const copyReference = async (reference) => {
+    if (!reference) {
+      return toast.error("No payment reference available");
+    }
+
+    try {
+      await navigator.clipboard.writeText(reference);
+      toast.success("Reference copied");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to copy reference");
+    }
+  };
+
+  const notifyCustomer = async (orderId) => {
+    try {
+      await API.post(`/orders/${orderId}/notify-customer`);
+      toast.success("Customer notified");
+    } catch (err) {
+      console.error(err.response?.data || err.message);
+      toast.error(err.response?.data?.error || "Failed to notify customer");
     }
   };
 
@@ -458,18 +492,21 @@ export default function OrdersPage() {
                     <div className="flex flex-wrap gap-2 mt-5">
 
                       <button
+                        onClick={() => printInvoice(order.id)}
                         className="bg-green-600 text-white px-3 py-2 rounded"
                       >
                         Print Invoice
                       </button>
 
                       <button
+                        onClick={() => copyReference(order.reference)}
                         className="bg-blue-600 text-white px-3 py-2 rounded"
                       >
                         Copy Reference
                       </button>
 
                       <button
+                        onClick={() => notifyCustomer(order.id)}
                         className="bg-purple-600 text-white px-3 py-2 rounded"
                       >
                         Notify Customer

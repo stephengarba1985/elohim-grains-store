@@ -531,6 +531,57 @@ router.get("/:id/invoice", async (req, res) => {
 /* =========================
    UPDATE ORDER STATUS (ADMIN ONLY)
 ========================= */
+/* =========================
+   NOTIFY CUSTOMER (ADMIN ONLY)
+========================= */
+router.post("/:id/notify-customer", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const orderRes = await pool.query(
+      `SELECT o.id, o.total_amount, o.user_id, u.name, u.email
+       FROM orders o
+       LEFT JOIN users u ON u.id = o.user_id
+       WHERE o.id = $1`,
+      [id]
+    );
+
+    if (orderRes.rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    const order = orderRes.rows[0];
+
+    if (!order.email) {
+      return res.status(400).json({ error: "Customer email not found" });
+    }
+
+    const itemsRes = await pool.query(
+      `SELECT
+         p.name,
+         oi.quantity,
+         oi.price,
+         COALESCE(pv.weight, p.weight) AS weight
+       FROM order_items oi
+       JOIN products p ON oi.product_id = p.id
+       LEFT JOIN product_variants pv ON oi.variant_id = pv.id
+       WHERE oi.order_id = $1`,
+      [id]
+    );
+
+    await sendOrderConfirmationEmail(order.email, {
+      customerName: order.name || "Customer",
+      orderId: order.id,
+      totalAmount: order.total_amount,
+      items: itemsRes.rows,
+    });
+
+    res.json({ message: "Customer notified successfully" });
+  } catch (err) {
+    console.error("NOTIFY CUSTOMER ERROR:", err);
+    res.status(500).json({ error: "Failed to notify customer" });
+  }
+});
 router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params;

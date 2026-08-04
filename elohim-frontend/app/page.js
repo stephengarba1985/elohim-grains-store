@@ -12,57 +12,6 @@ export const dynamic = "force-dynamic";
 
 const heroImage = "/grains/rice.jpg";
 
-const financeProducts = [
-  {
-    title: "Wallet",
-    value: "Instant top up",
-    text: "Fund, withdraw, transfer, and receive refunds directly in your Elohim wallet.",
-    href: "/wallet",
-  },
-  {
-    title: "Smart Savings",
-    value: "Goal plans",
-    text: "Save daily, weekly, or monthly toward rice, beans, maize, and bulk supply goals.",
-    href: "/plans",
-  },
-  {
-    title: "BNPL",
-    value: "Pay small-small",
-    text: "Collect grains now and repay with structured installments and reminders.",
-    href: "/bnpl",
-  },
-  {
-    title: "Inventory Finance",
-    value: "Grain collateral",
-    text: "Use stored grains as collateral to access short-term working capital.",
-    href: "/inventory-finance",
-  },
-  {
-    title: "Smart Warehouse",
-    value: "Store and resell",
-    text: "Buy grains into warehouse storage, track market value, and sell later when prices rise.",
-    href: "/warehouse",
-  },
-  {
-    title: "Receipts",
-    value: "PDF records",
-    text: "Generate receipts, monthly statements, savings history, and tax invoices for your account.",
-    href: "/receipts-statements",
-  },
-  {
-    title: "Escrow",
-    value: "Protected orders",
-    text: "Hold funds safely until delivery is confirmed for large and interstate orders.",
-    href: "/cart",
-  },
-  {
-    title: "KYC Verification",
-    value: "Trust checks",
-    text: "Verify BVN, NIN, phone, and email to unlock stronger trust across finance features.",
-    href: "/kyc",
-  },
-];
-
 const trustMetrics = [
   { label: "Fintech services", value: "8+" },
   { label: "Staple categories", value: "6" },
@@ -263,26 +212,6 @@ export default async function Home() {
           </div>
 
           <HomeWalletCard marketSignals={marketSignals} />
-        </div>
-      </section>
-
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto grid max-w-7xl gap-3 px-4 py-5 md:px-6 lg:grid-cols-8">
-          {financeProducts.map((item) => (
-            <Link
-              key={item.title}
-              href={item.href}
-              className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-green-200 hover:bg-green-50"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-black text-slate-950">{item.title}</h2>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-                  {item.value}
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-slate-600">{item.text}</p>
-            </Link>
-          ))}
         </div>
       </section>
 

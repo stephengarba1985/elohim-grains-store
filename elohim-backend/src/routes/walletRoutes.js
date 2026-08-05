@@ -150,7 +150,41 @@ const parseAmount = (amount) => {
   return Math.round(value * 100) / 100;
 };
 
-const normalizePhone = (value) => String(value || "").trim();
+const normalizePhone = (value) => {
+  const digits = String(value || "").replace(/\D/g, "");
+
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.length === 11 && digits.startsWith("0")) {
+    return digits;
+  }
+
+  if (digits.length === 10) {
+    return `0${digits}`;
+  }
+
+  if (digits.length === 13 && digits.startsWith("234")) {
+    return `0${digits.slice(3)}`;
+  }
+
+  if (digits.length === 12 && digits.startsWith("234")) {
+    return `0${digits.slice(3)}`;
+  }
+
+  return null;
+};
+
+const canonicalPhone = (value) => {
+  const local = normalizePhone(value);
+
+  if (!local || local.length !== 11) {
+    return null;
+  }
+
+  return `234${local.slice(1)}`;
+};
 
 const getWalletBalance = async (userId, client = pool) => {
   const result = await client.query(
@@ -403,22 +437,38 @@ router.get("/admin/phone-duplicates", verifyToken, isAdmin, async (req, res) => 
   try {
     await ensureWalletTables();
 
-    const duplicates = await pool.query(`
-      SELECT
-        phone,
-        COUNT(*)::int AS duplicate_count,
-        ARRAY_AGG(id ORDER BY id ASC) AS user_ids
+    const usersWithPhone = await pool.query(`
+      SELECT id, phone
       FROM users
       WHERE phone IS NOT NULL
         AND TRIM(phone) <> ''
-      GROUP BY phone
-      HAVING COUNT(*) > 1
-      ORDER BY duplicate_count DESC, phone ASC
     `);
 
+    const grouped = new Map();
+
+    for (const row of usersWithPhone.rows) {
+      const canonical = canonicalPhone(row.phone);
+      if (!canonical) {
+        continue;
+      }
+
+      const current = grouped.get(canonical) || [];
+      current.push(Number(row.id));
+      grouped.set(canonical, current);
+    }
+
+    const duplicates = Array.from(grouped.entries())
+      .filter(([, ids]) => ids.length > 1)
+      .map(([canonical, ids]) => ({
+        phone: canonical,
+        duplicate_count: ids.length,
+        user_ids: ids.sort((a, b) => a - b),
+      }))
+      .sort((a, b) => b.duplicate_count - a.duplicate_count || a.phone.localeCompare(b.phone));
+
     return res.json({
-      duplicates: duplicates.rows,
-      duplicate_groups: duplicates.rows.length,
+      duplicates,
+      duplicate_groups: duplicates.length,
     });
   } catch (err) {
     console.error("PHONE DUPLICATE LIST ERROR:", err);
@@ -433,22 +483,31 @@ router.post("/admin/phone-duplicates/resolve", verifyToken, isAdmin, async (req,
   try {
     await ensureWalletTables();
 
-    const duplicatesRes = await client.query(`
-      SELECT
-        phone,
-        ARRAY_AGG(id ORDER BY id ASC) AS user_ids
+    const usersWithPhone = await client.query(`
+      SELECT id, phone
       FROM users
       WHERE phone IS NOT NULL
         AND TRIM(phone) <> ''
-      GROUP BY phone
-      HAVING COUNT(*) > 1
-      ORDER BY phone ASC
     `);
 
-    const duplicateGroups = duplicatesRes.rows.map((row) => {
-      const userIds = row.user_ids.map((id) => Number(id));
+    const grouped = new Map();
+    for (const row of usersWithPhone.rows) {
+      const canonical = canonicalPhone(row.phone);
+      if (!canonical) {
+        continue;
+      }
+
+      const current = grouped.get(canonical) || [];
+      current.push(Number(row.id));
+      grouped.set(canonical, current);
+    }
+
+    const duplicateGroups = Array.from(grouped.entries())
+      .filter(([, ids]) => ids.length > 1)
+      .map(([phone, ids]) => {
+        const userIds = ids.sort((a, b) => a - b);
       return {
-        phone: row.phone,
+        phone,
         keep_user_id: userIds[0],
         clear_user_ids: userIds.slice(1),
       };
@@ -698,6 +757,7 @@ router.post("/:userId/withdraw", verifyToken, async (req, res) => {
 router.post("/:userId/transfer", verifyToken, async (req, res) => {
   const amount = parseAmount(req.body.amount);
   const recipientPhone = normalizePhone(req.body.recipient_phone);
+  const recipientCanonical = canonicalPhone(req.body.recipient_phone);
   const { pin } = req.body;
 
   if (String(req.user.id) !== String(req.params.userId) && !req.user.is_admin) {
@@ -726,23 +786,41 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
     return res.status(400).json({ error: "Recipient phone is required" });
   }
 
+  if (!recipientCanonical) {
+    return res.status(400).json({ error: "Recipient phone is invalid" });
+  }
+
   const client = await pool.connect();
 
   try {
     await ensureWalletTables();
     await client.query("BEGIN");
 
-    const recipient = await client.query(
-      "SELECT id, name, email, phone FROM users WHERE phone=$1",
-      [recipientPhone]
+    const usersWithPhone = await client.query(
+      `SELECT id, name, email, phone
+       FROM users
+       WHERE phone IS NOT NULL
+         AND TRIM(phone) <> ''`
     );
 
-    if (recipient.rows.length === 0) {
+    const matches = usersWithPhone.rows.filter(
+      (row) => canonicalPhone(row.phone) === recipientCanonical
+    );
+
+    if (matches.length === 0) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Recipient not found" });
     }
 
-    const recipientUser = recipient.rows[0];
+    if (matches.length > 1) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "Recipient phone is duplicated. Contact support/admin to resolve phone duplicates.",
+      });
+    }
+
+    const recipientUser = matches[0];
+    const recipientDisplayPhone = normalizePhone(recipientUser.phone) || recipientPhone;
 
     if (String(recipientUser.id) === String(req.params.userId)) {
       await client.query("ROLLBACK");
@@ -762,7 +840,7 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
       type: "transfer_out",
       direction: "debit",
       amount,
-      note: `Transfer to ${recipientUser.phone || recipientPhone}`,
+      note: `Transfer to ${recipientDisplayPhone}`,
     });
 
     await insertTransaction(client, {
@@ -780,7 +858,7 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
       direction: "debit",
       amount,
       balance: senderBalance,
-      note: `Transfer to ${recipientUser.phone || recipientPhone}`,
+      note: `Transfer to ${recipientDisplayPhone}`,
       client,
     });
 

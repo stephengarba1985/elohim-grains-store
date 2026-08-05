@@ -5,6 +5,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { sendVerificationEmail } = require("../utils/mail");
+const { normalizePhone } = require("../utils/phone");
 
 const resolveFrontendBaseUrl = (req) => {
   const requestOrigin = String(req.get("origin") || "").trim();
@@ -61,7 +62,14 @@ router.post("/register", async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = normalizePhone(phone);
     const normalizedRole = role === "bulk" ? "bulk" : "retail";
+
+    if (!normalizedPhone) {
+      return res.status(400).json({
+        error: "Phone number is invalid. Use a valid Nigerian number.",
+      });
+    }
 
     // Check if email already exists
     const existingUser = await pool.query(
@@ -127,7 +135,7 @@ router.post("/register", async (req, res) => {
       [
         name.trim(),
         normalizedEmail,
-        phone.trim(),
+        normalizedPhone,
         hashedPassword,
         normalizedRole,
         verificationToken,
@@ -149,6 +157,12 @@ router.post("/register", async (req, res) => {
 
   } catch (err) {
     console.error("REGISTER ERROR:", err);
+
+    if (err.code === "23505" && String(err.constraint || "").includes("phone")) {
+      return res.status(409).json({
+        error: "Phone number is already in use.",
+      });
+    }
 
     return res.status(500).json({
       error: "Registration failed.",

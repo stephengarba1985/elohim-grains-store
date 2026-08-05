@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const { sendPasswordResetEmail } = require("../utils/mail");
 const pool = require("../config/db");
 const { verifyToken } = require("../middleware/auth");
+const { normalizePhone } = require("../utils/phone");
 
 const router = express.Router();
 
@@ -89,7 +90,17 @@ router.put("/profile", verifyToken, async (req, res) => {
 
     const payload = {};
     if (typeof name !== "undefined") payload.name = name;
-    if (typeof phone !== "undefined") payload.phone = phone;
+    if (typeof phone !== "undefined") {
+      const normalizedPhone = normalizePhone(phone);
+
+      if (!normalizedPhone) {
+        return res.status(400).json({
+          error: "Phone number is invalid. Use a valid Nigerian number.",
+        });
+      }
+
+      payload.phone = normalizedPhone;
+    }
     if (columns.has("address")) payload.address = address ?? null;
 
     if (Object.keys(payload).length === 0) {
@@ -114,6 +125,13 @@ router.put("/profile", verifyToken, async (req, res) => {
     res.json(profile);
   } catch (err) {
     console.error(err);
+
+    if (err.code === "23505" && String(err.constraint || "").includes("phone")) {
+      return res.status(409).json({
+        error: "Phone number is already in use.",
+      });
+    }
+
     res.status(500).json({ error: "Profile update failed" });
   }
 });

@@ -39,6 +39,7 @@ const actionLabels = {
 export default function WalletPage() {
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(0);
+  const [walletPinSet, setWalletPinSet] = useState(false);
   const [virtualAccount, setVirtualAccount] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [activeAction, setActiveAction] = useState("fund");
@@ -46,6 +47,7 @@ export default function WalletPage() {
   const [form, setForm] = useState({
     amount: "",
     recipient_email: "",
+    pin: "",
     note: "",
   });
   const [depositForm, setDepositForm] = useState({
@@ -100,6 +102,7 @@ export default function WalletPage() {
       setLoading(true);
       const res = await API.get(`/wallet/${userId}`);
       setBalance(Number(res.data?.balance || 0));
+      setWalletPinSet(Boolean(res.data?.wallet_pin_set));
       setVirtualAccount(res.data?.virtual_account || null);
       setTransactions(Array.isArray(res.data?.transactions) ? res.data.transactions : []);
     } catch (err) {
@@ -115,7 +118,7 @@ export default function WalletPage() {
   };
 
   const resetForm = () => {
-    setForm({ amount: "", recipient_email: "", note: "" });
+    setForm({ amount: "", recipient_email: "", pin: "", note: "" });
   };
 
   const confirmVirtualAccountTransfer = async () => {
@@ -174,6 +177,7 @@ export default function WalletPage() {
       if (activeAction === "withdraw") {
         await API.post(`/wallet/${user.id}/withdraw`, {
           amount,
+          pin: form.pin,
           note: form.note || "Wallet withdrawal",
         });
         toast.success("Withdrawal recorded");
@@ -183,6 +187,7 @@ export default function WalletPage() {
         await API.post(`/wallet/${user.id}/transfer`, {
           amount,
           recipient_email: form.recipient_email,
+          pin: form.pin,
         });
         toast.success("Transfer sent");
       }
@@ -215,6 +220,12 @@ export default function WalletPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2">
+            <Link
+              href="/user/wallet/security"
+              className="border border-emerald-300 text-emerald-700 hover:bg-emerald-50 px-5 py-3 rounded-lg font-semibold text-center"
+            >
+              Wallet Security
+            </Link>
             <button
               onClick={() => fetchWallet(user?.id)}
               disabled={loading}
@@ -243,6 +254,12 @@ export default function WalletPage() {
           <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 shadow-sm">
             <p className="text-xs text-slate-500">Auto-save</p>
             <p className="text-xl font-bold text-amber-600">{formatPrice(summary.autoSave)}</p>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 shadow-sm">
+            <p className="text-xs text-slate-500">Wallet PIN</p>
+            <p className="text-xl font-bold text-slate-900">
+              {walletPinSet ? "Set" : "Not Set"}
+            </p>
           </div>
         </div>
 
@@ -375,6 +392,23 @@ export default function WalletPage() {
                       }
                       className="border border-slate-300 rounded-lg p-3 w-full mt-1 focus:outline-none focus:ring-2 focus:ring-green-600"
                       placeholder="customer@example.com"
+                    />
+                  </label>
+                )}
+
+                {(activeAction === "withdraw" || activeAction === "transfer") && (
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Wallet PIN</span>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={form.pin}
+                      onChange={(event) =>
+                        updateForm({ pin: event.target.value.replace(/\D/g, "").slice(0, 4) })
+                      }
+                      className="border border-slate-300 rounded-lg p-3 w-full mt-1 focus:outline-none focus:ring-2 focus:ring-green-600"
+                      placeholder="Enter 4-digit PIN"
                     />
                   </label>
                 )}

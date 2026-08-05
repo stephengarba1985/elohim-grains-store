@@ -1,6 +1,8 @@
 const express = require("express");
+const bcrypt = require("bcrypt");
 const pool = require("../config/db");
 const { createWalletAlert } = require("./mobileRoutes");
+const { verifyToken } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -11,6 +13,16 @@ const DEBIT_TYPES = ["withdraw", "transfer_out", "plan_payment"];
 const VIRTUAL_ACCOUNT_BANK = "Elohim Monnify MFB";
 
 const ensureWalletTables = async () => {
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS wallet_pin VARCHAR(255)
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS wallet_pin_set BOOLEAN DEFAULT FALSE
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS wallet_transactions (
       id SERIAL PRIMARY KEY,
@@ -52,6 +64,29 @@ const ensureWalletTables = async () => {
       confirmed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+};
+
+const verifyWalletPin = async (userId, pin) => {
+  const result = await pool.query(
+    `
+    SELECT wallet_pin
+    FROM users
+    WHERE id = $1
+    `,
+    [userId]
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error("User not found");
+  }
+
+  const walletPin = result.rows[0].wallet_pin;
+
+  if (!walletPin) {
+    return false;
+  }
+
+  return bcrypt.compare(pin, walletPin);
 };
 
 const createAccountNumber = (userId) => {
@@ -135,12 +170,20 @@ const insertTransaction = async (
   );
 };
 
-router.get("/:userId", async (req, res) => {
+router.get("/:userId", verifyToken, async (req, res) => {
   try {
+    if (String(req.user.id) !== String(req.params.userId) && !req.user.is_admin) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
+
     await ensureWalletTables();
 
     const balance = await getWalletBalance(req.params.userId);
     const virtualAccount = await getOrCreateVirtualAccount(req.params.userId);
+    const userRes = await pool.query(
+      `SELECT wallet_pin_set FROM users WHERE id=$1`,
+      [req.params.userId]
+    );
     const transactions = await pool.query(
       `SELECT wt.*, u.name AS related_user_name
        FROM wallet_transactions wt
@@ -151,10 +194,107 @@ router.get("/:userId", async (req, res) => {
       [req.params.userId]
     );
 
-    res.json({ balance, virtual_account: virtualAccount, transactions: transactions.rows });
+    res.json({
+      balance,
+      virtual_account: virtualAccount,
+      transactions: transactions.rows,
+      wallet_pin_set: Boolean(userRes.rows[0]?.wallet_pin_set),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load wallet" });
+  }
+});
+
+router.post("/set-pin", verifyToken, async (req, res) => {
+  try {
+    const { pin, confirmPin } = req.body;
+
+    if (!pin || !confirmPin) {
+      return res.status(400).json({
+        error: "PIN and confirmation are required",
+      });
+    }
+
+    if (pin !== confirmPin) {
+      return res.status(400).json({
+        error: "PINs do not match",
+      });
+    }
+
+    if (!/^\d{4}$/.test(pin)) {
+      return res.status(400).json({
+        error: "PIN must be exactly 4 digits",
+      });
+    }
+
+    const hashedPin = await bcrypt.hash(pin, 10);
+
+    await pool.query(
+      `
+      UPDATE users
+      SET wallet_pin = $1,
+          wallet_pin_set = TRUE
+      WHERE id = $2
+      `,
+      [hashedPin, req.user.id]
+    );
+
+    res.json({
+      success: true,
+      message: "Wallet PIN created successfully.",
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      error: "Failed to create wallet PIN.",
+    });
+  }
+});
+
+router.post("/change-pin", verifyToken, async (req, res) => {
+  try {
+    const { oldPin, newPin, confirmPin } = req.body;
+
+    if (!oldPin || !newPin || !confirmPin) {
+      return res.status(400).json({ error: "Old PIN, new PIN and confirmation are required." });
+    }
+
+    if (newPin !== confirmPin) {
+      return res.status(400).json({ error: "New PINs do not match." });
+    }
+
+    if (!/^\d{4}$/.test(newPin)) {
+      return res.status(400).json({ error: "New PIN must be exactly 4 digits." });
+    }
+
+    const validOldPin = await verifyWalletPin(req.user.id, oldPin);
+
+    if (!validOldPin) {
+      return res.status(401).json({ error: "Invalid old PIN." });
+    }
+
+    const hashedPin = await bcrypt.hash(newPin, 10);
+
+    await pool.query(
+      `
+      UPDATE users
+      SET wallet_pin = $1,
+          wallet_pin_set = TRUE
+      WHERE id = $2
+      `,
+      [hashedPin, req.user.id]
+    );
+
+    return res.json({
+      success: true,
+      message: "Wallet PIN changed successfully.",
+    });
+  } catch (err) {
+    console.error("CHANGE WALLET PIN ERROR:", err);
+    return res.status(500).json({ error: "Failed to change wallet PIN." });
   }
 });
 
@@ -355,11 +495,30 @@ router.post("/:userId/fund", async (req, res) => {
   }
 });
 
-router.post("/:userId/withdraw", async (req, res) => {
+router.post("/:userId/withdraw", verifyToken, async (req, res) => {
   const amount = parseAmount(req.body.amount);
+  const { pin } = req.body;
+
+  if (String(req.user.id) !== String(req.params.userId) && !req.user.is_admin) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
 
   if (!amount) {
     return res.status(400).json({ error: "Amount must be greater than zero" });
+  }
+
+  if (!pin) {
+    return res.status(400).json({
+      error: "Wallet PIN is required.",
+    });
+  }
+
+  const validPin = await verifyWalletPin(req.params.userId, pin);
+
+  if (!validPin) {
+    return res.status(401).json({
+      error: "Invalid Wallet PIN.",
+    });
   }
 
   const client = await pool.connect();
@@ -408,12 +567,31 @@ router.post("/:userId/withdraw", async (req, res) => {
   }
 });
 
-router.post("/:userId/transfer", async (req, res) => {
+router.post("/:userId/transfer", verifyToken, async (req, res) => {
   const amount = parseAmount(req.body.amount);
   const recipientEmail = String(req.body.recipient_email || "").trim().toLowerCase();
+  const { pin } = req.body;
+
+  if (String(req.user.id) !== String(req.params.userId) && !req.user.is_admin) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
 
   if (!amount) {
     return res.status(400).json({ error: "Amount must be greater than zero" });
+  }
+
+  if (!pin) {
+    return res.status(400).json({
+      error: "Wallet PIN is required.",
+    });
+  }
+
+  const validPin = await verifyWalletPin(req.params.userId, pin);
+
+  if (!validPin) {
+    return res.status(401).json({
+      error: "Invalid Wallet PIN.",
+    });
   }
 
   if (!recipientEmail) {
@@ -511,4 +689,5 @@ module.exports = {
   CREDIT_TYPES,
   DEBIT_TYPES,
   getOrCreateVirtualAccount,
+  verifyWalletPin,
 };

@@ -1,4 +1,5 @@
 const express = require("express");
+const axios = require("axios");
 const pool = require("../config/db");
 const { createPaymentReminder, queueMobileNotification } = require("./mobileRoutes");
 
@@ -266,6 +267,55 @@ router.post("/initialize", async (req, res) => {
     }
 
     const reference = createReference(provider);
+    let paystackResponse = null;
+
+    if (provider === "paystack") {
+      try {
+        const userRes = await pool.query(
+          "SELECT email, name FROM users WHERE id = $1",
+          [user_id]
+        );
+
+        if (userRes.rows.length === 0) {
+          return res.status(404).json({
+            error: "User not found",
+          });
+        }
+
+        const user = userRes.rows[0];
+
+        paystackResponse = await axios.post(
+          "https://api.paystack.co/transaction/initialize",
+          {
+            email: user.email,
+            amount: Math.round(finalAmount * 100),
+            currency: "NGN",
+            reference,
+            callback_url: `${process.env.FRONTEND_URL}/payment/callback`,
+            metadata: {
+              user_id,
+              provider,
+            },
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      } catch (err) {
+        console.error(
+          "PAYSTACK INITIALIZE ERROR:",
+          err.response?.data || err.message
+        );
+
+        return res.status(500).json({
+          error: "Unable to initialize Paystack payment.",
+        });
+      }
+    }
+
     const isTransfer = ["bank_transfer", "virtual_account", "opay_transfer"].includes(channel);
     const accountNumber = isTransfer ? createVirtualAccount({ provider, userId: user_id }) : null;
     const ussdCode = channel === "ussd" ? selectedProvider.ussd?.replace("amount", String(Math.ceil(finalAmount))) : null;
@@ -287,8 +337,7 @@ router.post("/initialize", async (req, res) => {
         ussdCode,
         JSON.stringify({
           provider_label: selectedProvider.label,
-          verification_mode: "simulated",
-          future_integrations: ["market bank transfer verification", "webhooks", "virtual account callbacks"],
+          paystack: paystackResponse?.data?.data || null,
         }),
       ]
     );
@@ -305,6 +354,10 @@ router.post("/initialize", async (req, res) => {
 
     res.json({
       transaction: result.rows[0],
+      authorization_url:
+        paystackResponse?.data?.data?.authorization_url || null,
+      access_code:
+        paystackResponse?.data?.data?.access_code || null,
       instructions: {
         title: selectedProvider.label,
         reference,

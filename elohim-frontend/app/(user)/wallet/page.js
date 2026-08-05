@@ -40,13 +40,14 @@ export default function WalletPage() {
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(0);
   const [walletPinSet, setWalletPinSet] = useState(false);
+  const [walletNumber, setWalletNumber] = useState("");
   const [virtualAccount, setVirtualAccount] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [activeAction, setActiveAction] = useState("fund");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     amount: "",
-    recipient_email: "",
+    recipient_phone: "",
     pin: "",
     note: "",
   });
@@ -103,6 +104,7 @@ export default function WalletPage() {
       const res = await API.get(`/wallet/${userId}`);
       setBalance(Number(res.data?.balance || 0));
       setWalletPinSet(Boolean(res.data?.wallet_pin_set));
+      setWalletNumber(String(res.data?.wallet_number || ""));
       setVirtualAccount(res.data?.virtual_account || null);
       setTransactions(Array.isArray(res.data?.transactions) ? res.data.transactions : []);
     } catch (err) {
@@ -118,7 +120,7 @@ export default function WalletPage() {
   };
 
   const resetForm = () => {
-    setForm({ amount: "", recipient_email: "", pin: "", note: "" });
+    setForm({ amount: "", recipient_phone: "", pin: "", note: "" });
   };
 
   const confirmVirtualAccountTransfer = async () => {
@@ -186,7 +188,7 @@ export default function WalletPage() {
       if (activeAction === "transfer") {
         await API.post(`/wallet/${user.id}/transfer`, {
           amount,
-          recipient_email: form.recipient_email,
+          recipient_phone: form.recipient_phone,
           pin: form.pin,
         });
         toast.success("Transfer sent");
@@ -274,6 +276,12 @@ export default function WalletPage() {
 
             <div className="p-5 grid lg:grid-cols-[1fr_1.2fr] gap-5">
               <div className="grid sm:grid-cols-3 gap-3">
+                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                  <p className="text-xs text-slate-500">Wallet Number</p>
+                  <p className="font-bold text-slate-950 mt-1">
+                    {walletNumber || "Unavailable"}
+                  </p>
+                </div>
                 <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
                   <p className="text-xs text-slate-500">Bank</p>
                   <p className="font-bold text-slate-950 mt-1">
@@ -382,16 +390,15 @@ export default function WalletPage() {
                 {activeAction === "transfer" && (
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">
-                      Recipient Email
+                      Recipient Phone
                     </span>
                     <input
-                      type="email"
-                      value={form.recipient_email}
+                      value={form.recipient_phone}
                       onChange={(event) =>
-                        updateForm({ recipient_email: event.target.value })
+                        updateForm({ recipient_phone: event.target.value })
                       }
                       className="border border-slate-300 rounded-lg p-3 w-full mt-1 focus:outline-none focus:ring-2 focus:ring-green-600"
-                      placeholder="customer@example.com"
+                      placeholder="08031234567"
                     />
                   </label>
                 )}

@@ -2,7 +2,7 @@ const express = require("express");
 const bcrypt = require("bcrypt");
 const pool = require("../config/db");
 const { createWalletAlert } = require("./mobileRoutes");
-const { verifyToken } = require("../middleware/auth");
+const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -42,6 +42,7 @@ const ensureWalletTables = async () => {
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
       account_number VARCHAR(30) UNIQUE NOT NULL,
+      wallet_number VARCHAR(20) UNIQUE,
       account_name VARCHAR(255) NOT NULL,
       bank_name VARCHAR(255) NOT NULL,
       provider VARCHAR(50) DEFAULT 'monnify',
@@ -63,6 +64,11 @@ const ensureWalletTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       confirmed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE wallet_virtual_accounts
+    ADD COLUMN IF NOT EXISTS wallet_number VARCHAR(20) UNIQUE
   `);
 };
 
@@ -105,22 +111,26 @@ const getOrCreateVirtualAccount = async (userId, client = pool) => {
     return existing.rows[0];
   }
 
-  const user = await client.query("SELECT id, name FROM users WHERE id=$1", [userId]);
+  const user = await client.query("SELECT id, name, phone FROM users WHERE id=$1", [userId]);
 
   if (user.rows.length === 0) {
     throw new Error("User not found");
   }
 
   const accountNumber = createAccountNumber(userId);
+  const walletNumber = normalizePhone(user.rows[0].phone) || null;
   const result = await client.query(
     `INSERT INTO wallet_virtual_accounts
-      (user_id, account_number, account_name, bank_name)
-     VALUES ($1,$2,$3,$4)
+      (user_id, wallet_number, account_number, account_name, bank_name)
+     VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT (user_id) DO UPDATE
-       SET account_number=EXCLUDED.account_number
+       SET
+         wallet_number=EXCLUDED.wallet_number,
+         account_number=EXCLUDED.account_number
      RETURNING *`,
     [
       userId,
+      walletNumber,
       accountNumber,
       `ELOHIM WALLET/${String(user.rows[0].name || "CUSTOMER").toUpperCase()}`,
       VIRTUAL_ACCOUNT_BANK,
@@ -139,6 +149,8 @@ const parseAmount = (amount) => {
 
   return Math.round(value * 100) / 100;
 };
+
+const normalizePhone = (value) => String(value || "").trim();
 
 const getWalletBalance = async (userId, client = pool) => {
   const result = await client.query(
@@ -196,6 +208,7 @@ router.get("/:userId", verifyToken, async (req, res) => {
 
     res.json({
       balance,
+      wallet_number: virtualAccount.wallet_number,
       virtual_account: virtualAccount,
       transactions: transactions.rows,
       wallet_pin_set: Boolean(userRes.rows[0]?.wallet_pin_set),
@@ -386,6 +399,121 @@ router.post("/virtual-accounts/confirm-transfer", async (req, res) => {
   }
 });
 
+router.get("/admin/phone-duplicates", verifyToken, isAdmin, async (req, res) => {
+  try {
+    await ensureWalletTables();
+
+    const duplicates = await pool.query(`
+      SELECT
+        phone,
+        COUNT(*)::int AS duplicate_count,
+        ARRAY_AGG(id ORDER BY id ASC) AS user_ids
+      FROM users
+      WHERE phone IS NOT NULL
+        AND TRIM(phone) <> ''
+      GROUP BY phone
+      HAVING COUNT(*) > 1
+      ORDER BY duplicate_count DESC, phone ASC
+    `);
+
+    return res.json({
+      duplicates: duplicates.rows,
+      duplicate_groups: duplicates.rows.length,
+    });
+  } catch (err) {
+    console.error("PHONE DUPLICATE LIST ERROR:", err);
+    return res.status(500).json({ error: "Failed to inspect duplicate phone numbers" });
+  }
+});
+
+router.post("/admin/phone-duplicates/resolve", verifyToken, isAdmin, async (req, res) => {
+  const { apply = false } = req.body || {};
+  const client = await pool.connect();
+
+  try {
+    await ensureWalletTables();
+
+    const duplicatesRes = await client.query(`
+      SELECT
+        phone,
+        ARRAY_AGG(id ORDER BY id ASC) AS user_ids
+      FROM users
+      WHERE phone IS NOT NULL
+        AND TRIM(phone) <> ''
+      GROUP BY phone
+      HAVING COUNT(*) > 1
+      ORDER BY phone ASC
+    `);
+
+    const duplicateGroups = duplicatesRes.rows.map((row) => {
+      const userIds = row.user_ids.map((id) => Number(id));
+      return {
+        phone: row.phone,
+        keep_user_id: userIds[0],
+        clear_user_ids: userIds.slice(1),
+      };
+    });
+
+    if (!apply) {
+      return res.json({
+        success: true,
+        mode: "dry-run",
+        duplicate_groups: duplicateGroups.length,
+        plan: duplicateGroups,
+      });
+    }
+
+    await client.query("BEGIN");
+
+    let clearedUsers = 0;
+    for (const group of duplicateGroups) {
+      if (group.clear_user_ids.length === 0) {
+        continue;
+      }
+
+      await client.query(
+        `UPDATE users
+         SET phone = NULL
+         WHERE id = ANY($1::int[])`,
+        [group.clear_user_ids]
+      );
+
+      await client.query(
+        `UPDATE wallet_virtual_accounts
+         SET wallet_number = NULL
+         WHERE user_id = ANY($1::int[])`,
+        [group.clear_user_ids]
+      );
+
+      clearedUsers += group.clear_user_ids.length;
+    }
+
+    await client
+      .query(`ALTER TABLE users ADD CONSTRAINT users_phone_unique UNIQUE (phone)`)
+      .catch((error) => {
+        if (error.code !== "42710") {
+          throw error;
+        }
+      });
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      mode: "applied",
+      duplicate_groups_resolved: duplicateGroups.length,
+      cleared_users: clearedUsers,
+      message: "Duplicate phone numbers resolved and uniqueness enforced.",
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("PHONE DUPLICATE RESOLVE ERROR:", err);
+    return res.status(500).json({ error: "Failed to resolve duplicate phone numbers" });
+  } finally {
+    client.release();
+  }
+});
+
 router.get("/admin/overview", async (req, res) => {
   try {
     await ensureWalletTables();
@@ -569,7 +697,7 @@ router.post("/:userId/withdraw", verifyToken, async (req, res) => {
 
 router.post("/:userId/transfer", verifyToken, async (req, res) => {
   const amount = parseAmount(req.body.amount);
-  const recipientEmail = String(req.body.recipient_email || "").trim().toLowerCase();
+  const recipientPhone = normalizePhone(req.body.recipient_phone);
   const { pin } = req.body;
 
   if (String(req.user.id) !== String(req.params.userId) && !req.user.is_admin) {
@@ -594,8 +722,8 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
     });
   }
 
-  if (!recipientEmail) {
-    return res.status(400).json({ error: "Recipient email is required" });
+  if (!recipientPhone) {
+    return res.status(400).json({ error: "Recipient phone is required" });
   }
 
   const client = await pool.connect();
@@ -605,8 +733,8 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
     await client.query("BEGIN");
 
     const recipient = await client.query(
-      "SELECT id, name, email FROM users WHERE LOWER(email)=$1",
-      [recipientEmail]
+      "SELECT id, name, email, phone FROM users WHERE phone=$1",
+      [recipientPhone]
     );
 
     if (recipient.rows.length === 0) {
@@ -634,7 +762,7 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
       type: "transfer_out",
       direction: "debit",
       amount,
-      note: `Transfer to ${recipientUser.email}`,
+      note: `Transfer to ${recipientUser.phone || recipientPhone}`,
     });
 
     await insertTransaction(client, {
@@ -643,7 +771,7 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
       type: "transfer_in",
       direction: "credit",
       amount,
-      note: "Wallet transfer received",
+      note: `Wallet transfer from ${normalizePhone(req.user.phone) || "unknown"}`,
     });
     const senderBalance = balance - amount;
 
@@ -652,7 +780,7 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
       direction: "debit",
       amount,
       balance: senderBalance,
-      note: `Transfer to ${recipientUser.email}`,
+      note: `Transfer to ${recipientUser.phone || recipientPhone}`,
       client,
     });
 

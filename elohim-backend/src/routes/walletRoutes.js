@@ -537,6 +537,37 @@ router.post("/admin/phone-duplicates/resolve", verifyToken, isAdmin, async (req,
   }
 });
 
+router.get("/admin/phone-cleanup-report", verifyToken, isAdmin, async (req, res) => {
+  try {
+    await ensureWalletTables();
+
+    const affected = await pool.query(`
+      SELECT
+        u.id,
+        u.name,
+        u.email,
+        u.phone,
+        va.id AS virtual_account_id,
+        va.wallet_number,
+        va.account_number,
+        va.bank_name
+      FROM users u
+      LEFT JOIN wallet_virtual_accounts va ON va.user_id = u.id
+      WHERE u.phone IS NULL
+         OR TRIM(u.phone) = ''
+      ORDER BY u.id ASC
+    `);
+
+    return res.json({
+      affected_users_count: affected.rowCount,
+      affected_users: affected.rows,
+    });
+  } catch (err) {
+    console.error("PHONE CLEANUP REPORT ERROR:", err);
+    return res.status(500).json({ error: "Failed to load phone cleanup report" });
+  }
+});
+
 router.get("/admin/overview", async (req, res) => {
   try {
     await ensureWalletTables();

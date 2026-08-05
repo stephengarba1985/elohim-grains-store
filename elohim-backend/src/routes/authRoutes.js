@@ -309,8 +309,8 @@ router.post("/login", async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(400).json({
-        error: "User not found.",
+      return res.status(401).json({
+        error: "Invalid email or password",
       });
     }
 
@@ -334,8 +334,8 @@ router.post("/login", async (req, res) => {
     );
 
     if (!validPassword) {
-      return res.status(400).json({
-        error: "Invalid password.",
+      return res.status(401).json({
+        error: "Invalid email or password",
       });
     }
 
@@ -348,7 +348,7 @@ router.post("/login", async (req, res) => {
       },
       process.env.JWT_SECRET,
       {
-        expiresIn: "7d",
+        expiresIn: "24h",
       }
     );
 

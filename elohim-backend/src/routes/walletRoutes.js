@@ -69,7 +69,7 @@ const ensureWalletTables = async () => {
 
   await pool.query(`
     ALTER TABLE wallet_virtual_accounts
-    ADD COLUMN IF NOT EXISTS wallet_number VARCHAR(20) UNIQUE
+    ADD COLUMN IF NOT EXISTS wallet_number VARCHAR(20)
   `);
 };
 
@@ -126,8 +126,7 @@ const getOrCreateVirtualAccount = async (userId, client = pool) => {
      VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT (user_id) DO UPDATE
        SET
-         wallet_number=EXCLUDED.wallet_number,
-         account_number=EXCLUDED.account_number
+         wallet_number=EXCLUDED.wallet_number
      RETURNING *`,
     [
       userId,

@@ -16,7 +16,6 @@ const VIRTUAL_ACCOUNT_BANK = "Elohim Monnify MFB";
 let _walletTablesReady = false;
 const ensureWalletTables = async () => {
   if (_walletTablesReady) return;
-  _walletTablesReady = true;
   await pool.query(`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS wallet_pin VARCHAR(255)
@@ -90,6 +89,7 @@ const ensureWalletTables = async () => {
           AND va2.user_id <> va.user_id
       )
   `);
+  _walletTablesReady = true;
 };
 
 const verifyWalletPin = async (userId, pin) => {
@@ -138,14 +138,21 @@ const getOrCreateVirtualAccount = async (userId, client = pool) => {
   }
 
   const accountNumber = createAccountNumber(userId);
-  const walletNumber = normalizePhone(user.rows[0].phone) || null;
+  const rawWalletNumber = normalizePhone(user.rows[0].phone) || null;
+  // avoid UNIQUE violation if another user already owns this phone as wallet_number
+  const taken = rawWalletNumber
+    ? await client.query(
+        "SELECT 1 FROM wallet_virtual_accounts WHERE wallet_number=$1 AND user_id!=$2",
+        [rawWalletNumber, userId]
+      )
+    : { rows: [] };
+  const walletNumber = taken.rows.length > 0 ? null : rawWalletNumber;
   const result = await client.query(
     `INSERT INTO wallet_virtual_accounts
       (user_id, wallet_number, account_number, account_name, bank_name)
      VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT (user_id) DO UPDATE
-       SET
-         wallet_number=EXCLUDED.wallet_number
+       SET wallet_number=EXCLUDED.wallet_number
      RETURNING *`,
     [
       userId,
@@ -205,7 +212,7 @@ router.get("/:userId", verifyToken, async (req, res) => {
       return res.status(403).json({ error: "Not allowed" });
     }
 
-    await ensureWalletTables();
+    await ensureWalletTables().catch((e) => console.error("ensureWalletTables failed:", e));
 
     const balance = await getWalletBalance(req.params.userId);
     const virtualAccount = await getOrCreateVirtualAccount(req.params.userId);

@@ -127,7 +127,7 @@ const getOrCreateVirtualAccount = async (userId, client = pool) => {
     [userId]
   );
 
-  if (existing.rows.length > 0) {
+  if (existing.rows.length > 0 && existing.rows[0].wallet_number) {
     return existing.rows[0];
   }
 

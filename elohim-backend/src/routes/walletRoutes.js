@@ -42,8 +42,8 @@ const ensureWalletTables = async () => {
     CREATE TABLE IF NOT EXISTS wallet_virtual_accounts (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
-      account_number VARCHAR(30) UNIQUE NOT NULL,
       wallet_number VARCHAR(20) UNIQUE,
+      account_number VARCHAR(30) UNIQUE NOT NULL,
       account_name VARCHAR(255) NOT NULL,
       bank_name VARCHAR(255) NOT NULL,
       provider VARCHAR(50) DEFAULT 'monnify',
@@ -70,6 +70,14 @@ const ensureWalletTables = async () => {
   await pool.query(`
     ALTER TABLE wallet_virtual_accounts
     ADD COLUMN IF NOT EXISTS wallet_number VARCHAR(20)
+  `);
+
+  await pool.query(`
+    UPDATE wallet_virtual_accounts va
+    SET wallet_number = u.phone
+    FROM users u
+    WHERE va.user_id = u.id
+    AND va.wallet_number IS NULL
   `);
 };
 

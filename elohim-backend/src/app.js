@@ -130,6 +130,7 @@ app.use(
 );
 
 app.use("/api/payment/webhook", express.raw({ type: "application/json" }));
+app.use("/api/wallet/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 
 const uploadStaticDirs = [

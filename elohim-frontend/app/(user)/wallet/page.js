@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
@@ -19,6 +20,7 @@ const formatDate = (date) => {
 
 const typeLabels = {
   fund: "Wallet Funding",
+  paystack_funding: "Wallet Funding (Paystack)",
   withdraw: "Withdrawal",
   transfer_in: "Transfer Received",
   transfer_out: "Transfer Sent",
@@ -45,6 +47,8 @@ export default function WalletPage() {
   const [transactions, setTransactions] = useState([]);
   const [activeAction, setActiveAction] = useState("fund");
   const [loading, setLoading] = useState(false);
+  const [recipient, setRecipient] = useState(null);
+  const [recipientLoading, setRecipientLoading] = useState(false);
   const [form, setForm] = useState({
     amount: "",
     recipient_phone: "",
@@ -56,6 +60,9 @@ export default function WalletPage() {
     sender_name: "",
     reference: "",
   });
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -73,6 +80,32 @@ export default function WalletPage() {
       console.error(err);
       toast.error("Failed to read user session");
     }
+  }, []);
+
+  // Verify Paystack payment on return from checkout
+  useEffect(() => {
+    const reference = searchParams.get("reference");
+    if (!reference) return;
+    router.replace("/user/wallet");
+    const verifyFunding = async () => {
+      try {
+        setLoading(true);
+        const res = await API.post("/wallet/fund/verify", { reference });
+        if (res.data.already_verified) {
+          toast.success("Payment already verified");
+        } else {
+          toast.success(`Wallet funded! NGN ${Number(res.data.amount || 0).toLocaleString()} added`);
+        }
+        const storedUser = JSON.parse(localStorage.getItem("user") || "null");
+        if (storedUser?.id) fetchWallet(storedUser.id);
+      } catch (err) {
+        toast.error(err.response?.data?.error || "Payment verification failed");
+      } finally {
+        setLoading(false);
+      }
+    };
+    verifyFunding();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const summary = useMemo(() => {
@@ -118,6 +151,20 @@ export default function WalletPage() {
   const updateForm = (updates) => {
     setForm((current) => ({ ...current, ...updates }));
   };
+
+  const lookupRecipient = useCallback(async (phone) => {
+    const trimmed = String(phone || "").trim();
+    if (trimmed.length < 10) { setRecipient(null); return; }
+    try {
+      setRecipientLoading(true);
+      const res = await API.get(`/wallet/recipient/${encodeURIComponent(trimmed)}`);
+      setRecipient(res.data.recipient);
+    } catch {
+      setRecipient(null);
+    } finally {
+      setRecipientLoading(false);
+    }
+  }, []);
 
   const resetForm = () => {
     setForm({ amount: "", recipient_phone: "", pin: "", note: "" });
@@ -169,11 +216,9 @@ export default function WalletPage() {
       setLoading(true);
 
       if (activeAction === "fund") {
-        await API.post(`/wallet/${user.id}/fund`, {
-          amount,
-          note: form.note || "Wallet funding",
-        });
-        toast.success("Wallet funded");
+        const res = await API.post("/wallet/fund/initialize", { amount });
+        window.location.href = res.data.authorization_url;
+        return;
       }
 
       if (activeAction === "withdraw") {
@@ -195,6 +240,7 @@ export default function WalletPage() {
       }
 
       resetForm();
+      setRecipient(null);
       fetchWallet(user.id);
     } catch (err) {
       console.error(err);
@@ -394,12 +440,22 @@ export default function WalletPage() {
                     </span>
                     <input
                       value={form.recipient_phone}
-                      onChange={(event) =>
-                        updateForm({ recipient_phone: event.target.value })
-                      }
+                      onChange={(event) => {
+                        updateForm({ recipient_phone: event.target.value });
+                        lookupRecipient(event.target.value);
+                      }}
                       className="border border-slate-300 rounded-lg p-3 w-full mt-1 focus:outline-none focus:ring-2 focus:ring-green-600"
                       placeholder="08031234567"
                     />
+                    {recipientLoading && (
+                      <p className="text-xs text-slate-400 mt-1">Looking up...</p>
+                    )}
+                    {recipient && (
+                      <p className="text-sm font-semibold text-green-700 mt-1">✓ {recipient.name}</p>
+                    )}
+                    {!recipientLoading && !recipient && form.recipient_phone.length >= 10 && (
+                      <p className="text-xs text-red-500 mt-1">Account not found</p>
+                    )}
                   </label>
                 )}
 
@@ -420,7 +476,7 @@ export default function WalletPage() {
                   </label>
                 )}
 
-                {activeAction !== "transfer" && (
+                {activeAction !== "transfer" && activeAction !== "fund" && (
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">Note</span>
                     <input
@@ -430,6 +486,12 @@ export default function WalletPage() {
                       placeholder="Optional note"
                     />
                   </label>
+                )}
+
+                {activeAction === "fund" && (
+                  <p className="text-xs text-slate-500">
+                    You will be redirected to Paystack to complete payment securely.
+                  </p>
                 )}
 
                 <button

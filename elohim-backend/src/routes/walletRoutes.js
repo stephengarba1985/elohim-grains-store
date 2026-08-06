@@ -1,9 +1,12 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
+const axios = require("axios");
+const crypto = require("crypto");
 const pool = require("../config/db");
 const { createWalletAlert } = require("./mobileRoutes");
 const { verifyToken, isAdmin } = require("../middleware/auth");
 const { normalizePhone, canonicalPhone } = require("../utils/phone");
+const { sendEmail } = require("../utils/mail");
 
 const router = express.Router();
 
@@ -89,6 +92,21 @@ const ensureWalletTables = async () => {
           AND va2.user_id <> va.user_id
       )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS wallet_funding_transactions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      reference VARCHAR(120) UNIQUE NOT NULL,
+      provider VARCHAR(30) NOT NULL DEFAULT 'paystack',
+      amount DECIMAL(12,2) NOT NULL,
+      status VARCHAR(30) DEFAULT 'pending',
+      gateway_response JSONB,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      verified_at TIMESTAMP
+    )
+  `);
+
   _walletTablesReady = true;
 };
 
@@ -205,6 +223,216 @@ const insertTransaction = async (
     [userId, relatedUserId, planId, type, direction, amount, note]
   );
 };
+
+const sendWalletFundingEmail = async (user, amount, reference, balance) => {
+  await sendEmail({
+    to: user.email,
+    subject: "Wallet Funded Successfully — Elohim Grains",
+    htmlContent: `
+      <h2>Wallet Funded ✓</h2>
+      <p>Hello ${user.name},</p>
+      <p>Your Elohim Grains wallet has been credited with <strong>NGN ${Number(amount).toLocaleString()}</strong>.</p>
+      <table style="border-collapse:collapse;width:100%;max-width:400px;margin-top:16px">
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;color:#64748b">Reference</td><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold">${reference}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;color:#64748b">Amount</td><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold">NGN ${Number(amount).toLocaleString()}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;color:#64748b">New Balance</td><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold">NGN ${Number(balance).toLocaleString()}</td></tr>
+      </table>
+      <p style="margin-top:24px;color:#64748b;font-size:14px">Elohim Grains Store</p>
+    `,
+  });
+};
+
+// POST /wallet/fund/initialize — returns Paystack authorization_url
+router.post("/fund/initialize", verifyToken, async (req, res) => {
+  const amount = parseAmount(req.body.amount);
+  if (!amount) return res.status(400).json({ error: "Amount must be greater than zero" });
+  if (amount < 100) return res.status(400).json({ error: "Minimum funding amount is NGN 100" });
+  if (!process.env.PAYSTACK_SECRET_KEY) return res.status(500).json({ error: "Payment gateway not configured" });
+
+  try {
+    await ensureWalletTables().catch(console.error);
+
+    const userRes = await pool.query("SELECT id, name, email FROM users WHERE id=$1", [req.user.id]);
+    if (userRes.rows.length === 0) return res.status(404).json({ error: "User not found" });
+
+    const user = userRes.rows[0];
+    const reference = `EGW-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+    const frontendUrl = process.env.FRONTEND_URL || "https://elohimgrains.com";
+
+    const paystackRes = await axios.post(
+      "https://api.paystack.co/transaction/initialize",
+      {
+        email: user.email,
+        amount: Math.round(amount * 100),
+        reference,
+        metadata: { user_id: req.user.id, purpose: "wallet_funding" },
+        callback_url: `${frontendUrl}/user/wallet?reference=${reference}`,
+      },
+      { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
+    );
+
+    await pool.query(
+      `INSERT INTO wallet_funding_transactions (user_id, reference, amount) VALUES ($1,$2,$3)`,
+      [req.user.id, reference, amount]
+    );
+
+    res.json({ authorization_url: paystackRes.data.data.authorization_url, reference });
+  } catch (err) {
+    console.error("FUND INITIALIZE ERROR:", err.response?.data || err.message);
+    res.status(500).json({ error: "Failed to initialize payment" });
+  }
+});
+
+// POST /wallet/fund/verify — verify a Paystack payment and credit wallet
+router.post("/fund/verify", verifyToken, async (req, res) => {
+  const { reference } = req.body;
+  if (!reference) return res.status(400).json({ error: "Reference is required" });
+  if (!process.env.PAYSTACK_SECRET_KEY) return res.status(500).json({ error: "Payment gateway not configured" });
+
+  const client = await pool.connect();
+  try {
+    await ensureWalletTables().catch(console.error);
+    await client.query("BEGIN");
+
+    const fundingRes = await client.query(
+      "SELECT * FROM wallet_funding_transactions WHERE reference=$1 FOR UPDATE",
+      [reference]
+    );
+    if (fundingRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Funding transaction not found" });
+    }
+
+    const funding = fundingRes.rows[0];
+    if (String(funding.user_id) !== String(req.user.id)) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Not allowed" });
+    }
+
+    if (funding.status === "verified") {
+      await client.query("ROLLBACK");
+      const balance = await getWalletBalance(req.user.id);
+      return res.json({ success: true, already_verified: true, balance, amount: funding.amount });
+    }
+
+    const paystackRes = await axios.get(
+      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+      { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
+    );
+
+    const payment = paystackRes.data.data;
+    if (payment.status !== "success") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Payment not successful" });
+    }
+    if (payment.currency !== "NGN") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Invalid currency" });
+    }
+    if (Number(payment.amount) < Math.round(Number(funding.amount) * 100)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Amount mismatch" });
+    }
+
+    await insertTransaction(client, {
+      userId: funding.user_id,
+      type: "paystack_funding",
+      direction: "credit",
+      amount: funding.amount,
+      note: `Wallet funded via Paystack (${reference})`,
+    });
+
+    await client.query(
+      `UPDATE wallet_funding_transactions SET status='verified', verified_at=NOW(), gateway_response=$1 WHERE reference=$2`,
+      [JSON.stringify(payment), reference]
+    );
+
+    const balance = await getWalletBalance(funding.user_id, client);
+
+    await createWalletAlert({ userId: funding.user_id, direction: "credit", amount: funding.amount, balance, note: `Wallet funded via Paystack (${reference})`, client });
+
+    await client.query("COMMIT");
+
+    pool.query("SELECT name, email FROM users WHERE id=$1", [funding.user_id]).then(({ rows }) => {
+      if (rows.length > 0) sendWalletFundingEmail(rows[0], funding.amount, reference, balance).catch(console.error);
+    });
+
+    res.json({ success: true, balance, amount: funding.amount });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("FUND VERIFY ERROR:", err.response?.data || err.message);
+    res.status(500).json({ error: "Failed to verify payment" });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /wallet/webhook — Paystack webhook for wallet funding
+router.post("/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  const signature = req.headers["x-paystack-signature"];
+  if (!process.env.PAYSTACK_SECRET_KEY || !signature || !Buffer.isBuffer(req.body)) {
+    return res.sendStatus(401);
+  }
+
+  const hash = crypto.createHmac("sha512", process.env.PAYSTACK_SECRET_KEY).update(req.body).digest("hex");
+  if (!crypto.timingSafeEqual(Buffer.from(String(signature)), Buffer.from(hash))) {
+    return res.sendStatus(401);
+  }
+
+  const event = JSON.parse(req.body.toString());
+  if (event.event !== "charge.success") return res.sendStatus(200);
+
+  const payment = event.data;
+  const reference = payment.reference;
+  if (!String(reference).startsWith("EGW-")) return res.sendStatus(200);
+
+  const client = await pool.connect();
+  try {
+    await ensureWalletTables().catch(console.error);
+    await client.query("BEGIN");
+
+    const fundingRes = await client.query(
+      "SELECT * FROM wallet_funding_transactions WHERE reference=$1 FOR UPDATE",
+      [reference]
+    );
+    if (fundingRes.rows.length === 0) { await client.query("ROLLBACK"); return res.sendStatus(200); }
+
+    const funding = fundingRes.rows[0];
+    if (funding.status === "verified") { await client.query("ROLLBACK"); return res.sendStatus(200); }
+    if (payment.status !== "success" || payment.currency !== "NGN") { await client.query("ROLLBACK"); return res.sendStatus(200); }
+    if (Number(payment.amount) < Math.round(Number(funding.amount) * 100)) { await client.query("ROLLBACK"); return res.sendStatus(200); }
+
+    await insertTransaction(client, {
+      userId: funding.user_id,
+      type: "paystack_funding",
+      direction: "credit",
+      amount: funding.amount,
+      note: `Wallet funded via Paystack (${reference})`,
+    });
+
+    await client.query(
+      `UPDATE wallet_funding_transactions SET status='verified', verified_at=NOW(), gateway_response=$1 WHERE reference=$2`,
+      [JSON.stringify(payment), reference]
+    );
+
+    const balance = await getWalletBalance(funding.user_id, client);
+    await createWalletAlert({ userId: funding.user_id, direction: "credit", amount: funding.amount, balance, note: `Wallet funded via Paystack (${reference})`, client });
+
+    await client.query("COMMIT");
+
+    pool.query("SELECT name, email FROM users WHERE id=$1", [funding.user_id]).then(({ rows }) => {
+      if (rows.length > 0) sendWalletFundingEmail(rows[0], funding.amount, reference, balance).catch(console.error);
+    });
+
+    res.sendStatus(200);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("WALLET WEBHOOK ERROR:", err);
+    res.sendStatus(500);
+  } finally {
+    client.release();
+  }
+});
 
 router.get("/recipient/:phone", verifyToken, async (req, res) => {
   try {

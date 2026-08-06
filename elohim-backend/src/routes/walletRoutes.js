@@ -206,6 +206,28 @@ const insertTransaction = async (
   );
 };
 
+router.get("/recipient/:phone", verifyToken, async (req, res) => {
+  try {
+    const phone = String(req.params.phone || "").trim();
+    if (!phone) return res.status(400).json({ error: "Phone number is required" });
+
+    const usersWithPhone = await pool.query(
+      `SELECT id, name, phone FROM users WHERE phone IS NOT NULL AND TRIM(phone) <> ''`
+    );
+    const canon = canonicalPhone(phone);
+    const matches = usersWithPhone.rows.filter((r) => canonicalPhone(r.phone) === canon);
+
+    if (matches.length === 0) return res.status(404).json({ error: "Account not found" });
+    if (matches.length > 1) return res.status(409).json({ error: "Duplicate phone — contact support" });
+
+    const u = matches[0];
+    res.json({ success: true, recipient: { id: u.id, name: u.name, phone: u.phone } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Unable to lookup recipient" });
+  }
+});
+
 router.get("/:userId", verifyToken, async (req, res) => {
   try {
     if (String(req.user.id) !== String(req.params.userId) && !req.user.is_admin) {
@@ -861,7 +883,7 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
       type: "transfer_out",
       direction: "debit",
       amount,
-      note: `Transfer to ${recipientDisplayPhone}`,
+      note: `Transfer to ${recipientUser.name} (${recipientDisplayPhone})`,
     });
 
     await insertTransaction(client, {
@@ -870,7 +892,7 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
       type: "transfer_in",
       direction: "credit",
       amount,
-      note: `Wallet transfer from ${normalizePhone(req.user.phone) || "unknown"}`,
+      note: `Wallet transfer from ${req.user.name || normalizePhone(req.user.phone) || "User ID " + req.params.userId}`,
     });
     const senderBalance = balance - amount;
 
@@ -887,7 +909,7 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
       userId: recipientUser.id,
       direction: "credit",
       amount,
-      note: "Wallet transfer received",
+      note: `Wallet transfer from ${req.user.name || normalizePhone(req.user.phone) || "User ID " + req.params.userId}`,
       client,
     });
 

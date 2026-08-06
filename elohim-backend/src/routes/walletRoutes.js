@@ -13,7 +13,10 @@ const DEBIT_TYPES = ["withdraw", "transfer_out", "plan_payment"];
 
 const VIRTUAL_ACCOUNT_BANK = "Elohim Monnify MFB";
 
+let _walletTablesReady = false;
 const ensureWalletTables = async () => {
+  if (_walletTablesReady) return;
+  _walletTablesReady = true;
   await pool.query(`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS wallet_pin VARCHAR(255)
@@ -72,12 +75,20 @@ const ensureWalletTables = async () => {
     ADD COLUMN IF NOT EXISTS wallet_number VARCHAR(20)
   `);
 
+  // only backfill rows whose phone won't violate the unique constraint
   await pool.query(`
     UPDATE wallet_virtual_accounts va
     SET wallet_number = u.phone
     FROM users u
     WHERE va.user_id = u.id
-    AND va.wallet_number IS NULL
+      AND va.wallet_number IS NULL
+      AND u.phone IS NOT NULL
+      AND TRIM(u.phone) <> ''
+      AND NOT EXISTS (
+        SELECT 1 FROM wallet_virtual_accounts va2
+        WHERE va2.wallet_number = u.phone
+          AND va2.user_id <> va.user_id
+      )
   `);
 };
 

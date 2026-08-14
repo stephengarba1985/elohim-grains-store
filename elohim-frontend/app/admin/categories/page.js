@@ -26,11 +26,21 @@ export default function CategoriesPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const trimmedName = String(form.name ?? "").trim();
+    if (!trimmedName) {
+      toast.error("Category name is required");
+      return;
+    }
+
     try {
       setLoading(true);
 
       const payload = {
         ...form,
+        name: trimmedName,
+        description: String(form.description ?? "").trim(),
+        image: String(form.image ?? "").trim(),
         status: form.status === undefined ? true : form.status,
       };
 

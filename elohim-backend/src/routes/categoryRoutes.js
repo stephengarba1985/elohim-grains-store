@@ -54,21 +54,51 @@ router.get("/", async (req, res) => {
 // Create category
 router.post("/", async (req, res) => {
   try {
-    const { name, description, image } = req.body;
+    const { name, description, image, status } = req.body;
+    const trimmedName = typeof name === "string" ? name.trim() : "";
 
-    const result = await pool.query(
+    if (!trimmedName) {
+      return res.status(400).json({ error: "Category name is required" });
+    }
+
+    const hasStatusColumn = await columnExists("categories", "status");
+    const normalizedStatus =
+      status === undefined
+        ? true
+        : status === "false"
+          ? false
+          : status === "true"
+            ? true
+            : Boolean(status);
+
+    const insertQuery = hasStatusColumn
+      ? `
+        INSERT INTO categories
+        (name, description, image, status)
+        VALUES ($1,$2,$3,$4)
+        RETURNING *
       `
-      INSERT INTO categories
-      (name, description, image)
-      VALUES ($1,$2,$3)
-      RETURNING *
-      `,
-      [name, description, image]
-    );
+      : `
+        INSERT INTO categories
+        (name, description, image)
+        VALUES ($1,$2,$3)
+        RETURNING *
+      `;
+
+    const insertValues = hasStatusColumn
+      ? [trimmedName, description ?? "", image ?? "", normalizedStatus]
+      : [trimmedName, description ?? "", image ?? ""];
+
+    const result = await pool.query(insertQuery, insertValues);
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("CREATE CATEGORY ERROR:", err);
+
+    if (err.code === "23505" || /duplicate key|unique/i.test(err.message)) {
+      return res.status(409).json({ error: "Category name already exists" });
+    }
+
     res.status(500).json({
       error: "Failed to create category",
     });

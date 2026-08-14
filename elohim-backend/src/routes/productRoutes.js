@@ -50,36 +50,82 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT 
+      SELECT
         p.id,
         p.name,
+        p.description,
+        p.image,
         p.price,
-        p.stock_quantity,
-        p.weight,
-        p.image_url,
-        p.created_at,
 
-        COALESCE(
-          json_agg(
-            json_build_object(
-              'id', v.id,
-              'weight', v.weight,
-              'price', v.price,
-              'stock', v.stock
-            )
-          ) FILTER (WHERE v.id IS NOT NULL),
-          '[]'
-        ) AS variants
+        c.name AS category_name,
+
+        pt.id AS product_type_id,
+        pt.name AS product_type_name,
+
+        pv.id AS variant_id,
+        pv.weight,
+        pv.price AS variant_price,
+        pv.stock
 
       FROM products p
-      LEFT JOIN product_variants v 
-        ON p.id = v.product_id
 
-      GROUP BY p.id
-      ORDER BY p.created_at DESC
+      LEFT JOIN categories c
+        ON p.category_id = c.id
+
+      LEFT JOIN product_types pt
+        ON pt.product_id = p.id
+
+      LEFT JOIN product_variants pv
+        ON pv.product_type_id = pt.id
+
+      ORDER BY
+        p.id,
+        pt.id,
+        pv.id
     `);
 
-    res.json(result.rows);
+    const products = {};
+
+    for (const row of result.rows) {
+      if (!products[row.id]) {
+        products[row.id] = {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          image: row.image,
+          price: row.price,
+          category: row.category_name,
+          types: []
+        };
+      }
+
+      if (row.product_type_id) {
+        let type = products[row.id].types.find(
+          t => t.id === row.product_type_id
+        );
+
+        if (!type) {
+          type = {
+            id: row.product_type_id,
+            name: row.product_type_name,
+            variants: []
+          };
+
+          products[row.id].types.push(type);
+        }
+
+        if (row.variant_id) {
+          type.variants.push({
+            id: row.variant_id,
+            weight: row.weight,
+            price: row.variant_price,
+            stock: row.stock
+          });
+        }
+      }
+    }
+
+    res.json(Object.values(products));
 
   } catch (err) {
     console.error("FETCH ERROR:", err);

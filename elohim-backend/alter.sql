@@ -21,17 +21,8 @@ CREATE TABLE IF NOT EXISTS stock_history (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Drop and recreate product_variants table
-DROP TABLE IF EXISTS product_variants;
-CREATE TABLE product_variants (
-  id SERIAL PRIMARY KEY,
-  product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-  weight VARCHAR(255) NOT NULL,
-  price DECIMAL(10,2) NOT NULL,
-  bulk_price DECIMAL(10,2),
-  stock INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Keep the existing product_variants table intact and add any new compatibility columns as needed.
+ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE;
 
 -- Add variant_id to cart table
 ALTER TABLE cart ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE;
@@ -296,3 +287,54 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   verified_at TIMESTAMP
 );
+
+-- Create categories table if it doesn't exist yet, then add any compatibility columns for existing installations.
+CREATE TABLE IF NOT EXISTS categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    image TEXT,
+    status BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE categories
+  ADD COLUMN IF NOT EXISTS description TEXT,
+  ADD COLUMN IF NOT EXISTS image TEXT,
+  ADD COLUMN IF NOT EXISTS status BOOLEAN DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+CREATE UNIQUE INDEX IF NOT EXISTS categories_name_unique_idx ON categories (name);
+
+-- Create product_types table
+CREATE TABLE IF NOT EXISTS product_types (
+    id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    name VARCHAR(120) NOT NULL,
+    origin VARCHAR(120),
+    brand VARCHAR(120),
+    description TEXT,
+    image TEXT,
+    status BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(product_id, name)
+);
+
+-- Link products to categories without removing the legacy category field
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id);
+
+-- Link product variants to a specific product type while keeping existing product_id intact
+ALTER TABLE product_variants
+ADD COLUMN IF NOT EXISTS product_type_id INTEGER REFERENCES product_types(id);
+
+-- Seed base categories
+INSERT INTO categories (name, description)
+VALUES
+('Grains','All grains'),
+('Flour','Flour products'),
+('Spices','Cooking spices'),
+('Oil','Cooking oil'),
+('Livestock Feed','Animal feed'),
+('Seeds','Planting seeds')
+ON CONFLICT (name) DO NOTHING;

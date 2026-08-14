@@ -34,9 +34,13 @@ export default function AdminLayout({ children }) {
           <p className="text-xs text-gray-400 mt-2">OPERATIONS</p>
 
           {navItem("Dashboard", "/admin")}
+          {navItem("Products", "/admin/products")}
+          {navItem("Categories", "/admin/categories")}
+          {navItem("Product Types", "/admin/product-types")}
+          {navItem("Variants", "/admin/variants")}
           {navItem("Orders", "/admin/orders")}
-          {navItem("Inventory", "/admin/inventory")}
           {navItem("Customers", "/admin/customers")}
+          {navItem("Inventory", "/admin/inventory")}
           {navItem("Vendors", "/admin/vendors")}
           {navItem("Riders", "/admin/riders")}
           {navItem("Logistics", "/admin/logistics")}

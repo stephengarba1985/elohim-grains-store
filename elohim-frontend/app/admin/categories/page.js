@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState([]);
-  const [form, setForm] = useState({ name: "", description: "", image: "" });
+  const [form, setForm] = useState({ name: "", description: "", image: "", status: true });
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -29,15 +29,20 @@ export default function CategoriesPage() {
     try {
       setLoading(true);
 
+      const payload = {
+        ...form,
+        status: form.status === undefined ? true : form.status,
+      };
+
       if (editingId) {
-        await API.put(`/categories/${editingId}`, form);
+        await API.put(`/categories/${editingId}`, payload);
         toast.success("Category updated");
       } else {
-        await API.post("/categories", form);
+        await API.post("/categories", payload);
         toast.success("Category added");
       }
 
-      setForm({ name: "", description: "", image: "" });
+      setForm({ name: "", description: "", image: "", status: true });
       setEditingId(null);
       fetchCategories();
     } catch (err) {
@@ -112,7 +117,7 @@ export default function CategoriesPage() {
               type="button"
               onClick={() => {
                 setEditingId(null);
-                setForm({ name: "", description: "", image: "" });
+                setForm({ name: "", description: "", image: "", status: true });
               }}
               className="bg-gray-300 px-4 py-2 rounded"
             >
@@ -158,6 +163,7 @@ export default function CategoriesPage() {
                         name: category.name || "",
                         description: category.description || "",
                         image: category.image || "",
+                        status: category.status ?? true,
                       });
                     }}
                     className="bg-yellow-500 text-white px-3 py-1 rounded"

@@ -79,24 +79,50 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { name, description, image, status } = req.body;
+    const hasStatusColumn = await columnExists("categories", "status");
+    const normalizedStatus =
+      status === undefined
+        ? true
+        : status === "false"
+          ? false
+          : status === "true"
+            ? true
+            : Boolean(status);
 
-    const result = await pool.query(
+    const updateQuery = hasStatusColumn
+      ? `
+        UPDATE categories
+        SET
+          name=$1,
+          description=$2,
+          image=$3,
+          status=$4
+        WHERE id=$5
+        RETURNING *
       `
-      UPDATE categories
-      SET
-        name=$1,
-        description=$2,
-        image=$3,
-        status=$4
-      WHERE id=$5
-      RETURNING *
-      `,
-      [name, description, image, status, req.params.id]
-    );
+      : `
+        UPDATE categories
+        SET
+          name=$1,
+          description=$2,
+          image=$3
+        WHERE id=$4
+        RETURNING *
+      `;
+
+    const updateValues = hasStatusColumn
+      ? [name ?? "", description ?? "", image ?? "", normalizedStatus, req.params.id]
+      : [name ?? "", description ?? "", image ?? "", req.params.id];
+
+    const result = await pool.query(updateQuery, updateValues);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Category not found" });
+    }
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("UPDATE CATEGORY ERROR:", err);
     res.status(500).json({
       error: "Failed to update category",
     });

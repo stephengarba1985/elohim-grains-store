@@ -40,9 +40,13 @@ router.get("/", async (req, res) => {
     let joinClause = "";
     let variantCountSelect = "0::bigint AS variant_count";
 
-    if (hasVariantsTable && hasProductTypeColumn) {
-      joinClause = "LEFT JOIN product_variants pv ON pv.product_type_id = pt.id";
-      variantCountSelect = "COUNT(pv.id) AS variant_count";
+    if (hasVariantsTable) {
+      if (hasProductTypeColumn) {
+        joinClause = "LEFT JOIN product_variants pv ON pv.product_type_id = pt.id";
+      } else {
+        joinClause = "LEFT JOIN product_variants pv ON pv.product_id = pt.product_id";
+      }
+      variantCountSelect = "COUNT(DISTINCT pv.id) AS variant_count";
     }
 
     const result = await pool.query(`

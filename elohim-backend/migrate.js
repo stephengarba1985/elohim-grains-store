@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const pool = require('./src/config/db');
 const fs = require('fs');
 

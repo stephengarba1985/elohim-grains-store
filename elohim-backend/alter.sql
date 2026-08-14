@@ -328,6 +328,13 @@ ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id);
 ALTER TABLE product_variants
 ADD COLUMN IF NOT EXISTS product_type_id INTEGER REFERENCES product_types(id);
 
+-- Backfill legacy product variants to their matching product type when they were only linked by product_id
+UPDATE product_variants pv
+SET product_type_id = pt.id
+FROM product_types pt
+WHERE pv.product_type_id IS NULL
+  AND pv.product_id = pt.product_id;
+
 -- Seed base categories
 INSERT INTO categories (name, description)
 VALUES

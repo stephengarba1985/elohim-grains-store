@@ -130,19 +130,28 @@ router.get('/', async (req, res) => {
           variants: []
         };
 
+        let variantsResult = [];
+
         if (hasProductTypeColumn) {
-          const variantsResult = await pool.query(
+          variantsResult = await pool.query(
             'SELECT * FROM product_variants WHERE product_type_id = $1 ORDER BY id',
             [type.id]
           );
-
-          typeEntry.variants = variantsResult.rows.map((variant) => ({
-            id: variant.id,
-            weight: variant.weight,
-            price: Number(variant.price ?? 0),
-            stock: Number(variant.stock ?? 0)
-          }));
         }
+
+        if (variantsResult.rows?.length === 0 && type.product_id != null) {
+          variantsResult = await pool.query(
+            'SELECT * FROM product_variants WHERE product_id = $1 ORDER BY id',
+            [type.product_id]
+          );
+        }
+
+        typeEntry.variants = variantsResult.rows?.map((variant) => ({
+          id: variant.id,
+          weight: variant.weight,
+          price: Number(variant.price ?? 0),
+          stock: Number(variant.stock ?? 0)
+        })) || [];
 
         product.types.push(typeEntry);
       }

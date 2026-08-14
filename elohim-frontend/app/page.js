@@ -74,19 +74,20 @@ const getProductPrice = (product) => {
 const normalizeImagePath = (imageUrl) => {
   if (!imageUrl) return "";
 
-  const normalized = String(imageUrl).replace(/\\/g, "/");
+  const normalized = String(imageUrl).replace(/\\/g, "/").split("?")[0].split("#")[0];
 
   if (normalized.startsWith("http")) return normalized;
   if (normalized.startsWith("/uploads/")) return `${backendRootUrl}${normalized}`;
   if (normalized.startsWith("uploads/")) return `${backendRootUrl}/${normalized}`;
-  if (normalized.startsWith("/")) {
-    return normalized.replace(/\/grains\/([^/]+)$/i, (_, name) => `/grains/${name.toLowerCase()}`);
-  }
 
-  const cleaned = normalized.replace(/^grains\//i, "");
-  const hasExtension = /\.[a-z0-9]+$/i.test(cleaned);
+  const withoutLeadingSlash = normalized.replace(/^\/+/, "");
+  const withoutAdminPrefix = withoutLeadingSlash.replace(/^admin\//i, "");
+  const withoutGrainsPrefix = withoutAdminPrefix.replace(/^grains\//i, "");
+  const cleaned = withoutGrainsPrefix.replace(/^\/+/, "");
+  const leaf = cleaned.split("/").pop();
+  const fileName = leaf || "rice.jpg";
 
-  return `/grains/${hasExtension ? cleaned.toLowerCase() : `${cleaned.toLowerCase()}.jpg`}`;
+  return `/grains/${fileName}`;
 };
 
 const getStableImageOverride = (productName) => {

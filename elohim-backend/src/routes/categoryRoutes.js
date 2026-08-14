@@ -2,20 +2,52 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 
+const tableExists = async (qualifiedName) => {
+  const result = await pool.query(
+    "SELECT to_regclass($1) AS exists",
+    [qualifiedName]
+  );
+
+  return Boolean(result.rows[0]?.exists);
+};
+
+const columnExists = async (tableName, columnName) => {
+  const result = await pool.query(
+    `SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1
+        AND column_name = $2
+    ) AS exists`,
+    [tableName, columnName]
+  );
+
+  return Boolean(result.rows[0]?.exists);
+};
+
 // Get all categories
 router.get("/", async (req, res) => {
   try {
+    const categoriesTableExists = await tableExists("public.categories");
+    if (!categoriesTableExists) {
+      return res.json([]);
+    }
+
+    const hasStatusColumn = await columnExists("categories", "status");
+    const whereClause = hasStatusColumn ? "WHERE status = TRUE" : "";
+
     const result = await pool.query(`
       SELECT *
       FROM categories
-      WHERE status = TRUE
+      ${whereClause}
       ORDER BY name ASC
     `);
 
-    res.json(result.rows);
+    return res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to load categories" });
+    console.error("LOAD CATEGORIES ERROR:", err);
+    return res.status(500).json({ error: "Failed to load categories" });
   }
 });
 

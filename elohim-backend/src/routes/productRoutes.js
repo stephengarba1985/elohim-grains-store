@@ -47,89 +47,112 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
 /* =========================
    GET ALL PRODUCTS
 ========================= */
+const tableExists = async (qualifiedName) => {
+  const result = await pool.query(
+    "SELECT to_regclass($1) AS exists",
+    [qualifiedName]
+  );
+
+  return Boolean(result.rows[0]?.exists);
+};
+
+const columnExists = async (tableName, columnName) => {
+  const result = await pool.query(
+    `SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1
+        AND column_name = $2
+    ) AS exists`,
+    [tableName, columnName]
+  );
+
+  return Boolean(result.rows[0]?.exists);
+};
+
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT
-        p.id,
-        p.name,
-        p.description,
-        p.image,
-        p.price,
+    const productsTableExists = await tableExists("public.products");
+    if (!productsTableExists) {
+      return res.json([]);
+    }
 
-        c.name AS category_name,
+    const categoriesTableExists = await tableExists("public.categories");
+    const productTypesTableExists = await tableExists("public.product_types");
+    const variantsTableExists = await tableExists("public.product_variants");
+    const hasCategoryIdColumn = await columnExists("products", "category_id");
+    const hasProductTypeColumn = variantsTableExists && await columnExists("product_variants", "product_type_id");
 
-        pt.id AS product_type_id,
-        pt.name AS product_type_name,
+    const productsResult = await pool.query(
+      `SELECT id, name, description, COALESCE(image_url, image, '') AS image, price, stock_quantity, weight, ${hasCategoryIdColumn ? 'category_id' : 'NULL::integer AS category_id'}
+       FROM products
+       ORDER BY id`
+    );
 
-        pv.id AS variant_id,
-        pv.weight,
-        pv.price AS variant_price,
-        pv.stock
+    const products = productsResult.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      image: row.image || '',
+      price: Number(row.price ?? 0),
+      stock_quantity: Number(row.stock_quantity ?? 0),
+      weight: row.weight || '',
+      category: null,
+      category_id: row.category_id ?? null,
+      types: []
+    }));
 
-      FROM products p
+    if (categoriesTableExists && hasCategoryIdColumn) {
+      const categoriesResult = await pool.query('SELECT id, name FROM categories');
+      const categoryMap = Object.fromEntries(
+        categoriesResult.rows.map((category) => [String(category.id), category.name])
+      );
 
-      LEFT JOIN categories c
-        ON p.category_id = c.id
-
-      LEFT JOIN product_types pt
-        ON pt.product_id = p.id
-
-      LEFT JOIN product_variants pv
-        ON pv.product_type_id = pt.id
-
-      ORDER BY
-        p.id,
-        pt.id,
-        pv.id
-    `);
-
-    const products = {};
-
-    for (const row of result.rows) {
-      if (!products[row.id]) {
-        products[row.id] = {
-          id: row.id,
-          name: row.name,
-          description: row.description,
-          image: row.image,
-          price: row.price,
-          category: row.category_name,
-          types: []
-        };
-      }
-
-      if (row.product_type_id) {
-        let type = products[row.id].types.find(
-          t => t.id === row.product_type_id
-        );
-
-        if (!type) {
-          type = {
-            id: row.product_type_id,
-            name: row.product_type_name,
-            variants: []
-          };
-
-          products[row.id].types.push(type);
-        }
-
-        if (row.variant_id) {
-          type.variants.push({
-            id: row.variant_id,
-            weight: row.weight,
-            price: row.variant_price,
-            stock: row.stock
-          });
+      for (const product of products) {
+        if (product.category_id != null) {
+          product.category = categoryMap[String(product.category_id)] || null;
         }
       }
     }
 
-    res.json(Object.values(products));
+    if (productTypesTableExists) {
+      const typesResult = await pool.query('SELECT * FROM product_types ORDER BY id');
+      const productsById = Object.fromEntries(products.map((product) => [String(product.id), product]));
+
+      for (const type of typesResult.rows) {
+        const product = productsById[String(type.product_id)];
+        if (!product) continue;
+
+        const typeEntry = {
+          id: type.id,
+          name: type.name,
+          variants: []
+        };
+
+        if (hasProductTypeColumn) {
+          const variantsResult = await pool.query(
+            'SELECT * FROM product_variants WHERE product_type_id = $1 ORDER BY id',
+            [type.id]
+          );
+
+          typeEntry.variants = variantsResult.rows.map((variant) => ({
+            id: variant.id,
+            weight: variant.weight,
+            price: Number(variant.price ?? 0),
+            stock: Number(variant.stock ?? 0)
+          }));
+        }
+
+        product.types.push(typeEntry);
+      }
+    }
+
+    return res.json(products);
 
   } catch (err) {
     console.error("FETCH ERROR:", err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 })
 

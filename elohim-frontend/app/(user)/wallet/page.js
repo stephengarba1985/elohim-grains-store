@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import API from "@/lib/api";
@@ -38,7 +38,7 @@ const actionLabels = {
   transfer: "Transfer",
 };
 
-export default function WalletPage() {
+function WalletPageContent() {
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(0);
   const [walletPinSet, setWalletPinSet] = useState(false);
@@ -555,5 +555,13 @@ export default function WalletPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function WalletPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 p-6">Loading wallet...</div>}>
+      <WalletPageContent />
+    </Suspense>
   );
 }

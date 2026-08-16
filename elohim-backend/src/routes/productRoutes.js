@@ -1301,4 +1301,118 @@ router.get(
   }
 );
 
+/* =========================
+   ASSIGN VARIANT TO PRODUCT TYPE
+   ADMIN ONLY
+
+   This does NOT change:
+   - weight
+   - price
+   - stock
+   - product
+
+   It only sets product_type_id.
+========================= */
+router.put(
+  "/variants/:variant_id/assign-type",
+  verifyToken,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const variantId = Number(req.params.variant_id);
+      const { product_type_id } = req.body;
+
+      if (!Number.isInteger(variantId)) {
+        return res.status(400).json({
+          error: "Invalid variant ID",
+        });
+      }
+
+      if (!product_type_id) {
+        return res.status(400).json({
+          error: "Product type is required",
+        });
+      }
+
+      const typeId = Number(product_type_id);
+
+      if (!Number.isInteger(typeId) || typeId <= 0) {
+        return res.status(400).json({
+          error: "Invalid product type ID",
+        });
+      }
+
+      const variantRes = await pool.query(
+        `
+        SELECT
+          id,
+          product_id,
+          weight,
+          price,
+          stock
+        FROM product_variants
+        WHERE id = $1
+        `,
+        [variantId]
+      );
+
+      if (variantRes.rows.length === 0) {
+        return res.status(404).json({
+          error: "Variant not found",
+        });
+      }
+
+      const variant = variantRes.rows[0];
+
+      const typeRes = await pool.query(
+        `
+        SELECT
+          id,
+          product_id,
+          name
+        FROM product_types
+        WHERE id = $1
+        `,
+        [typeId]
+      );
+
+      if (typeRes.rows.length === 0) {
+        return res.status(404).json({
+          error: "Product type not found",
+        });
+      }
+
+      const productType = typeRes.rows[0];
+
+      if (Number(productType.product_id) !== Number(variant.product_id)) {
+        return res.status(400).json({
+          error: "Product type does not belong to this product",
+        });
+      }
+
+      const result = await pool.query(
+        `
+        UPDATE product_variants
+        SET product_type_id = $1
+        WHERE id = $2
+        RETURNING *
+        `,
+        [typeId, variantId]
+      );
+
+      res.json({
+        message: "Variant assigned successfully",
+        variant: result.rows[0],
+        product_type: productType,
+      });
+    } catch (err) {
+      console.error("ASSIGN VARIANT TYPE ERROR:", err);
+
+      res.status(500).json({
+        error: err.message || "Failed to assign variant",
+      });
+    }
+  }
+);
+
 module.exports = router;

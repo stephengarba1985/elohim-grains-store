@@ -1,75 +1,209 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
 
-const defaultForm = {
+const emptyProduct = {
   name: "",
-  price: "",
-  stock_quantity: "",
-  weight: "",
+  description: "",
+  category_id: "",
   image_url: "",
+};
+
+const emptyType = {
+  product_id: "",
+  name: "",
+  origin: "",
+  brand: "",
+  description: "",
+  image: "",
+};
+
+const emptyVariant = {
+  product_type_id: "",
+  weight: "",
+  price: "",
+  stock: "",
+};
+
+const emptyCategory = {
+  name: "",
+  slug: "",
+  description: "",
+  image: "",
 };
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
-  const [form, setForm] = useState(defaultForm);
-  const [editingId, setEditingId] = useState(null);
-  const [showForm, setShowForm] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [productTypes, setProductTypes] = useState([]);
+
   const [loading, setLoading] = useState(false);
 
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [showTypeForm, setShowTypeForm] = useState(false);
+  const [showVariantForm, setShowVariantForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+
+  const [productForm, setProductForm] = useState(emptyProduct);
+  const [typeForm, setTypeForm] = useState(emptyType);
+  const [variantForm, setVariantForm] = useState(emptyVariant);
+  const [categoryForm, setCategoryForm] = useState(emptyCategory);
+
+  const [editingProductId, setEditingProductId] = useState(null);
+  const [editingTypeId, setEditingTypeId] = useState(null);
+
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [expandedProducts, setExpandedProducts] = useState({});
+
+  /* =========================
+     IMAGE HELPERS
+  ========================= */
+
   const getBackendRootUrl = () => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      "http://localhost:5000/api";
+
     return apiUrl.replace(/\/api\/?$/, "");
   };
 
   const normalizeImagePath = (imageUrl) => {
     if (!imageUrl) return "/grains/rice.jpg";
 
-    const normalizedUrl = String(imageUrl).replace(/\\/g, "/");
+    const normalized = String(imageUrl).replace(/\\/g, "/");
 
-    if (normalizedUrl.startsWith("http")) return normalizedUrl;
-    if (normalizedUrl.startsWith("/uploads/")) return `${getBackendRootUrl()}${normalizedUrl}`;
-    if (normalizedUrl.startsWith("uploads/")) return `${getBackendRootUrl()}/${normalizedUrl}`;
-    if (normalizedUrl.startsWith("/grains/")) return normalizedUrl;
-    if (normalizedUrl.startsWith("/")) return normalizedUrl;
+    if (normalized.startsWith("http")) {
+      return normalized;
+    }
 
-    return `/grains/${normalizedUrl.replace(/^grains\//i, "")}`;
+    if (normalized.startsWith("/uploads/")) {
+      return `${getBackendRootUrl()}${normalized}`;
+    }
+
+    if (normalized.startsWith("uploads/")) {
+      return `${getBackendRootUrl()}/${normalized}`;
+    }
+
+    if (normalized.startsWith("/grains/")) {
+      return normalized;
+    }
+
+    if (normalized.startsWith("/")) {
+      return normalized;
+    }
+
+    return `/grains/${normalized.replace(/^grains\//i, "")}`;
   };
+
+  /* =========================
+     LOAD DATA
+  ========================= */
 
   const fetchProducts = async () => {
     try {
       const res = await API.get("/products");
-      setProducts(Array.isArray(res.data) ? res.data : []);
+
+      setProducts(
+        Array.isArray(res.data) ? res.data : []
+      );
     } catch (err) {
       console.error(err);
       toast.error("Failed to load products");
     }
   };
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
+  const fetchCategories = async () => {
+    try {
+      const res = await API.get("/categories");
 
-  const resetForm = () => {
-    setForm(defaultForm);
-    setEditingId(null);
-    setShowForm(false);
+      setCategories(
+        Array.isArray(res.data)
+          ? res.data
+          : res.data?.categories || []
+      );
+    } catch (err) {
+      console.error("CATEGORY LOAD ERROR:", err);
+      toast.error("Failed to load categories");
+    }
   };
 
-  const handleSubmit = async (e) => {
+  const fetchProductTypes = async () => {
+    try {
+      const res = await API.get("/product-types");
+
+      setProductTypes(
+        Array.isArray(res.data)
+          ? res.data
+          : res.data?.productTypes || []
+      );
+    } catch (err) {
+      console.error("PRODUCT TYPE LOAD ERROR:", err);
+      toast.error("Failed to load product types");
+    }
+  };
+
+  const refreshAll = async () => {
+    await Promise.all([
+      fetchProducts(),
+      fetchCategories(),
+      fetchProductTypes(),
+    ]);
+  };
+
+  useEffect(() => {
+    refreshAll();
+  }, []);
+
+  /* =========================
+     HELPERS
+  ========================= */
+
+  const getCategoryName = (categoryId) => {
+    const category = categories.find(
+      (item) => String(item.id) === String(categoryId)
+    );
+
+    return category?.name || "Uncategorized";
+  };
+
+  const getTypesForProduct = (productId) => {
+    return productTypes.filter(
+      (type) =>
+        String(type.product_id) === String(productId)
+    );
+  };
+
+  const getTypeName = (typeId) => {
+    const type = productTypes.find(
+      (item) => String(item.id) === String(typeId)
+    );
+
+    return type?.name || "General";
+  };
+
+  const toggleProduct = (id) => {
+    setExpandedProducts((current) => ({
+      ...current,
+      [id]: !current[id],
+    }));
+  };
+
+  /* =========================
+     PRODUCT
+  ========================= */
+
+  const resetProductForm = () => {
+    setProductForm(emptyProduct);
+    setEditingProductId(null);
+    setShowProductForm(false);
+  };
+
+  const handleProductSubmit = async (e) => {
     e.preventDefault();
 
-    const payload = {
-      name: form.name,
-      price: Number(form.price || 0),
-      stock_quantity: Number(form.stock_quantity || 0),
-      weight: form.weight || "",
-      image_url: form.image_url || "",
-    };
-
-    if (!payload.name.trim()) {
+    if (!productForm.name.trim()) {
       toast.error("Product name is required");
       return;
     }
@@ -77,208 +211,1401 @@ export default function ProductsPage() {
     try {
       setLoading(true);
 
-      if (editingId) {
-        await API.put(`/products/${editingId}`, payload);
+      const payload = {
+        name: productForm.name.trim(),
+        description: productForm.description || "",
+        category_id: productForm.category_id
+          ? Number(productForm.category_id)
+          : null,
+        image_url: productForm.image_url || "",
+        price: 0,
+        stock_quantity: 0,
+        weight: "",
+      };
+
+      if (editingProductId) {
+        await API.put(
+          `/products/${editingProductId}`,
+          payload
+        );
+
         toast.success("Product updated");
       } else {
         await API.post("/products", payload);
-        toast.success("Product added");
+
+        toast.success("Product created");
       }
 
-      resetForm();
-      fetchProducts();
+      resetProductForm();
+      await refreshAll();
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.error || "Product save failed");
+
+      toast.error(
+        err.response?.data?.error ||
+          "Failed to save product"
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEdit = (product) => {
-    setEditingId(product.id);
-    setForm({
+  const editProduct = (product) => {
+    setEditingProductId(product.id);
+
+    setProductForm({
       name: product.name || "",
-      price: product.price ?? "",
-      stock_quantity: product.stock_quantity ?? "",
-      weight: product.weight || "",
-      image_url: product.image_url || product.image || "",
+      description: product.description || "",
+      category_id: product.category_id || "",
+      image_url:
+        product.image_url ||
+        product.image ||
+        "",
     });
-    setShowForm(true);
+
+    setShowProductForm(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm("Delete this product?")) return;
+  const deleteProduct = async (id) => {
+    if (
+      !confirm(
+        "Delete this product and its inventory variants?"
+      )
+    ) {
+      return;
+    }
 
     try {
       await API.delete(`/products/${id}`);
+
       toast.success("Product deleted");
-      fetchProducts();
+
+      await refreshAll();
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.error || "Delete failed");
+
+      toast.error(
+        err.response?.data?.error ||
+          "Failed to delete product"
+      );
     }
   };
 
+  /* =========================
+     PRODUCT TYPE
+  ========================= */
+
+  const resetTypeForm = () => {
+    setTypeForm(emptyType);
+    setEditingTypeId(null);
+    setShowTypeForm(false);
+  };
+
+  const openAddType = (product) => {
+    setEditingTypeId(null);
+
+    setTypeForm({
+      ...emptyType,
+      product_id: String(product.id),
+    });
+
+    setShowTypeForm(true);
+  };
+
+  const editType = (type) => {
+    setEditingTypeId(type.id);
+
+    setTypeForm({
+      product_id: String(type.product_id),
+      name: type.name || "",
+      origin: type.origin || "",
+      brand: type.brand || "",
+      description: type.description || "",
+      image: type.image || "",
+    });
+
+    setShowTypeForm(true);
+  };
+
+  const handleTypeSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!typeForm.product_id) {
+      toast.error("Select a product");
+      return;
+    }
+
+    if (!typeForm.name.trim()) {
+      toast.error("Product type name is required");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const payload = {
+        product_id: Number(typeForm.product_id),
+        name: typeForm.name.trim(),
+        origin: typeForm.origin || "",
+        brand: typeForm.brand || "",
+        description: typeForm.description || "",
+        image: typeForm.image || "",
+      };
+
+      if (editingTypeId) {
+        await API.put(
+          `/product-types/${editingTypeId}`,
+          payload
+        );
+
+        toast.success("Product type updated");
+      } else {
+        await API.post(
+          "/product-types",
+          payload
+        );
+
+        toast.success("Product type created");
+      }
+
+      resetTypeForm();
+      await refreshAll();
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err.response?.data?.error ||
+          "Failed to save product type"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteType = async (type) => {
+    if (
+      !confirm(
+        `Delete "${type.name}"? Existing variants will be kept.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await API.delete(
+        `/product-types/${type.id}`
+      );
+
+      toast.success("Product type deleted");
+
+      await refreshAll();
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err.response?.data?.error ||
+          "Failed to delete product type"
+      );
+    }
+  };
+
+  /* =========================
+     VARIANT
+  ========================= */
+
+  const openAddVariant = (product, type = null) => {
+    setSelectedProduct(product);
+
+    setVariantForm({
+      ...emptyVariant,
+      product_type_id: type
+        ? String(type.id)
+        : "",
+    });
+
+    setShowVariantForm(true);
+  };
+
+  const resetVariantForm = () => {
+    setVariantForm(emptyVariant);
+    setSelectedProduct(null);
+    setShowVariantForm(false);
+  };
+
+  const handleVariantSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!selectedProduct) {
+      toast.error("Product is required");
+      return;
+    }
+
+    if (!variantForm.weight.trim()) {
+      toast.error("Weight is required");
+      return;
+    }
+
+    if (
+      variantForm.price === "" ||
+      Number(variantForm.price) < 0
+    ) {
+      toast.error("Valid price is required");
+      return;
+    }
+
+    if (
+      variantForm.stock === "" ||
+      Number(variantForm.stock) < 0
+    ) {
+      toast.error("Valid stock is required");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const payload = {
+        product_type_id:
+          variantForm.product_type_id
+            ? Number(
+                variantForm.product_type_id
+              )
+            : null,
+
+        weight: variantForm.weight.trim(),
+
+        price: Number(
+          variantForm.price
+        ),
+
+        stock: Number(
+          variantForm.stock
+        ),
+      };
+
+      await API.post(
+        `/products/${selectedProduct.id}/variants`,
+        payload
+      );
+
+      toast.success("Variant added");
+
+      resetVariantForm();
+      await refreshAll();
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err.response?.data?.error ||
+          "Failed to add variant"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteVariant = async (
+    productId,
+    variantId
+  ) => {
+    if (!confirm("Delete this variant?")) {
+      return;
+    }
+
+    try {
+      await API.delete(
+        `/products/${productId}/variants/${variantId}`
+      );
+
+      toast.success("Variant deleted");
+
+      await refreshAll();
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err.response?.data?.error ||
+          "Failed to delete variant"
+      );
+    }
+  };
+
+  const assignVariantType = async (
+    variantId,
+    productTypeId
+  ) => {
+    if (!productTypeId) {
+      toast.error("Select a product type first");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      await API.put(
+        `/products/variants/${variantId}/assign-type`,
+        {
+          product_type_id: Number(productTypeId),
+        }
+      );
+
+      toast.success("Variant assigned to product type");
+      await refreshAll();
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err.response?.data?.error ||
+          "Failed to assign type"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* =========================
+     CATEGORY
+  ========================= */
+
+  const resetCategoryForm = () => {
+    setCategoryForm(emptyCategory);
+    setShowCategoryForm(false);
+  };
+
+  const handleCategorySubmit = async (e) => {
+    e.preventDefault();
+
+    if (!categoryForm.name.trim()) {
+      toast.error("Category name is required");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const slug =
+        categoryForm.slug.trim() ||
+        categoryForm.name
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, "-");
+
+      await API.post("/categories", {
+        name: categoryForm.name.trim(),
+        slug,
+        description:
+          categoryForm.description || "",
+        image: categoryForm.image || "",
+      });
+
+      toast.success("Category created");
+
+      resetCategoryForm();
+      await refreshAll();
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err.response?.data?.error ||
+          "Failed to create category"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* =========================
+     PRODUCT SUMMARY
+  ========================= */
+
+  const totalProducts = products.length;
+
+  const totalTypes = productTypes.length;
+
+  const totalCategories = categories.length;
+
+  const totalVariants = useMemo(() => {
+    return products.reduce(
+      (total, product) => {
+        const types = getTypesForProduct(
+          product.id
+        );
+
+        return (
+          total +
+          types.reduce(
+            (count, type) =>
+              count +
+              Number(type.variant_count || 0),
+            0
+          )
+        );
+      },
+      0
+    );
+  }, [products, productTypes]);
+
+  /* =========================
+     UI
+  ========================= */
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+
+      {/* HEADER */}
+
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Products</h1>
-          <p className="text-sm text-gray-500">Manage catalog products and product families.</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Agro Product Catalog
+          </h1>
+
+          <p className="text-sm text-gray-500 mt-1">
+            Manage categories, products, varieties,
+            weights, prices, stock and images.
+          </p>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowForm(true);
-          }}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg shadow hover:bg-green-700"
-        >
-          + Add Product
-        </button>
+
+        <div className="flex flex-wrap gap-2">
+
+          <button
+            onClick={() =>
+              setShowCategoryForm(true)
+            }
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+          >
+            + Category
+          </button>
+
+          <button
+            onClick={() => {
+              resetProductForm();
+              setShowProductForm(true);
+            }}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            + Product
+          </button>
+
+        </div>
       </div>
 
-      {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{editingId ? "Edit Product" : "Add Product"}</h2>
+      {/* SUMMARY */}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="text-sm text-gray-500">
+            Categories
+          </div>
+
+          <div className="text-2xl font-bold mt-1">
+            {totalCategories}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="text-sm text-gray-500">
+            Products
+          </div>
+
+          <div className="text-2xl font-bold mt-1">
+            {totalProducts}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="text-sm text-gray-500">
+            Product Types
+          </div>
+
+          <div className="text-2xl font-bold mt-1">
+            {totalTypes}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="text-sm text-gray-500">
+            Variants
+          </div>
+
+          <div className="text-2xl font-bold mt-1">
+            {totalVariants}
+          </div>
+        </div>
+
+      </div>
+
+      {/* CATEGORY FORM */}
+
+      {showCategoryForm && (
+        <form
+          onSubmit={handleCategorySubmit}
+          className="bg-white rounded-xl shadow p-5"
+        >
+          <div className="flex justify-between mb-4">
+            <h2 className="text-lg font-semibold">
+              Add Category
+            </h2>
+
             <button
               type="button"
-              onClick={resetForm}
-              className="text-sm text-gray-500 hover:text-gray-700"
+              onClick={resetCategoryForm}
+              className="text-gray-500"
             >
               Close
             </button>
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
+
             <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Product name"
               className="border rounded-lg px-3 py-2"
+              placeholder="Category name e.g. Grains"
+              value={categoryForm.name}
+              onChange={(e) =>
+                setCategoryForm({
+                  ...categoryForm,
+                  name: e.target.value,
+                })
+              }
             />
+
             <input
-              type="number"
-              value={form.price}
-              onChange={(e) => setForm({ ...form, price: e.target.value })}
-              placeholder="Price"
               className="border rounded-lg px-3 py-2"
+              placeholder="Slug e.g. grains"
+              value={categoryForm.slug}
+              onChange={(e) =>
+                setCategoryForm({
+                  ...categoryForm,
+                  slug: e.target.value,
+                })
+              }
             />
+
+            <textarea
+              className="border rounded-lg px-3 py-2 md:col-span-2"
+              placeholder="Category description"
+              value={categoryForm.description}
+              onChange={(e) =>
+                setCategoryForm({
+                  ...categoryForm,
+                  description: e.target.value,
+                })
+              }
+            />
+
             <input
-              type="number"
-              value={form.stock_quantity}
-              onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })}
-              placeholder="Stock quantity"
-              className="border rounded-lg px-3 py-2"
+              className="border rounded-lg px-3 py-2 md:col-span-2"
+              placeholder="Category image URL"
+              value={categoryForm.image}
+              onChange={(e) =>
+                setCategoryForm({
+                  ...categoryForm,
+                  image: e.target.value,
+                })
+              }
             />
-            <input
-              type="text"
-              value={form.weight}
-              onChange={(e) => setForm({ ...form, weight: e.target.value })}
-              placeholder="Weight"
-              className="border rounded-lg px-3 py-2"
-            />
-            <div className="md:col-span-2">
-              <input
-                type="text"
-                value={form.image_url}
-                onChange={(e) => setForm({ ...form, image_url: e.target.value })}
-                placeholder="Image URL or uploaded path"
-                className="border rounded-lg px-3 py-2 w-full"
-              />
-            </div>
+
           </div>
 
-          {form.image_url && (
-            <img
-              src={normalizeImagePath(form.image_url)}
-              alt="Preview"
-              className="h-28 w-28 object-cover rounded border"
-              onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = "/grains/rice.jpg";
-              }}
-            />
-          )}
-
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={loading}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg disabled:opacity-50"
-            >
-              {loading ? "Saving..." : editingId ? "Update Product" : "Save Product"}
-            </button>
-            <button
-              type="button"
-              onClick={resetForm}
-              className="bg-gray-200 px-4 py-2 rounded-lg"
-            >
-              Cancel
-            </button>
-          </div>
+          <button
+            disabled={loading}
+            className="mt-4 bg-purple-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
+          >
+            {loading
+              ? "Saving..."
+              : "Save Category"}
+          </button>
         </form>
       )}
 
-      <div className="bg-white rounded-xl shadow overflow-hidden">
-        <table className="min-w-full text-left">
-          <thead className="bg-gray-100 text-sm uppercase text-gray-600">
-            <tr>
-              <th className="px-4 py-3">Image</th>
-              <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Number of Types</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map((product) => (
-              <tr key={product.id} className="border-t">
-                <td className="px-4 py-3">
-                  {product.image || product.image_url ? (
+      {/* PRODUCT FORM */}
+
+      {showProductForm && (
+        <form
+          onSubmit={handleProductSubmit}
+          className="bg-white rounded-xl shadow p-5"
+        >
+          <div className="flex justify-between mb-4">
+
+            <div>
+              <h2 className="text-lg font-semibold">
+                {editingProductId
+                  ? "Edit Product"
+                  : "Add Product"}
+              </h2>
+
+              <p className="text-sm text-gray-500">
+                Example: Rice, Beans, Maize,
+                Groundnut
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={resetProductForm}
+              className="text-gray-500"
+            >
+              Close
+            </button>
+
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Product name"
+              value={productForm.name}
+              onChange={(e) =>
+                setProductForm({
+                  ...productForm,
+                  name: e.target.value,
+                })
+              }
+            />
+
+            <select
+              className="border rounded-lg px-3 py-2 bg-white"
+              value={productForm.category_id}
+              onChange={(e) =>
+                setProductForm({
+                  ...productForm,
+                  category_id: e.target.value,
+                })
+              }
+            >
+              <option value="">
+                Select category
+              </option>
+
+              {categories.map((category) => (
+                <option
+                  key={category.id}
+                  value={category.id}
+                >
+                  {category.name}
+                </option>
+              ))}
+            </select>
+
+            <textarea
+              className="border rounded-lg px-3 py-2 md:col-span-2"
+              placeholder="Product description"
+              value={productForm.description}
+              onChange={(e) =>
+                setProductForm({
+                  ...productForm,
+                  description: e.target.value,
+                })
+              }
+            />
+
+            <input
+              className="border rounded-lg px-3 py-2 md:col-span-2"
+              placeholder="Product image URL"
+              value={productForm.image_url}
+              onChange={(e) =>
+                setProductForm({
+                  ...productForm,
+                  image_url: e.target.value,
+                })
+              }
+            />
+
+          </div>
+
+          {productForm.image_url && (
+            <img
+              src={normalizeImagePath(
+                productForm.image_url
+              )}
+              alt="Product"
+              className="mt-4 h-24 w-24 object-cover rounded-lg border"
+            />
+          )}
+
+          <button
+            disabled={loading}
+            className="mt-4 bg-green-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
+          >
+            {loading
+              ? "Saving..."
+              : editingProductId
+              ? "Update Product"
+              : "Save Product"}
+          </button>
+        </form>
+      )}
+
+      {/* PRODUCT TYPE FORM */}
+
+      {showTypeForm && (
+        <form
+          onSubmit={handleTypeSubmit}
+          className="bg-white rounded-xl shadow p-5"
+        >
+          <div className="flex justify-between mb-4">
+
+            <h2 className="text-lg font-semibold">
+              {editingTypeId
+                ? "Edit Product Type"
+                : "Add Product Type / Variety"}
+            </h2>
+
+            <button
+              type="button"
+              onClick={resetTypeForm}
+              className="text-gray-500"
+            >
+              Close
+            </button>
+
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+
+            <select
+              className="border rounded-lg px-3 py-2 bg-white"
+              value={typeForm.product_id}
+              onChange={(e) =>
+                setTypeForm({
+                  ...typeForm,
+                  product_id: e.target.value,
+                })
+              }
+              disabled={Boolean(editingTypeId)}
+            >
+              <option value="">
+                Select product
+              </option>
+
+              {products.map((product) => (
+                <option
+                  key={product.id}
+                  value={product.id}
+                >
+                  {product.name}
+                </option>
+              ))}
+            </select>
+
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Type / Variety name"
+              value={typeForm.name}
+              onChange={(e) =>
+                setTypeForm({
+                  ...typeForm,
+                  name: e.target.value,
+                })
+              }
+            />
+
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Origin e.g. Kaduna"
+              value={typeForm.origin}
+              onChange={(e) =>
+                setTypeForm({
+                  ...typeForm,
+                  origin: e.target.value,
+                })
+              }
+            />
+
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Brand"
+              value={typeForm.brand}
+              onChange={(e) =>
+                setTypeForm({
+                  ...typeForm,
+                  brand: e.target.value,
+                })
+              }
+            />
+
+            <textarea
+              className="border rounded-lg px-3 py-2 md:col-span-2"
+              placeholder="Description"
+              value={typeForm.description}
+              onChange={(e) =>
+                setTypeForm({
+                  ...typeForm,
+                  description: e.target.value,
+                })
+              }
+            />
+
+            <input
+              className="border rounded-lg px-3 py-2 md:col-span-2"
+              placeholder="Variety image URL"
+              value={typeForm.image}
+              onChange={(e) =>
+                setTypeForm({
+                  ...typeForm,
+                  image: e.target.value,
+                })
+              }
+            />
+
+          </div>
+
+          <button
+            disabled={loading}
+            className="mt-4 bg-blue-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
+          >
+            {loading
+              ? "Saving..."
+              : editingTypeId
+              ? "Update Type"
+              : "Save Product Type"}
+          </button>
+        </form>
+      )}
+
+      {/* VARIANT FORM */}
+
+      {showVariantForm && (
+        <form
+          onSubmit={handleVariantSubmit}
+          className="bg-white rounded-xl shadow p-5"
+        >
+          <div className="flex justify-between mb-4">
+
+            <div>
+              <h2 className="text-lg font-semibold">
+                Add Variant
+              </h2>
+
+              <p className="text-sm text-gray-500">
+                Product:{" "}
+                <strong>
+                  {selectedProduct?.name}
+                </strong>
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={resetVariantForm}
+              className="text-gray-500"
+            >
+              Close
+            </button>
+
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-4">
+
+            <select
+              className="border rounded-lg px-3 py-2 bg-white"
+              value={variantForm.product_type_id}
+              onChange={(e) =>
+                setVariantForm({
+                  ...variantForm,
+                  product_type_id:
+                    e.target.value,
+                })
+              }
+            >
+              <option value="">
+                General Variant
+              </option>
+
+              {getTypesForProduct(
+                selectedProduct?.id
+              ).map((type) => (
+                <option
+                  key={type.id}
+                  value={type.id}
+                >
+                  {type.name}
+                </option>
+              ))}
+            </select>
+
+            <input
+              className="border rounded-lg px-3 py-2"
+              placeholder="Weight e.g. 25kg"
+              value={variantForm.weight}
+              onChange={(e) =>
+                setVariantForm({
+                  ...variantForm,
+                  weight: e.target.value,
+                })
+              }
+            />
+
+            <input
+              type="number"
+              className="border rounded-lg px-3 py-2"
+              placeholder="Price"
+              value={variantForm.price}
+              onChange={(e) =>
+                setVariantForm({
+                  ...variantForm,
+                  price: e.target.value,
+                })
+              }
+            />
+
+            <input
+              type="number"
+              className="border rounded-lg px-3 py-2"
+              placeholder="Stock"
+              value={variantForm.stock}
+              onChange={(e) =>
+                setVariantForm({
+                  ...variantForm,
+                  stock: e.target.value,
+                })
+              }
+            />
+
+          </div>
+
+          <button
+            disabled={loading}
+            className="mt-4 bg-orange-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
+          >
+            {loading
+              ? "Saving..."
+              : "Save Variant"}
+          </button>
+        </form>
+      )}
+
+      {/* PRODUCT LIST */}
+
+      <div className="space-y-4">
+
+        {products.length === 0 ? (
+          <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">
+            No products found.
+          </div>
+        ) : (
+          products.map((product) => {
+
+            const types =
+              getTypesForProduct(product.id);
+
+            const expanded =
+              expandedProducts[product.id];
+
+            return (
+              <div
+                key={product.id}
+                className="bg-white rounded-xl shadow overflow-hidden"
+              >
+
+                {/* PRODUCT HEADER */}
+
+                <div className="p-5">
+
+                  <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+
                     <img
-                      src={normalizeImagePath(product.image || product.image_url)}
+                      src={normalizeImagePath(
+                        product.image ||
+                          product.image_url
+                      )}
                       alt={product.name}
+                      className="h-20 w-20 object-cover rounded-xl border"
                       onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = "/grains/rice.jpg";
+                        e.currentTarget.onerror =
+                          null;
+
+                        e.currentTarget.src =
+                          "/grains/rice.jpg";
                       }}
-                      className="h-12 w-12 object-cover rounded"
                     />
-                  ) : (
-                    <div className="h-12 w-12 rounded bg-gray-200 flex items-center justify-center text-xs text-gray-500">IMG</div>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="font-semibold">{product.name}</div>
-                </td>
-                <td className="px-4 py-3">{product.category || "Uncategorized"}</td>
-                <td className="px-4 py-3">{product.types?.length || 0}</td>
-                <td className="px-4 py-3">
-                  <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">Active</span>
-                </td>
-                <td className="px-4 py-3 space-x-2">
-                  <button
-                    onClick={() => handleEdit(product)}
-                    className="bg-yellow-500 text-white px-3 py-1 rounded"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(product.id)}
-                    className="bg-red-500 text-white px-3 py-1 rounded"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+                    <div className="flex-1">
+
+                      <div className="flex flex-wrap items-center gap-2">
+
+                        <h2 className="text-xl font-bold">
+                          {product.name}
+                        </h2>
+
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                          {getCategoryName(
+                            product.category_id
+                          )}
+                        </span>
+
+                      </div>
+
+                      <p className="text-sm text-gray-500 mt-1">
+                        {product.description ||
+                          "No description"}
+                      </p>
+
+                      <div className="text-sm text-gray-500 mt-2">
+                        {types.length} product type
+                        {types.length !== 1
+                          ? "s"
+                          : ""}
+                      </div>
+
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+
+                      <button
+                        onClick={() =>
+                          openAddType(product)
+                        }
+                        className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm"
+                      >
+                        + Type
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          openAddVariant(product)
+                        }
+                        className="bg-orange-600 text-white px-3 py-2 rounded-lg text-sm"
+                      >
+                        + Variant
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          editProduct(product)
+                        }
+                        className="bg-yellow-500 text-white px-3 py-2 rounded-lg text-sm"
+                      >
+                        Edit
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          deleteProduct(product.id)
+                        }
+                        className="bg-red-500 text-white px-3 py-2 rounded-lg text-sm"
+                      >
+                        Delete
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          toggleProduct(
+                            product.id
+                          )
+                        }
+                        className="bg-gray-200 px-3 py-2 rounded-lg text-sm"
+                      >
+                        {expanded
+                          ? "Hide"
+                          : "Manage"}
+                      </button>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* TYPES */}
+
+                {expanded && (
+                  <div className="border-t bg-gray-50 p-5">
+
+                    {types.length === 0 ? (
+                      <div className="text-center py-6 text-gray-500">
+
+                        <p>
+                          No product types yet.
+                        </p>
+
+                        <button
+                          onClick={() =>
+                            openAddType(product)
+                          }
+                          className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg"
+                        >
+                          + Add First Type
+                        </button>
+
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+
+                        {types.map((type) => (
+
+                          <div
+                            key={type.id}
+                            className="bg-white border rounded-xl p-4"
+                          >
+
+                            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+
+                              {type.image && (
+                                <img
+                                  src={normalizeImagePath(
+                                    type.image
+                                  )}
+                                  alt={type.name}
+                                  className="h-16 w-16 object-cover rounded-lg"
+                                />
+                              )}
+
+                              <div className="flex-1">
+
+                                <h3 className="font-bold text-lg">
+                                  {type.name}
+                                </h3>
+
+                                <div className="flex flex-wrap gap-2 mt-1">
+
+                                  {type.origin && (
+                                    <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                      Origin:{" "}
+                                      {type.origin}
+                                    </span>
+                                  )}
+
+                                  {type.brand && (
+                                    <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                      Brand:{" "}
+                                      {type.brand}
+                                    </span>
+                                  )}
+
+                                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                    {type.variant_count ||
+                                      0}{" "}
+                                    variants
+                                  </span>
+
+                                </div>
+
+                              </div>
+
+                              <div className="flex gap-2">
+
+                                <button
+                                  onClick={() =>
+                                    openAddVariant(
+                                      product,
+                                      type
+                                    )
+                                  }
+                                  className="bg-orange-600 text-white px-3 py-2 rounded-lg text-sm"
+                                >
+                                  + Variant
+                                </button>
+
+                                <button
+                                  onClick={() =>
+                                    editType(type)
+                                  }
+                                  className="bg-yellow-500 text-white px-3 py-2 rounded-lg text-sm"
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  onClick={() =>
+                                    deleteType(type)
+                                  }
+                                  className="bg-red-500 text-white px-3 py-2 rounded-lg text-sm"
+                                >
+                                  Delete
+                                </button>
+
+                              </div>
+
+                            </div>
+
+                            {/* VARIANTS */}
+
+                            <div className="mt-4">
+
+                              <div className="text-sm font-semibold text-gray-700 mb-2">
+                                Inventory Variants
+                              </div>
+
+                              {product.types
+                                ?.find(
+                                  (item) =>
+                                    String(
+                                      item.id
+                                    ) ===
+                                    String(type.id)
+                                )
+                                ?.variants?.length >
+                              0 ? (
+                                <div className="overflow-x-auto">
+
+                                  <table className="min-w-full text-sm">
+
+                                    <thead className="bg-gray-100">
+                                      <tr>
+                                        <th className="text-left px-3 py-2">
+                                          Weight
+                                        </th>
+
+                                        <th className="text-left px-3 py-2">
+                                          Price
+                                        </th>
+
+                                        <th className="text-left px-3 py-2">
+                                          Stock
+                                        </th>
+
+                                        <th className="text-left px-3 py-2">
+                                          Action
+                                        </th>
+                                      </tr>
+                                    </thead>
+
+                                    <tbody>
+
+                                      {product.types
+                                        ?.find(
+                                          (item) =>
+                                            String(
+                                              item.id
+                                            ) ===
+                                            String(
+                                              type.id
+                                            )
+                                        )
+                                        ?.variants?.map(
+                                          (
+                                            variant
+                                          ) => (
+
+                                            <tr
+                                              key={
+                                                variant.id
+                                              }
+                                              className="border-t"
+                                            >
+
+                                              <td className="px-3 py-2 font-medium">
+                                                {
+                                                  variant.weight
+                                                }
+                                              </td>
+
+                                              <td className="px-3 py-2">
+                                                ₦
+                                                {Number(
+                                                  variant.price ||
+                                                    0
+                                                ).toLocaleString()}
+                                              </td>
+
+                                              <td className="px-3 py-2">
+
+                                                <span
+                                                  className={
+                                                    Number(
+                                                      variant.stock
+                                                    ) <=
+                                                    0
+                                                      ? "text-red-600 font-semibold"
+                                                      : "text-green-600 font-semibold"
+                                                  }
+                                                >
+                                                  {
+                                                    variant.stock
+                                                  }
+                                                </span>
+
+                                              </td>
+
+                                              <td className="px-3 py-2 space-y-2">
+
+                                                <select
+                                                  value={
+                                                    variant.product_type_id || ""
+                                                  }
+                                                  onChange={(e) =>
+                                                    assignVariantType(
+                                                      variant.id,
+                                                      e.target.value
+                                                    )
+                                                  }
+                                                  className="border rounded px-2 py-1 text-xs bg-white min-w-[140px]"
+                                                  disabled={loading}
+                                                >
+                                                  <option value="">
+                                                    General variant
+                                                  </option>
+
+                                                  {getTypesForProduct(
+                                                    product.id
+                                                  ).map((typeOption) => (
+                                                    <option
+                                                      key={typeOption.id}
+                                                      value={typeOption.id}
+                                                    >
+                                                      {typeOption.name}
+                                                    </option>
+                                                  ))}
+                                                </select>
+
+                                                <div>
+                                                  <button
+                                                    onClick={() =>
+                                                      deleteVariant(
+                                                        product.id,
+                                                        variant.id
+                                                      )
+                                                    }
+                                                    className="text-red-600 hover:underline text-xs"
+                                                  >
+                                                    Delete
+                                                  </button>
+                                                </div>
+
+                                              </td>
+
+                                            </tr>
+
+                                          )
+                                        )}
+
+                                    </tbody>
+
+                                  </table>
+
+                                </div>
+                              ) : (
+                                <div className="text-sm text-gray-400 py-3">
+                                  No variants assigned
+                                  to this product
+                                  type yet.
+                                </div>
+                              )}
+
+                            </div>
+
+                          </div>
+
+                        ))}
+
+                      </div>
+                    )}
+
+                  </div>
+                )}
+
+              </div>
+            );
+          })
+        )}
+
       </div>
+
     </div>
   );
 }

@@ -56,6 +56,8 @@ export default function ProductsPage() {
 
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [expandedProducts, setExpandedProducts] = useState({});
+  const [assigningVariant, setAssigningVariant] = useState(null);
+  const [assignTypeId, setAssignTypeId] = useState("");
 
   /* =========================
      IMAGE HELPERS
@@ -530,12 +532,14 @@ export default function ProductsPage() {
     }
   };
 
-  const assignVariantType = async (
-    variantId,
-    productTypeId
-  ) => {
-    if (!productTypeId) {
-      toast.error("Select a product type first");
+  const assignVariantToType = async () => {
+    if (!assigningVariant) {
+      toast.error("Variant not selected");
+      return;
+    }
+
+    if (!assignTypeId) {
+      toast.error("Select a product type");
       return;
     }
 
@@ -543,20 +547,22 @@ export default function ProductsPage() {
       setLoading(true);
 
       await API.put(
-        `/products/variants/${variantId}/assign-type`,
+        `/products/variants/${assigningVariant.id}/assign-type`,
         {
-          product_type_id: Number(productTypeId),
+          product_type_id: Number(assignTypeId),
         }
       );
 
-      toast.success("Variant assigned to product type");
+      toast.success("Variant assigned successfully");
+      setAssigningVariant(null);
+      setAssignTypeId("");
       await refreshAll();
     } catch (err) {
       console.error(err);
 
       toast.error(
         err.response?.data?.error ||
-          "Failed to assign type"
+          "Failed to assign variant"
       );
     } finally {
       setLoading(false);
@@ -1179,6 +1185,88 @@ export default function ProductsPage() {
         </form>
       )}
 
+      {assigningVariant && (
+        <div className="bg-white rounded-xl shadow p-5 border border-blue-200">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Assign Variant to Product Type
+              </h2>
+              <p className="text-sm text-gray-500">
+                {assigningVariant.weight} • {assigningVariant.product_id}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAssigningVariant(null);
+                setAssignTypeId("");
+              }}
+              className="text-gray-500"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <div className="text-xs text-gray-500">Weight</div>
+              <div className="font-semibold">{assigningVariant.weight}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Price</div>
+              <div className="font-semibold">
+                ₦{Number(assigningVariant.price || 0).toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Stock</div>
+              <div className="font-semibold">{assigningVariant.stock}</div>
+            </div>
+          </div>
+
+          <select
+            value={assignTypeId}
+            onChange={(e) => setAssignTypeId(e.target.value)}
+            className="w-full border rounded-lg px-3 py-3 bg-white"
+          >
+            <option value="">Select product type</option>
+            {productTypes
+              .filter(
+                (type) =>
+                  String(type.product_id) === String(assigningVariant.product_id)
+              )
+              .map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.name}
+                  {type.origin ? ` — ${type.origin}` : ""}
+                </option>
+              ))}
+          </select>
+
+          <div className="flex gap-3 mt-4">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={assignVariantToType}
+              className="bg-blue-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
+            >
+              {loading ? "Assigning..." : "Assign Variant"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAssigningVariant(null);
+                setAssignTypeId("");
+              }}
+              className="bg-gray-200 px-5 py-2 rounded-lg"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* PRODUCT LIST */}
 
       <div className="space-y-4">
@@ -1524,34 +1612,18 @@ export default function ProductsPage() {
 
                                               <td className="px-3 py-2 space-y-2">
 
-                                                <select
-                                                  value={
-                                                    variant.product_type_id || ""
-                                                  }
-                                                  onChange={(e) =>
-                                                    assignVariantType(
-                                                      variant.id,
-                                                      e.target.value
-                                                    )
-                                                  }
-                                                  className="border rounded px-2 py-1 text-xs bg-white min-w-35"
-                                                  disabled={loading}
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setAssigningVariant(variant);
+                                                    setAssignTypeId(
+                                                      variant.product_type_id || ""
+                                                    );
+                                                  }}
+                                                  className="bg-blue-600 text-white px-2 py-1 rounded text-xs"
                                                 >
-                                                  <option value="">
-                                                    General variant
-                                                  </option>
-
-                                                  {getTypesForProduct(
-                                                    product.id
-                                                  ).map((typeOption) => (
-                                                    <option
-                                                      key={typeOption.id}
-                                                      value={typeOption.id}
-                                                    >
-                                                      {typeOption.name}
-                                                    </option>
-                                                  ))}
-                                                </select>
+                                                  Assign Type
+                                                </button>
 
                                                 <div>
                                                   <button

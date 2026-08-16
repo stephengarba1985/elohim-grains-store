@@ -152,7 +152,8 @@ router.get(
                 'product_type_id', pv.product_type_id,
                 'weight', pv.weight,
                 'price', pv.price,
-                'stock', pv.stock
+                'stock', pv.stock,
+                'image', pv.image
               )
               ORDER BY pv.id
             ) FILTER (

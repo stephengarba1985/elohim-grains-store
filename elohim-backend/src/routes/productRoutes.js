@@ -1126,6 +1126,7 @@ router.post("/:id/variants", verifyToken, isAdmin, async (req, res) => {
       price,
       bulk_price,
       stock,
+      image,
       image_url,
     } = req.body;
 
@@ -1186,10 +1187,11 @@ router.post("/:id/variants", verifyToken, isAdmin, async (req, res) => {
           price,
           bulk_price,
           stock,
+          image,
           image_url
         )
       VALUES
-        ($1, $2, $3, $4, $5, $6, $7)
+        ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
       `,
       [
@@ -1199,7 +1201,8 @@ router.post("/:id/variants", verifyToken, isAdmin, async (req, res) => {
         numericPrice,
         bulk_price === "" || bulk_price == null ? null : parseNumber(bulk_price),
         numericStock,
-        image_url || "",
+        image || image_url || "",
+        image_url || image || "",
       ]
     );
 

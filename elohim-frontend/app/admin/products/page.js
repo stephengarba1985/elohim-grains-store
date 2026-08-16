@@ -25,6 +25,7 @@ const emptyVariant = {
   weight: "",
   price: "",
   stock: "",
+  image: "",
 };
 
 const emptyCategory = {
@@ -560,6 +561,7 @@ export default function ProductsPage() {
         weight: variantForm.weight.trim(),
         price,
         stock,
+        image: variantForm.image || "",
       };
 
       await API.post(
@@ -573,6 +575,7 @@ export default function ProductsPage() {
         weight: "",
         price: "",
         stock: "",
+        image: "",
       });
       setSelectedTypeId(null);
       setShowVariantForm(false);
@@ -1294,6 +1297,19 @@ export default function ProductsPage() {
                   stock: e.target.value,
                 })
               }
+            />
+
+            <input
+              type="text"
+              value={variantForm.image || ""}
+              onChange={(e) =>
+                setVariantForm({
+                  ...variantForm,
+                  image: e.target.value,
+                })
+              }
+              placeholder="Variant image URL"
+              className="border rounded-lg px-3 py-2"
             />
 
           </div>

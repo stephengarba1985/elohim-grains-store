@@ -292,11 +292,16 @@ router.post("/", verifyToken, isAdmin, async (req, res) => {
       slug,
     } = req.body;
 
-    if (!name?.trim()) {
+    if (!String(name || "").trim()) {
       return res.status(400).json({
         error: "Product name is required",
       });
     }
+
+    const categoryId =
+      category_id === "" || category_id === null || category_id === undefined
+        ? null
+        : Number(category_id);
 
     price = parseNumber(price);
     bulk_price =
@@ -328,8 +333,8 @@ router.post("/", verifyToken, isAdmin, async (req, res) => {
       RETURNING *
       `,
       [
-        name.trim(),
-        category_id || null,
+        String(name).trim(),
+        categoryId,
         description || "",
         price,
         bulk_price,
@@ -346,7 +351,7 @@ router.post("/", verifyToken, isAdmin, async (req, res) => {
     console.error("CREATE PRODUCT ERROR:", err);
 
     res.status(500).json({
-      error: err.message,
+      error: err.message || "Failed to create product",
     });
   }
 });
@@ -659,6 +664,11 @@ router.put("/:id", verifyToken, isAdmin, async (req, res) => {
       slug,
     } = req.body;
 
+    const categoryId =
+      category_id === "" || category_id === null || category_id === undefined
+        ? null
+        : Number(category_id);
+
     price = parseNumber(price);
 
     bulk_price =
@@ -686,8 +696,8 @@ router.put("/:id", verifyToken, isAdmin, async (req, res) => {
       RETURNING *
       `,
       [
-        name?.trim() || current.name,
-        category_id || null,
+        String(name || current.name).trim(),
+        categoryId,
         description || "",
         price,
         bulk_price,

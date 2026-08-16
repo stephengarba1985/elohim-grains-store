@@ -224,6 +224,11 @@ export default function ProductsPage() {
       return;
     }
 
+    if (!productForm.category_id) {
+      toast.error("Please select a category");
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -896,19 +901,25 @@ export default function ProductsPage() {
                   category_id: e.target.value,
                 })
               }
+              required
             >
               <option value="">
-                Select category
+                Select Category *
               </option>
 
-              {categories.map((category) => (
-                <option
-                  key={category.id}
-                  value={category.id}
-                >
-                  {category.name}
-                </option>
-              ))}
+              {categories
+                .filter(
+                  (category) =>
+                    category.status !== false
+                )
+                .map((category) => (
+                  <option
+                    key={category.id}
+                    value={category.id}
+                  >
+                    {category.name}
+                  </option>
+                ))}
             </select>
 
             <textarea

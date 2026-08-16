@@ -2,180 +2,441 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 
-const tableExists = async (qualifiedName) => {
-  const result = await pool.query(
-    "SELECT to_regclass($1) AS exists",
-    [qualifiedName]
-  );
+const {
+  verifyToken,
+  isAdmin,
+} = require("../middleware/auth");
 
-  return Boolean(result.rows[0]?.exists);
-};
-
-const columnExists = async (tableName, columnName) => {
-  const result = await pool.query(
-    `SELECT EXISTS (
-      SELECT 1
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = $1
-        AND column_name = $2
-    ) AS exists`,
-    [tableName, columnName]
-  );
-
-  return Boolean(result.rows[0]?.exists);
-};
-
-// Get all categories
+/* =========================
+   GET ALL CATEGORIES
+   PUBLIC
+========================= */
 router.get("/", async (req, res) => {
   try {
-    const categoriesTableExists = await tableExists("public.categories");
-    if (!categoriesTableExists) {
-      return res.json([]);
-    }
-
-    const hasStatusColumn = await columnExists("categories", "status");
-    const whereClause = hasStatusColumn ? "WHERE status = TRUE" : "";
-
     const result = await pool.query(`
-      SELECT *
+      SELECT
+        id,
+        name,
+        slug,
+        description,
+        image,
+        status,
+        created_at
       FROM categories
-      ${whereClause}
       ORDER BY name ASC
     `);
 
-    return res.json(result.rows);
+    res.json(result.rows);
   } catch (err) {
-    console.error("LOAD CATEGORIES ERROR:", err);
-    return res.status(500).json({ error: "Failed to load categories" });
-  }
-});
-
-// Create category
-router.post("/", async (req, res) => {
-  try {
-    const { name, description, image, status } = req.body;
-    const trimmedName = typeof name === "string" ? name.trim() : "";
-
-    if (!trimmedName) {
-      return res.status(400).json({ error: "Category name is required" });
-    }
-
-    const hasStatusColumn = await columnExists("categories", "status");
-    const normalizedStatus =
-      status === undefined
-        ? true
-        : status === "false"
-          ? false
-          : status === "true"
-            ? true
-            : Boolean(status);
-
-    const insertQuery = hasStatusColumn
-      ? `
-        INSERT INTO categories
-        (name, description, image, status)
-        VALUES ($1,$2,$3,$4)
-        RETURNING *
-      `
-      : `
-        INSERT INTO categories
-        (name, description, image)
-        VALUES ($1,$2,$3)
-        RETURNING *
-      `;
-
-    const insertValues = hasStatusColumn
-      ? [trimmedName, description ?? "", image ?? "", normalizedStatus]
-      : [trimmedName, description ?? "", image ?? ""];
-
-    const result = await pool.query(insertQuery, insertValues);
-
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error("CREATE CATEGORY ERROR:", err);
-
-    if (err.code === "23505" || /duplicate key|unique/i.test(err.message)) {
-      return res.status(409).json({ error: "Category name already exists" });
-    }
+    console.error("GET CATEGORIES ERROR:", err);
 
     res.status(500).json({
-      error: "Failed to create category",
+      error: "Failed to load categories",
     });
   }
 });
 
-// Update category
-router.put("/:id", async (req, res) => {
+/* =========================
+   GET SINGLE CATEGORY
+========================= */
+router.get("/:id", async (req, res) => {
   try {
-    const { name, description, image, status } = req.body;
-    const hasStatusColumn = await columnExists("categories", "status");
-    const normalizedStatus =
-      status === undefined
-        ? true
-        : status === "false"
-          ? false
-          : status === "true"
-            ? true
-            : Boolean(status);
+    const categoryId = Number(req.params.id);
 
-    const updateQuery = hasStatusColumn
-      ? `
-        UPDATE categories
-        SET
-          name=$1,
-          description=$2,
-          image=$3,
-          status=$4
-        WHERE id=$5
-        RETURNING *
+    if (!Number.isInteger(categoryId)) {
+      return res.status(400).json({
+        error: "Invalid category ID",
+      });
+    }
+
+    const result = await pool.query(
       `
-      : `
-        UPDATE categories
-        SET
-          name=$1,
-          description=$2,
-          image=$3
-        WHERE id=$4
-        RETURNING *
-      `;
-
-    const updateValues = hasStatusColumn
-      ? [name ?? "", description ?? "", image ?? "", normalizedStatus, req.params.id]
-      : [name ?? "", description ?? "", image ?? "", req.params.id];
-
-    const result = await pool.query(updateQuery, updateValues);
+      SELECT *
+      FROM categories
+      WHERE id = $1
+      `,
+      [categoryId]
+    );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Category not found" });
+      return res.status(404).json({
+        error: "Category not found",
+      });
     }
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("UPDATE CATEGORY ERROR:", err);
+    console.error("GET CATEGORY ERROR:", err);
+
     res.status(500).json({
-      error: "Failed to update category",
+      error: "Failed to load category",
     });
   }
 });
 
-// Delete category
-router.delete("/:id", async (req, res) => {
-  try {
-    await pool.query(
-      "DELETE FROM categories WHERE id=$1",
-      [req.params.id]
-    );
+/* =========================
+   CREATE CATEGORY
+   ADMIN ONLY
+========================= */
+router.post(
+  "/",
+  verifyToken,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const {
+        name,
+        slug,
+        description,
+        image,
+        status,
+      } = req.body;
 
-    res.json({
-      message: "Category deleted successfully",
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      error: "Failed to delete category",
-    });
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({
+          error: "Category name is required",
+        });
+      }
+
+      const categoryName = String(name).trim();
+
+      const categorySlug =
+        String(
+          slug ||
+            categoryName
+              .toLowerCase()
+              .trim()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "")
+        );
+
+      /* Check duplicate name */
+
+      const existingName = await pool.query(
+        `
+        SELECT id
+        FROM categories
+        WHERE LOWER(name) = LOWER($1)
+        `,
+        [categoryName]
+      );
+
+      if (existingName.rows.length > 0) {
+        return res.status(409).json({
+          error: "Category already exists",
+        });
+      }
+
+      /* Check duplicate slug */
+
+      const existingSlug = await pool.query(
+        `
+        SELECT id
+        FROM categories
+        WHERE slug = $1
+        `,
+        [categorySlug]
+      );
+
+      if (existingSlug.rows.length > 0) {
+        return res.status(409).json({
+          error: "Category slug already exists",
+        });
+      }
+
+      const result = await pool.query(
+        `
+        INSERT INTO categories
+        (
+          name,
+          slug,
+          description,
+          image,
+          status
+        )
+        VALUES
+        ($1,$2,$3,$4,$5)
+        RETURNING *
+        `,
+        [
+          categoryName,
+          categorySlug,
+          description || "",
+          image || "",
+          status !== undefined
+            ? Boolean(status)
+            : true,
+        ]
+      );
+
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      console.error(
+        "CREATE CATEGORY ERROR:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          err.message ||
+          "Failed to create category",
+      });
+    }
   }
-});
+);
+
+/* =========================
+   UPDATE CATEGORY
+   ADMIN ONLY
+========================= */
+router.put(
+  "/:id",
+  verifyToken,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const categoryId = Number(req.params.id);
+
+      if (!Number.isInteger(categoryId)) {
+        return res.status(400).json({
+          error: "Invalid category ID",
+        });
+      }
+
+      const {
+        name,
+        slug,
+        description,
+        image,
+        status,
+      } = req.body;
+
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({
+          error: "Category name is required",
+        });
+      }
+
+      const existing = await pool.query(
+        `
+        SELECT *
+        FROM categories
+        WHERE id = $1
+        `,
+        [categoryId]
+      );
+
+      if (existing.rows.length === 0) {
+        return res.status(404).json({
+          error: "Category not found",
+        });
+      }
+
+      const categoryName = String(name).trim();
+
+      const categorySlug =
+        String(
+          slug ||
+            categoryName
+              .toLowerCase()
+              .trim()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "")
+        );
+
+      const duplicate = await pool.query(
+        `
+        SELECT id
+        FROM categories
+        WHERE
+          (LOWER(name) = LOWER($1)
+           OR slug = $2)
+          AND id <> $3
+        `,
+        [
+          categoryName,
+          categorySlug,
+          categoryId,
+        ]
+      );
+
+      if (duplicate.rows.length > 0) {
+        return res.status(409).json({
+          error:
+            "Another category already uses this name or slug",
+        });
+      }
+
+      const result = await pool.query(
+        `
+        UPDATE categories
+        SET
+          name = $1,
+          slug = $2,
+          description = $3,
+          image = $4,
+          status = $5
+        WHERE id = $6
+        RETURNING *
+        `,
+        [
+          categoryName,
+          categorySlug,
+          description || "",
+          image || "",
+          status !== undefined
+            ? Boolean(status)
+            : existing.rows[0].status,
+          categoryId,
+        ]
+      );
+
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error(
+        "UPDATE CATEGORY ERROR:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          err.message ||
+          "Failed to update category",
+      });
+    }
+  }
+);
+
+/* =========================
+   DEACTIVATE CATEGORY
+   ADMIN ONLY
+
+   We DO NOT delete the category.
+   This protects existing products.
+========================= */
+router.patch(
+  "/:id/status",
+  verifyToken,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const categoryId = Number(req.params.id);
+
+      const { status } = req.body;
+
+      if (!Number.isInteger(categoryId)) {
+        return res.status(400).json({
+          error: "Invalid category ID",
+        });
+      }
+
+      const result = await pool.query(
+        `
+        UPDATE categories
+        SET status = $1
+        WHERE id = $2
+        RETURNING *
+        `,
+        [
+          Boolean(status),
+          categoryId,
+        ]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          error: "Category not found",
+        });
+      }
+
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error(
+        "CATEGORY STATUS ERROR:",
+        err
+      );
+
+      res.status(500).json({
+        error: "Failed to update category status",
+      });
+    }
+  }
+);
+
+/* =========================
+   DELETE CATEGORY
+   ADMIN ONLY
+
+   ONLY allowed when no product
+   is using the category.
+========================= */
+router.delete(
+  "/:id",
+  verifyToken,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const categoryId = Number(req.params.id);
+
+      if (!Number.isInteger(categoryId)) {
+        return res.status(400).json({
+          error: "Invalid category ID",
+        });
+      }
+
+      const products = await pool.query(
+        `
+        SELECT COUNT(*)::int AS count
+        FROM products
+        WHERE category_id = $1
+        `,
+        [categoryId]
+      );
+
+      const productCount =
+        products.rows[0].count;
+
+      if (productCount > 0) {
+        return res.status(409).json({
+          error:
+            "Category cannot be deleted because products are using it. Deactivate it instead.",
+          product_count: productCount,
+        });
+      }
+
+      const result = await pool.query(
+        `
+        DELETE FROM categories
+        WHERE id = $1
+        RETURNING *
+        `,
+        [categoryId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          error: "Category not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Category deleted successfully",
+        category: result.rows[0],
+      });
+    } catch (err) {
+      console.error(
+        "DELETE CATEGORY ERROR:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          err.message ||
+          "Failed to delete category",
+      });
+    }
+  }
+);
 
 module.exports = router;

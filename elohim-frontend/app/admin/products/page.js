@@ -38,6 +38,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
+  const [productVariants, setProductVariants] = useState([]);
   const [unassignedVariants, setUnassignedVariants] = useState([]);
 
   const [loading, setLoading] = useState(false);
@@ -56,6 +57,9 @@ export default function ProductsPage() {
   const [editingTypeId, setEditingTypeId] = useState(null);
 
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedProductId, setSelectedProductId] = useState(null);
+  const [selectedTypeId, setSelectedTypeId] = useState(null);
+  const [expandedProductId, setExpandedProductId] = useState(null);
   const [expandedProducts, setExpandedProducts] = useState({});
   const [assigningVariant, setAssigningVariant] = useState(null);
   const [assignTypeId, setAssignTypeId] = useState("");
@@ -132,18 +136,29 @@ export default function ProductsPage() {
     }
   };
 
-  const fetchProductTypes = async () => {
+  const fetchProductTypes = async (productId = null) => {
     try {
-      const res = await API.get("/product-types");
+      const url = productId
+        ? `/product-types/product/${productId}`
+        : "/product-types";
 
-      setProductTypes(
-        Array.isArray(res.data)
-          ? res.data
-          : res.data?.productTypes || []
-      );
+      const res = await API.get(url);
+
+      const list = Array.isArray(res.data)
+        ? res.data
+        : res.data?.productTypes || [];
+
+      setProductTypes(list);
+
+      if (productId) {
+        setProductVariants(list.flatMap((type) => type.variants || []));
+      }
+
+      return list;
     } catch (err) {
       console.error("PRODUCT TYPE LOAD ERROR:", err);
       toast.error("Failed to load product types");
+      return [];
     }
   };
 
@@ -199,11 +214,20 @@ export default function ProductsPage() {
     return type?.name || "General";
   };
 
-  const toggleProduct = (id) => {
+  const toggleProduct = async (productId) => {
+    const isOpen = expandedProductId === productId;
+
+    setExpandedProductId(isOpen ? null : productId);
+    setSelectedProductId(productId);
+
     setExpandedProducts((current) => ({
       ...current,
-      [id]: !current[id],
+      [productId]: !current[productId],
     }));
+
+    if (!isOpen) {
+      await fetchProductTypes(productId);
+    }
   };
 
   /* =========================
@@ -323,11 +347,15 @@ export default function ProductsPage() {
   };
 
   const openAddType = (product) => {
+    setSelectedProductId(String(product.id));
     setEditingTypeId(null);
 
     setTypeForm({
-      ...emptyType,
-      product_id: String(product.id),
+      name: "",
+      origin: "",
+      brand: "",
+      description: "",
+      image: "",
     });
 
     setShowTypeForm(true);
@@ -351,8 +379,12 @@ export default function ProductsPage() {
   const handleTypeSubmit = async (e) => {
     e.preventDefault();
 
-    if (!typeForm.product_id) {
-      toast.error("Select a product");
+    const targetProductId = Number(
+      selectedProductId || typeForm.product_id || 0
+    );
+
+    if (!targetProductId) {
+      toast.error("Product is required");
       return;
     }
 
@@ -365,7 +397,7 @@ export default function ProductsPage() {
       setLoading(true);
 
       const payload = {
-        product_id: Number(typeForm.product_id),
+        product_id: targetProductId,
         name: typeForm.name.trim(),
         origin: typeForm.origin || "",
         brand: typeForm.brand || "",
@@ -386,11 +418,21 @@ export default function ProductsPage() {
           payload
         );
 
-        toast.success("Product type created");
+        toast.success("Product type added");
       }
 
-      resetTypeForm();
-      await refreshAll();
+      setTypeForm({
+        name: "",
+        origin: "",
+        brand: "",
+        description: "",
+        image: "",
+      });
+      setEditingTypeId(null);
+      setSelectedProductId(targetProductId);
+      setShowTypeForm(false);
+      await fetchProductTypes(targetProductId);
+      await fetchProducts();
     } catch (err) {
       console.error(err);
 
@@ -436,6 +478,8 @@ export default function ProductsPage() {
 
   const openAddVariant = (product, type = null) => {
     setSelectedProduct(product);
+    setSelectedProductId(product.id);
+    setSelectedTypeId(type ? String(type.id) : "");
 
     setVariantForm({
       ...emptyVariant,
@@ -456,8 +500,20 @@ export default function ProductsPage() {
   const handleVariantSubmit = async (e) => {
     e.preventDefault();
 
-    if (!selectedProduct) {
+    const activeProductId = Number(
+      selectedProductId || selectedProduct?.id || 0
+    );
+    const activeTypeId = Number(
+      selectedTypeId || variantForm.product_type_id || 0
+    );
+
+    if (!activeProductId) {
       toast.error("Product is required");
+      return;
+    }
+
+    if (!activeTypeId) {
+      toast.error("Product type is required");
       return;
     }
 
@@ -466,19 +522,16 @@ export default function ProductsPage() {
       return;
     }
 
-    if (
-      variantForm.price === "" ||
-      Number(variantForm.price) < 0
-    ) {
-      toast.error("Valid price is required");
+    const price = Number(variantForm.price);
+    const stock = Number(variantForm.stock);
+
+    if (!Number.isFinite(price) || price < 0) {
+      toast.error("Enter a valid price");
       return;
     }
 
-    if (
-      variantForm.stock === "" ||
-      Number(variantForm.stock) < 0
-    ) {
-      toast.error("Valid stock is required");
+    if (!Number.isInteger(stock) || stock < 0) {
+      toast.error("Enter a valid stock quantity");
       return;
     }
 
@@ -486,33 +539,28 @@ export default function ProductsPage() {
       setLoading(true);
 
       const payload = {
-        product_type_id:
-          variantForm.product_type_id
-            ? Number(
-                variantForm.product_type_id
-              )
-            : null,
-
+        product_type_id: activeTypeId,
         weight: variantForm.weight.trim(),
-
-        price: Number(
-          variantForm.price
-        ),
-
-        stock: Number(
-          variantForm.stock
-        ),
+        price,
+        stock,
       };
 
       await API.post(
-        `/products/${selectedProduct.id}/variants`,
+        `/products/${activeProductId}/variants`,
         payload
       );
 
       toast.success("Variant added");
 
-      resetVariantForm();
-      await refreshAll();
+      setVariantForm({
+        weight: "",
+        price: "",
+        stock: "",
+      });
+      setSelectedTypeId(null);
+      setShowVariantForm(false);
+      await fetchProductTypes(activeProductId);
+      await fetchProducts();
     } catch (err) {
       console.error(err);
 
@@ -1459,16 +1507,15 @@ export default function ProductsPage() {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() =>
-                          toggleProduct(
-                            product.id
-                          )
+                          toggleProduct(product.id)
                         }
-                        className="bg-gray-200 px-3 py-2 rounded-lg text-sm"
+                        className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm"
                       >
-                        {expanded
-                          ? "Hide"
-                          : "Manage"}
+                        {expandedProductId === product.id
+                          ? "Close Catalog"
+                          : "Manage Catalog"}
                       </button>
 
                     </div>

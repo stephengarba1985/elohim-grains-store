@@ -495,6 +495,42 @@ router.get("/", async (req, res) => {
   }
 });
 
+/* =========================
+   GET UNASSIGNED VARIANTS
+   ADMIN ONLY
+========================= */
+router.get("/variants/unassigned", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        pv.id,
+        pv.product_id,
+        pv.weight,
+        pv.price,
+        pv.stock,
+        p.name AS product_name
+      FROM product_variants pv
+      JOIN products p
+        ON p.id = pv.product_id
+      WHERE pv.product_type_id IS NULL
+      ORDER BY
+        p.name ASC,
+        pv.weight ASC,
+        pv.id ASC
+      `
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("GET UNASSIGNED VARIANTS ERROR:", err);
+
+    res.status(500).json({
+      error: "Failed to load unassigned variants",
+    });
+  }
+});
+
 /* =========================================================
    GET SINGLE PRODUCT
 ========================================================= */

@@ -38,6 +38,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
+  const [unassignedVariants, setUnassignedVariants] = useState([]);
 
   const [loading, setLoading] = useState(false);
 
@@ -146,11 +147,24 @@ export default function ProductsPage() {
     }
   };
 
+  const fetchUnassignedVariants = async () => {
+    try {
+      const res = await API.get("/products/variants/unassigned");
+
+      setUnassignedVariants(
+        Array.isArray(res.data) ? res.data : []
+      );
+    } catch (err) {
+      console.error("UNASSIGNED VARIANTS ERROR:", err);
+    }
+  };
+
   const refreshAll = async () => {
     await Promise.all([
       fetchProducts(),
       fetchCategories(),
       fetchProductTypes(),
+      fetchUnassignedVariants(),
     ]);
   };
 
@@ -1263,6 +1277,59 @@ export default function ProductsPage() {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {unassignedVariants.length > 0 && (
+        <div className="bg-white rounded-xl shadow p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Unassigned Inventory
+            </h2>
+            <span className="text-sm text-gray-500">
+              {unassignedVariants.length} item
+              {unassignedVariants.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="text-left px-4 py-3">Product</th>
+                  <th className="text-left px-4 py-3">Weight</th>
+                  <th className="text-left px-4 py-3">Price</th>
+                  <th className="text-left px-4 py-3">Stock</th>
+                  <th className="text-left px-4 py-3">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unassignedVariants.map((variant) => (
+                  <tr key={variant.id} className="border-t">
+                    <td className="px-4 py-3 font-semibold">
+                      {variant.product_name}
+                    </td>
+                    <td className="px-4 py-3">{variant.weight}</td>
+                    <td className="px-4 py-3">
+                      ₦{Number(variant.price || 0).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3">{variant.stock}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => {
+                          setAssigningVariant(variant);
+                          setAssignTypeId("");
+                        }}
+                        className="bg-blue-600 text-white px-3 py-2 rounded-lg"
+                      >
+                        Assign Type
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

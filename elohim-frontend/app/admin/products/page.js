@@ -1534,7 +1534,7 @@ export default function ProductsPage() {
                                                       e.target.value
                                                     )
                                                   }
-                                                  className="border rounded px-2 py-1 text-xs bg-white min-w-[140px]"
+                                                  className="border rounded px-2 py-1 text-xs bg-white min-w-35"
                                                   disabled={loading}
                                                 >
                                                   <option value="">

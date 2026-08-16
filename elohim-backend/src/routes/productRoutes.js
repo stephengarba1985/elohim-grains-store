@@ -1101,7 +1101,9 @@ router.get("/:id/variants/public", async (req, res) => {
   }
 });
 
-/* ADD VARIANT TO PRODUCT */
+/* =========================
+   ADD VARIANT TO PRODUCT
+========================= */
 router.post("/:id/variants", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensureCatalogColumns();
@@ -1123,6 +1125,9 @@ router.post("/:id/variants", verifyToken, isAdmin, async (req, res) => {
       });
     }
 
+    const numericPrice = parseNumber(price);
+    const numericStock = parseNumber(stock);
+
     const product = await pool.query(
       `
       SELECT id
@@ -1141,15 +1146,20 @@ router.post("/:id/variants", verifyToken, isAdmin, async (req, res) => {
     if (product_type_id) {
       const type = await pool.query(
         `
-        SELECT id
+        SELECT id, product_id
         FROM product_types
         WHERE id = $1
-        AND product_id = $2
         `,
-        [product_type_id, productId]
+        [Number(product_type_id)]
       );
 
       if (type.rows.length === 0) {
+        return res.status(404).json({
+          error: "Product type not found",
+        });
+      }
+
+      if (Number(type.rows[0].product_id) !== productId) {
         return res.status(400).json({
           error: "Product type does not belong to this product",
         });
@@ -1169,18 +1179,16 @@ router.post("/:id/variants", verifyToken, isAdmin, async (req, res) => {
           image_url
         )
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7)
+        ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
       `,
       [
         productId,
-        product_type_id || null,
-        weight.trim(),
-        parseNumber(price),
-        bulk_price === "" || bulk_price == null
-          ? null
-          : parseNumber(bulk_price),
-        parseNumber(stock),
+        product_type_id ? Number(product_type_id) : null,
+        String(weight).trim(),
+        numericPrice,
+        bulk_price === "" || bulk_price == null ? null : parseNumber(bulk_price),
+        numericStock,
         image_url || "",
       ]
     );
@@ -1190,7 +1198,7 @@ router.post("/:id/variants", verifyToken, isAdmin, async (req, res) => {
     console.error("ADD VARIANT ERROR:", err);
 
     res.status(500).json({
-      error: err.message,
+      error: err.message || "Failed to add variant",
     });
   }
 });

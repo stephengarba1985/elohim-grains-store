@@ -125,23 +125,89 @@ router.get(
   "/product/:productId",
   async (req, res) => {
     try {
+      const productId = Number(req.params.productId);
+
+      if (!Number.isInteger(productId)) {
+        return res.status(400).json({
+          error: "Invalid product ID",
+        });
+      }
+
       const result = await pool.query(
         `
-        SELECT *
-        FROM product_types
-        WHERE product_id = $1
-        ORDER BY name ASC
+        SELECT
+          pt.id,
+          pt.product_id,
+          pt.name,
+          pt.origin,
+          pt.brand,
+          pt.description,
+          pt.image,
+          pt.status,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', pv.id,
+                'product_id', pv.product_id,
+                'product_type_id', pv.product_type_id,
+                'weight', pv.weight,
+                'price', pv.price,
+                'stock', pv.stock
+              )
+              ORDER BY pv.id
+            ) FILTER (
+              WHERE pv.id IS NOT NULL
+            ),
+            '[]'
+          ) AS variants
+        FROM product_types pt
+        LEFT JOIN product_variants pv
+          ON pv.product_type_id = pt.id
+        WHERE pt.product_id = $1
+        GROUP BY pt.id
+        ORDER BY pt.name ASC
         `,
-        [req.params.productId]
+        [productId]
       );
 
       res.json(result.rows);
-
     } catch (err) {
-      console.error(err);
+      console.error("LOAD PRODUCT TYPES ERROR:", err);
 
       res.status(500).json({
         error: "Failed to load product types",
+      });
+    }
+  }
+);
+
+router.get(
+  "/unassigned-variants",
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `
+        SELECT
+          pv.id,
+          pv.product_id,
+          pv.weight,
+          pv.price,
+          pv.stock,
+          p.name AS product_name
+        FROM product_variants pv
+        JOIN products p
+          ON p.id = pv.product_id
+        WHERE pv.product_type_id IS NULL
+        ORDER BY p.name ASC, pv.weight ASC, pv.id ASC
+        `
+      );
+
+      res.json(result.rows);
+    } catch (err) {
+      console.error("LOAD UNASSIGNED VARIANTS ERROR:", err);
+
+      res.status(500).json({
+        error: "Failed to load unassigned variants",
       });
     }
   }
@@ -418,6 +484,100 @@ router.delete(
 
     } finally {
       client.release();
+    }
+  }
+);
+
+router.patch(
+  "/variants/:variantId/assign",
+  verifyToken,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const variantId = Number(req.params.variantId);
+      const productTypeId = Number(req.body.product_type_id);
+
+      if (!Number.isInteger(variantId)) {
+        return res.status(400).json({
+          error: "Invalid variant ID",
+        });
+      }
+
+      if (!Number.isInteger(productTypeId)) {
+        return res.status(400).json({
+          error: "Product type is required",
+        });
+      }
+
+      const variant = await pool.query(
+        `
+        SELECT
+          id,
+          product_id,
+          weight,
+          price,
+          stock
+        FROM product_variants
+        WHERE id = $1
+        `,
+        [variantId]
+      );
+
+      if (variant.rows.length === 0) {
+        return res.status(404).json({
+          error: "Variant not found",
+        });
+      }
+
+      const type = await pool.query(
+        `
+        SELECT
+          id,
+          product_id,
+          name
+        FROM product_types
+        WHERE id = $1
+        `,
+        [productTypeId]
+      );
+
+      if (type.rows.length === 0) {
+        return res.status(404).json({
+          error: "Product type not found",
+        });
+      }
+
+      if (
+        Number(variant.rows[0].product_id) !==
+        Number(type.rows[0].product_id)
+      ) {
+        return res.status(400).json({
+          error:
+            "Variant and product type must belong to the same product",
+        });
+      }
+
+      const result = await pool.query(
+        `
+        UPDATE product_variants
+        SET product_type_id = $1
+        WHERE id = $2
+        RETURNING *
+        `,
+        [productTypeId, variantId]
+      );
+
+      res.json({
+        success: true,
+        message: "Variant assigned successfully",
+        variant: result.rows[0],
+      });
+    } catch (err) {
+      console.error("ASSIGN VARIANT ERROR:", err);
+
+      res.status(500).json({
+        error: err.message || "Failed to assign variant",
+      });
     }
   }
 );

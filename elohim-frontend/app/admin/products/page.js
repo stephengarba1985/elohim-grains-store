@@ -37,6 +37,7 @@ const emptyCategory = {
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [allProductTypes, setAllProductTypes] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
   const [productVariants, setProductVariants] = useState([]);
   const [unassignedVariants, setUnassignedVariants] = useState([]);
@@ -162,9 +163,21 @@ export default function ProductsPage() {
     }
   };
 
+  const fetchAllProductTypes = async () => {
+    try {
+      const res = await API.get("/product-types");
+
+      setAllProductTypes(
+        Array.isArray(res.data) ? res.data : []
+      );
+    } catch (err) {
+      console.error("ALL PRODUCT TYPE LOAD ERROR:", err);
+    }
+  };
+
   const fetchUnassignedVariants = async () => {
     try {
-      const res = await API.get("/products/variants/unassigned");
+      const res = await API.get("/product-types/unassigned-variants");
 
       setUnassignedVariants(
         Array.isArray(res.data) ? res.data : []
@@ -178,13 +191,17 @@ export default function ProductsPage() {
     await Promise.all([
       fetchProducts(),
       fetchCategories(),
+      fetchAllProductTypes(),
       fetchProductTypes(),
       fetchUnassignedVariants(),
     ]);
   };
 
   useEffect(() => {
-    refreshAll();
+    fetchProducts();
+    fetchCategories();
+    fetchAllProductTypes();
+    fetchUnassignedVariants();
   }, []);
 
   /* =========================
@@ -613,8 +630,8 @@ export default function ProductsPage() {
     try {
       setLoading(true);
 
-      await API.put(
-        `/products/variants/${assigningVariant.id}/assign-type`,
+      await API.patch(
+        `/product-types/variants/${assigningVariant.id}/assign`,
         {
           product_type_id: Number(assignTypeId),
         }
@@ -623,7 +640,11 @@ export default function ProductsPage() {
       toast.success("Variant assigned successfully");
       setAssigningVariant(null);
       setAssignTypeId("");
-      await refreshAll();
+      await fetchUnassignedVariants();
+      await fetchProducts();
+      if (selectedProductId) {
+        await fetchProductTypes(selectedProductId);
+      }
     } catch (err) {
       console.error(err);
 
@@ -633,6 +654,36 @@ export default function ProductsPage() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAssignVariant = async (variantId, productTypeId) => {
+    if (!productTypeId) {
+      toast.error("Select a product type");
+      return;
+    }
+
+    try {
+      await API.patch(
+        `/product-types/variants/${variantId}/assign`,
+        {
+          product_type_id: Number(productTypeId),
+        }
+      );
+
+      toast.success("Variant assigned successfully");
+      await fetchUnassignedVariants();
+      await fetchProducts();
+      if (selectedProductId) {
+        await fetchProductTypes(selectedProductId);
+      }
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err.response?.data?.error ||
+          "Failed to assign variant"
+      );
     }
   };
 
@@ -1360,7 +1411,7 @@ export default function ProductsPage() {
                   <th className="text-left px-4 py-3">Weight</th>
                   <th className="text-left px-4 py-3">Price</th>
                   <th className="text-left px-4 py-3">Stock</th>
-                  <th className="text-left px-4 py-3">Action</th>
+                  <th className="text-left px-4 py-3">Assign To</th>
                 </tr>
               </thead>
               <tbody>
@@ -1375,15 +1426,28 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-4 py-3">{variant.stock}</td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => {
-                          setAssigningVariant(variant);
-                          setAssignTypeId("");
-                        }}
-                        className="bg-blue-600 text-white px-3 py-2 rounded-lg"
+                      <select
+                        defaultValue=""
+                        onChange={(e) =>
+                          handleAssignVariant(
+                            variant.id,
+                            e.target.value
+                          )
+                        }
+                        className="border rounded-lg px-3 py-2 bg-white"
                       >
-                        Assign Type
-                      </button>
+                        <option value="">Select Product Type</option>
+                        {allProductTypes
+                          .filter(
+                            (type) =>
+                              String(type.product_id) === String(variant.product_id)
+                          )
+                          .map((type) => (
+                            <option key={type.id} value={type.id}>
+                              {type.name}
+                            </option>
+                          ))}
+                      </select>
                     </td>
                   </tr>
                 ))}

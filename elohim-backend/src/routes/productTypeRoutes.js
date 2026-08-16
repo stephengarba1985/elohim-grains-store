@@ -2,10 +2,13 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 
-const { verifyToken, isAdmin } = require("../middleware/auth");
+const {
+  verifyToken,
+  isAdmin,
+} = require("../middleware/auth");
 
 /* =========================
-   HELPERS
+   TABLE HELPERS
 ========================= */
 
 const tableExists = async (qualifiedName) => {
@@ -36,7 +39,6 @@ const columnExists = async (tableName, columnName) => {
 
 /* =========================
    GET ALL PRODUCT TYPES
-   PUBLIC
 ========================= */
 
 router.get("/", async (req, res) => {
@@ -48,20 +50,21 @@ router.get("/", async (req, res) => {
       return res.json([]);
     }
 
-    const hasVariantsTable =
+    const variantsTableExists =
       await tableExists("public.product_variants");
 
     const hasProductTypeColumn =
-      hasVariantsTable &&
+      variantsTableExists &&
       await columnExists(
         "product_variants",
         "product_type_id"
       );
 
     let joinClause = "";
-    let variantCountSelect = "0::bigint AS variant_count";
+    let variantCountSelect =
+      "0::bigint AS variant_count";
 
-    if (hasVariantsTable) {
+    if (variantsTableExists) {
       if (hasProductTypeColumn) {
         joinClause = `
           LEFT JOIN product_variants pv
@@ -88,21 +91,13 @@ router.get("/", async (req, res) => {
         pt.description,
         pt.image,
         pt.status,
-        pt.created_at,
-
         p.name AS product_name,
-
         ${variantCountSelect}
-
       FROM product_types pt
-
       LEFT JOIN products p
         ON p.id = pt.product_id
-
       ${joinClause}
-
       GROUP BY pt.id, p.id
-
       ORDER BY
         p.name ASC,
         pt.name ASC
@@ -111,7 +106,10 @@ router.get("/", async (req, res) => {
     res.json(result.rows);
 
   } catch (err) {
-    console.error("LOAD PRODUCT TYPES ERROR:", err);
+    console.error(
+      "LOAD PRODUCT TYPES ERROR:",
+      err
+    );
 
     res.status(500).json({
       error: "Failed to load product types",
@@ -123,352 +121,305 @@ router.get("/", async (req, res) => {
    GET PRODUCT TYPES BY PRODUCT
 ========================= */
 
-router.get("/product/:productId", async (req, res) => {
-  try {
-    const productId = Number(req.params.productId);
+router.get(
+  "/product/:productId",
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `
+        SELECT *
+        FROM product_types
+        WHERE product_id = $1
+        ORDER BY name ASC
+        `,
+        [req.params.productId]
+      );
 
-    if (!Number.isInteger(productId)) {
-      return res.status(400).json({
-        error: "Invalid product ID",
+      res.json(result.rows);
+
+    } catch (err) {
+      console.error(err);
+
+      res.status(500).json({
+        error: "Failed to load product types",
       });
     }
-
-    const result = await pool.query(
-      `
-      SELECT
-        pt.*,
-        COUNT(pv.id)::int AS variant_count
-
-      FROM product_types pt
-
-      LEFT JOIN product_variants pv
-        ON pv.product_type_id = pt.id
-
-      WHERE pt.product_id = $1
-
-      GROUP BY pt.id
-
-      ORDER BY pt.name ASC
-      `,
-      [productId]
-    );
-
-    res.json(result.rows);
-
-  } catch (err) {
-    console.error(
-      "LOAD PRODUCT TYPES BY PRODUCT ERROR:",
-      err
-    );
-
-    res.status(500).json({
-      error: "Failed to load product types",
-    });
   }
-});
-
-/* =========================
-   GET SINGLE PRODUCT TYPE
-========================= */
-
-router.get("/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-
-    const result = await pool.query(
-      `
-      SELECT
-        pt.*,
-        p.name AS product_name
-
-      FROM product_types pt
-
-      LEFT JOIN products p
-        ON p.id = pt.product_id
-
-      WHERE pt.id = $1
-      `,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        error: "Product type not found",
-      });
-    }
-
-    res.json(result.rows[0]);
-
-  } catch (err) {
-    console.error(
-      "GET PRODUCT TYPE ERROR:",
-      err
-    );
-
-    res.status(500).json({
-      error: "Failed to load product type",
-    });
-  }
-});
+);
 
 /* =========================
    CREATE PRODUCT TYPE
-   ADMIN ONLY
 ========================= */
 
-router.post("/", verifyToken, isAdmin, async (req, res) => {
-  try {
-    const {
-      product_id,
-      name,
-      origin,
-      brand,
-      description,
-      image,
-    } = req.body;
-
-    const productId = Number(product_id);
-
-    if (!Number.isInteger(productId)) {
-      return res.status(400).json({
-        error: "Valid product is required",
-      });
-    }
-
-    if (!name || !String(name).trim()) {
-      return res.status(400).json({
-        error: "Product type name is required",
-      });
-    }
-
-    /* =========================
-       VERIFY PRODUCT
-    ========================= */
-
-    const product = await pool.query(
-      `
-      SELECT id, name
-      FROM products
-      WHERE id = $1
-      `,
-      [productId]
-    );
-
-    if (product.rows.length === 0) {
-      return res.status(404).json({
-        error: "Product not found",
-      });
-    }
-
-    /* =========================
-       PREVENT DUPLICATE TYPE
-    ========================= */
-
-    const duplicate = await pool.query(
-      `
-      SELECT id
-      FROM product_types
-      WHERE product_id = $1
-        AND LOWER(TRIM(name)) = LOWER(TRIM($2))
-      `,
-      [productId, name]
-    );
-
-    if (duplicate.rows.length > 0) {
-      return res.status(409).json({
-        error: "This product type already exists",
-      });
-    }
-
-    /* =========================
-       CREATE
-    ========================= */
-
-    const result = await pool.query(
-      `
-      INSERT INTO product_types
-      (
+router.post(
+  "/",
+  verifyToken,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const {
         product_id,
         name,
         origin,
         brand,
         description,
         image,
-        status
-      )
-      VALUES
-      ($1,$2,$3,$4,$5,$6,true)
+      } = req.body;
 
-      RETURNING *
-      `,
-      [
-        productId,
-        String(name).trim(),
-        origin || "",
-        brand || "",
-        description || "",
-        image || "",
-      ]
-    );
+      if (!product_id) {
+        return res.status(400).json({
+          error: "Product is required",
+        });
+      }
 
-    res.status(201).json(result.rows[0]);
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({
+          error: "Product type name is required",
+        });
+      }
 
-  } catch (err) {
-    console.error(
-      "CREATE PRODUCT TYPE ERROR:",
-      err
-    );
+      const product = await pool.query(
+        `
+        SELECT id, name
+        FROM products
+        WHERE id = $1
+        `,
+        [product_id]
+      );
 
-    res.status(500).json({
-      error:
-        err.message ||
-        "Failed to create product type",
-    });
+      if (product.rows.length === 0) {
+        return res.status(404).json({
+          error: "Product not found",
+        });
+      }
+
+      const result = await pool.query(
+        `
+        INSERT INTO product_types
+        (
+          product_id,
+          name,
+          origin,
+          brand,
+          description,
+          image,
+          status
+        )
+        VALUES
+        ($1,$2,$3,$4,$5,$6,true)
+        RETURNING *
+        `,
+        [
+          Number(product_id),
+          String(name).trim(),
+          origin || "",
+          brand || "",
+          description || "",
+          image || "",
+        ]
+      );
+
+      res.status(201).json(result.rows[0]);
+
+    } catch (err) {
+      console.error(
+        "CREATE PRODUCT TYPE ERROR:",
+        err
+      );
+
+      res.status(500).json({
+        error: err.message ||
+          "Failed to create product type",
+      });
+    }
   }
-});
+);
 
 /* =========================
    UPDATE PRODUCT TYPE
-   ADMIN ONLY
 ========================= */
 
-router.put("/:id", verifyToken, isAdmin, async (req, res) => {
-  try {
-    const id = Number(req.params.id);
+router.put(
+  "/:id",
+  verifyToken,
+  isAdmin,
+  async (req, res) => {
+    try {
+      const typeId = Number(req.params.id);
 
-    const {
-      name,
-      origin,
-      brand,
-      description,
-      image,
-      status,
-    } = req.body;
+      const {
+        product_id,
+        name,
+        origin,
+        brand,
+        description,
+        image,
+        status,
+      } = req.body;
 
-    if (!name || !String(name).trim()) {
-      return res.status(400).json({
-        error: "Product type name is required",
+      if (!Number.isInteger(typeId)) {
+        return res.status(400).json({
+          error: "Invalid product type ID",
+        });
+      }
+
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({
+          error: "Product type name is required",
+        });
+      }
+
+      const existing = await pool.query(
+        `
+        SELECT *
+        FROM product_types
+        WHERE id = $1
+        `,
+        [typeId]
+      );
+
+      if (existing.rows.length === 0) {
+        return res.status(404).json({
+          error: "Product type not found",
+        });
+      }
+
+      const current = existing.rows[0];
+
+      const newProductId =
+        product_id || current.product_id;
+
+      const result = await pool.query(
+        `
+        UPDATE product_types
+        SET
+          product_id = $1,
+          name = $2,
+          origin = $3,
+          brand = $4,
+          description = $5,
+          image = $6,
+          status = $7
+        WHERE id = $8
+        RETURNING *
+        `,
+        [
+          Number(newProductId),
+          String(name).trim(),
+          origin || "",
+          brand || "",
+          description || "",
+          image || "",
+          status !== undefined
+            ? Boolean(status)
+            : current.status,
+          typeId,
+        ]
+      );
+
+      res.json(result.rows[0]);
+
+    } catch (err) {
+      console.error(
+        "UPDATE PRODUCT TYPE ERROR:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          err.message ||
+          "Failed to update product type",
       });
     }
-
-    const result = await pool.query(
-      `
-      UPDATE product_types
-
-      SET
-        name = $1,
-        origin = $2,
-        brand = $3,
-        description = $4,
-        image = $5,
-        status = $6
-
-      WHERE id = $7
-
-      RETURNING *
-      `,
-      [
-        String(name).trim(),
-        origin || "",
-        brand || "",
-        description || "",
-        image || "",
-        status !== false,
-        id,
-      ]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        error: "Product type not found",
-      });
-    }
-
-    res.json(result.rows[0]);
-
-  } catch (err) {
-    console.error(
-      "UPDATE PRODUCT TYPE ERROR:",
-      err
-    );
-
-    res.status(500).json({
-      error: "Failed to update product type",
-    });
   }
-});
+);
 
 /* =========================
    DELETE PRODUCT TYPE
-   ADMIN ONLY
 ========================= */
 
-router.delete("/:id", verifyToken, isAdmin, async (req, res) => {
-  const client = await pool.connect();
+router.delete(
+  "/:id",
+  verifyToken,
+  isAdmin,
+  async (req, res) => {
+    const client = await pool.connect();
 
-  try {
-    const id = Number(req.params.id);
+    try {
+      const typeId = Number(req.params.id);
 
-    await client.query("BEGIN");
+      await client.query("BEGIN");
 
-    /*
-      IMPORTANT:
-      Do NOT delete variants.
+      const existing = await client.query(
+        `
+        SELECT *
+        FROM product_types
+        WHERE id = $1
+        `,
+        [typeId]
+      );
 
-      Existing inventory must remain.
+      if (existing.rows.length === 0) {
+        await client.query("ROLLBACK");
 
-      We simply remove the relationship between
-      the variant and the deleted product type.
-    */
+        return res.status(404).json({
+          error: "Product type not found",
+        });
+      }
 
-    await client.query(
-      `
-      UPDATE product_variants
-      SET product_type_id = NULL
-      WHERE product_type_id = $1
-      `,
-      [id]
-    );
+      /*
+       * IMPORTANT:
+       * Do NOT delete variants.
+       *
+       * We simply remove their product_type_id.
+       * The inventory remains intact.
+       */
 
-    const result = await client.query(
-      `
-      DELETE FROM product_types
-      WHERE id = $1
-      RETURNING *
-      `,
-      [id]
-    );
+      const variants = await client.query(
+        `
+        UPDATE product_variants
+        SET product_type_id = NULL
+        WHERE product_type_id = $1
+        RETURNING id
+        `,
+        [typeId]
+      );
 
-    if (result.rows.length === 0) {
+      await client.query(
+        `
+        DELETE FROM product_types
+        WHERE id = $1
+        `,
+        [typeId]
+      );
+
+      await client.query("COMMIT");
+
+      res.json({
+        success: true,
+        message: "Product type deleted",
+        unassigned_variants:
+          variants.rows.length,
+      });
+
+    } catch (err) {
       await client.query("ROLLBACK");
 
-      return res.status(404).json({
-        error: "Product type not found",
+      console.error(
+        "DELETE PRODUCT TYPE ERROR:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          err.message ||
+          "Failed to delete product type",
       });
+
+    } finally {
+      client.release();
     }
-
-    await client.query("COMMIT");
-
-    res.json({
-      message: "Product type deleted successfully",
-      product_type: result.rows[0],
-    });
-
-  } catch (err) {
-    await client.query("ROLLBACK");
-
-    console.error(
-      "DELETE PRODUCT TYPE ERROR:",
-      err
-    );
-
-    res.status(500).json({
-      error: "Failed to delete product type",
-    });
-
-  } finally {
-    client.release();
   }
-});
+);
 
 module.exports = router;

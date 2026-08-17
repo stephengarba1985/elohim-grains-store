@@ -584,70 +584,95 @@ router.get("/:id", async (req, res) => {
     }
 
     const product = productResult.rows[0];
-
-    const typesResult = await pool.query(
-      `
-      SELECT *
-      FROM product_types
-      WHERE product_id = $1
-      ORDER BY id ASC
-      `,
-      [productId]
+    const productTypesTableExists = await tableExists("public.product_types");
+    const hasProductTypeIdColumn = await columnExists(
+      "product_variants",
+      "product_type_id"
     );
 
-    const types = [];
+    let types = [];
 
-    for (const type of typesResult.rows) {
-      const variantsResult = await pool.query(
+    if (productTypesTableExists) {
+      const typesResult = await pool.query(
+        `
+        SELECT *
+        FROM product_types
+        WHERE product_id = $1
+        ORDER BY id ASC
+        `,
+        [productId]
+      );
+
+      for (const type of typesResult.rows) {
+        const variantsResult = await pool.query(
+          `
+          SELECT *
+          FROM product_variants
+          WHERE product_type_id = $1
+          ORDER BY id ASC
+          `,
+          [type.id]
+        );
+
+        types.push({
+          id: type.id,
+          product_id: type.product_id,
+          name: type.name,
+          origin: type.origin,
+          brand: type.brand,
+          description: type.description,
+          image: type.image,
+          status: type.status,
+          variants: variantsResult.rows.map((variant) => ({
+            id: variant.id,
+            product_id: variant.product_id,
+            product_type_id: variant.product_type_id,
+            weight: variant.weight,
+            price: Number(variant.price || 0),
+            bulk_price:
+              variant.bulk_price != null ? Number(variant.bulk_price) : null,
+            stock: Number(variant.stock || 0),
+            image: variant.image,
+            image_url: variant.image_url || "",
+          })),
+        });
+      }
+    }
+
+    let legacyVariants = [];
+
+    if (hasProductTypeIdColumn) {
+      const legacyVariantsResult = await pool.query(
         `
         SELECT *
         FROM product_variants
-        WHERE product_type_id = $1
+        WHERE product_id = $1
+        AND product_type_id IS NULL
         ORDER BY id ASC
         `,
-        [type.id]
+        [productId]
       );
 
-      types.push({
-        id: type.id,
-        product_id: type.product_id,
-        name: type.name,
-        origin: type.origin,
-        brand: type.brand,
-        description: type.description,
-        image: type.image,
-        status: type.status,
-        variants: variantsResult.rows.map((variant) => ({
-          id: variant.id,
-          product_id: variant.product_id,
-          product_type_id: variant.product_type_id,
-          weight: variant.weight,
-          price: Number(variant.price || 0),
-          bulk_price:
-            variant.bulk_price != null ? Number(variant.bulk_price) : null,
-          stock: Number(variant.stock || 0),
-          image: variant.image,
-          image_url: variant.image_url || "",
-        })),
-      });
-    }
+      legacyVariants = legacyVariantsResult.rows;
+    } else {
+      const legacyVariantsResult = await pool.query(
+        `
+        SELECT *
+        FROM product_variants
+        WHERE product_id = $1
+        ORDER BY id ASC
+        `,
+        [productId]
+      );
 
-    const legacyVariants = await pool.query(
-      `
-      SELECT *
-      FROM product_variants
-      WHERE product_id = $1
-      AND product_type_id IS NULL
-      ORDER BY id ASC
-      `,
-      [productId]
-    );
+      legacyVariants = legacyVariantsResult.rows;
+    }
 
     res.json({
       ...product,
       category: product.category_name || null,
       types,
-      variants: legacyVariants.rows.map((variant) => ({
+      variants: legacyVariants.map((variant) => ({
         id: variant.id,
         product_id: variant.product_id,
         product_type_id: variant.product_type_id,

@@ -89,8 +89,17 @@ export default function ProductDetails() {
               (type.variants || []).some((variant) => variant.id === highestStockVariant.id)
             );
 
-            if (preferredType) {
-              setSelectedTypeId(Number(preferredType.id));
+            const defaultType = preferredType || found.types[0];
+
+            if (defaultType) {
+              setSelectedTypeId(Number(defaultType.id));
+
+              const defaultVariant =
+                (defaultType.variants || []).find(
+                  (variant) => variant.id === highestStockVariant.id
+                ) || defaultType.variants?.[0] || highestStockVariant;
+
+              setSelectedVariant(defaultVariant);
             }
           }
         } else {
@@ -332,7 +341,21 @@ export default function ProductDetails() {
     const stableOverride = getStableImageOverride(item?.name);
     if (stableOverride) return stableOverride;
 
-    if (item?.image_url) return normalizeImagePath(item.image_url);
+    const candidateSources = [
+      item?.image_url,
+      item?.image,
+      selectedVariant?.image_url,
+      selectedVariant?.image,
+      product?.image_url,
+      product?.image,
+    ].filter(Boolean);
+
+    for (const candidate of candidateSources) {
+      const normalized = normalizeImagePath(candidate);
+      if (normalized && normalized !== "/placeholder.jpg") {
+        return normalized;
+      }
+    }
 
     const fallbackName = String(item?.name || "rice")
       .trim()
@@ -356,8 +379,9 @@ export default function ProductDetails() {
           src={getProductImage(product)}
           alt={product.name}
           onError={(e) => {
-            e.target.onerror = null;
-            e.target.src = "/placeholder.jpg";
+            e.currentTarget.onerror = null;
+            e.currentTarget.src =
+              getStableImageOverride(product?.name) || "/grains/rice.jpg";
           }}
           className="h-64 w-full object-cover rounded-xl shadow"
         />

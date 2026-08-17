@@ -16,6 +16,7 @@ const ensureCatalogColumns = async () => {
       ADD COLUMN IF NOT EXISTS category_id INTEGER,
       ADD COLUMN IF NOT EXISTS description TEXT,
       ADD COLUMN IF NOT EXISTS image TEXT,
+      ADD COLUMN IF NOT EXISTS image_url TEXT,
       ADD COLUMN IF NOT EXISTS slug VARCHAR(255),
       ADD COLUMN IF NOT EXISTS bulk_price NUMERIC
   `);

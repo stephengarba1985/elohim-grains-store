@@ -1,6 +1,8 @@
 const jwt = require("jsonwebtoken");
 const pool = require("../config/db");
 
+const jwtSecret = process.env.JWT_SECRET || "elohim_123456";
+
 /* =========================
    VERIFY TOKEN
 ========================= */
@@ -14,7 +16,7 @@ const verifyToken = async (req, res, next) => {
 
     const token = authHeader.split(" ")[1];
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, jwtSecret);
 
     const result = await pool.query(
       "SELECT * FROM users WHERE id = $1",

@@ -360,7 +360,7 @@ router.post("/login", async (req, res) => {
         role: user.role,
         is_admin: user.is_admin,
       },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || "elohim_123456",
       {
         expiresIn: "24h",
       }

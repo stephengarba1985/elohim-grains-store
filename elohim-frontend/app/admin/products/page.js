@@ -79,6 +79,21 @@ export default function ProductsPage() {
     return apiUrl.replace(/\/api\/?$/, "");
   };
 
+  const uploadCatalogImage = async (file) => {
+    if (!file) return "";
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const res = await API.post("/uploads/catalog", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    return res.data.image_url;
+  };
+
   const normalizeImagePath = (imageUrl) => {
     if (!imageUrl) return "/grains/rice.jpg";
 
@@ -1117,29 +1132,51 @@ export default function ProductsPage() {
               }
             />
 
-            <input
-              className="border rounded-lg px-3 py-2 md:col-span-2"
-              placeholder="Product image URL"
-              value={productForm.image_url}
-              onChange={(e) =>
-                setProductForm({
-                  ...productForm,
-                  image_url: e.target.value,
-                })
-              }
-            />
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium mb-1">
+                Product Image
+              </label>
+
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  try {
+                    setLoading(true);
+                    const imageUrl = await uploadCatalogImage(file);
+                    setProductForm({
+                      ...productForm,
+                      image_url: imageUrl,
+                    });
+                    toast.success("Product image uploaded");
+                  } catch (err) {
+                    console.error(err);
+                    toast.error(
+                      err.response?.data?.error ||
+                        "Image upload failed"
+                    );
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="border rounded-lg px-3 py-2 w-full bg-white"
+              />
+
+              {productForm.image_url && (
+                <img
+                  src={normalizeImagePath(
+                    productForm.image_url
+                  )}
+                  alt="Product preview"
+                  className="mt-3 h-24 w-24 object-cover rounded-lg border"
+                />
+              )}
+            </div>
 
           </div>
-
-          {productForm.image_url && (
-            <img
-              src={normalizeImagePath(
-                productForm.image_url
-              )}
-              alt="Product"
-              className="mt-4 h-24 w-24 object-cover rounded-lg border"
-            />
-          )}
 
           <button
             disabled={loading}
@@ -1254,17 +1291,47 @@ export default function ProductsPage() {
               }
             />
 
-            <input
-              className="border rounded-lg px-3 py-2 md:col-span-2"
-              placeholder="Variety image URL"
-              value={typeForm.image}
-              onChange={(e) =>
-                setTypeForm({
-                  ...typeForm,
-                  image: e.target.value,
-                })
-              }
-            />
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium mb-1">
+                Variety Image
+              </label>
+
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  try {
+                    setLoading(true);
+                    const imageUrl = await uploadCatalogImage(file);
+                    setTypeForm({
+                      ...typeForm,
+                      image: imageUrl,
+                    });
+                    toast.success("Product type image uploaded");
+                  } catch (err) {
+                    console.error(err);
+                    toast.error(
+                      err.response?.data?.error ||
+                        "Image upload failed"
+                    );
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="border rounded-lg px-3 py-2 w-full bg-white"
+              />
+
+              {typeForm.image && (
+                <img
+                  src={normalizeImagePath(typeForm.image)}
+                  alt="Type preview"
+                  className="mt-3 h-24 w-24 object-cover rounded-lg border"
+                />
+              )}
+            </div>
 
           </div>
 
@@ -1380,18 +1447,44 @@ export default function ProductsPage() {
               }
             />
 
-            <input
-              type="text"
-              value={variantForm.image || ""}
-              onChange={(e) =>
-                setVariantForm({
-                  ...variantForm,
-                  image: e.target.value,
-                })
-              }
-              placeholder="Variant image URL"
-              className="border rounded-lg px-3 py-2"
-            />
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Variant Image
+              </label>
+
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  try {
+                    const imageUrl = await uploadCatalogImage(file);
+                    setVariantForm({
+                      ...variantForm,
+                      image: imageUrl,
+                    });
+                    toast.success("Variant image uploaded");
+                  } catch (err) {
+                    console.error(err);
+                    toast.error(
+                      err.response?.data?.error ||
+                        "Image upload failed"
+                    );
+                  }
+                }}
+                className="border rounded-lg px-3 py-2 w-full bg-white"
+              />
+
+              {variantForm.image && (
+                <img
+                  src={normalizeImagePath(variantForm.image)}
+                  alt="Variant preview"
+                  className="mt-2 h-20 w-20 object-cover rounded-lg border"
+                />
+              )}
+            </div>
 
           </div>
 

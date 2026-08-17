@@ -45,6 +45,8 @@ const paymentRoutes = require("./routes/paymentRoutes");
 
 const app = express();
 app.disable("x-powered-by");
+
+app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -212,6 +214,7 @@ app.use("/api/catalog", catalogRoutes);
 // ✅ SINGLE BULK ENTRY POINT
 app.use("/api/bulk", bulkRoutes);
 app.use("/api/upload", uploadLimiter, uploadRoutes);
+app.use("/api/uploads", uploadRoutes);
 
 // ✅ PAYMENT
 app.use("/api/payment", paymentLimiter, paymentRoutes);

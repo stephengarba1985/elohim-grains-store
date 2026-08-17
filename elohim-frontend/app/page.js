@@ -74,11 +74,18 @@ const getProductPrice = (product) => {
 const normalizeImagePath = (imageUrl) => {
   if (!imageUrl) return "";
 
-  const normalized = String(imageUrl).replace(/\\/g, "/").split("?")[0].split("#")[0];
+  const normalized = String(imageUrl)
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
 
+  if (!normalized || normalized === "/") return "/grains/rice.jpg";
   if (normalized.startsWith("http")) return normalized;
   if (normalized.startsWith("/uploads/")) return `${backendRootUrl}${normalized}`;
   if (normalized.startsWith("uploads/")) return `${backendRootUrl}/${normalized}`;
+  if (normalized.startsWith("/images/")) return `/grains/${normalized.split("/images/").pop() || "rice.jpg"}`;
+  if (normalized.startsWith("images/")) return `/grains/${normalized.replace(/^images\//i, "") || "rice.jpg"}`;
 
   const withoutLeadingSlash = normalized.replace(/^\/+/, "");
   const withoutAdminPrefix = withoutLeadingSlash.replace(/^admin\//i, "");

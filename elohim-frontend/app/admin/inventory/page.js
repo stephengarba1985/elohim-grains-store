@@ -141,8 +141,13 @@ export default function InventoryPage() {
   const normalizeImagePath = (imageUrl) => {
     if (!imageUrl) return "/placeholder.jpg";
 
-    const normalizedUrl = String(imageUrl).replace(/\\/g, "/");
+    const normalizedUrl = String(imageUrl)
+      .replace(/\\/g, "/")
+      .split("?")[0]
+      .split("#")[0]
+      .trim();
 
+    if (!normalizedUrl || normalizedUrl === "/") return "/grains/rice.jpg";
     if (normalizedUrl.startsWith("http")) return normalizedUrl;
 
     if (normalizedUrl.startsWith("/uploads/")) {
@@ -151,6 +156,14 @@ export default function InventoryPage() {
 
     if (normalizedUrl.startsWith("uploads/")) {
       return `${getBackendRootUrl()}/${normalizedUrl}`;
+    }
+
+    if (normalizedUrl.startsWith("/images/")) {
+      return `/grains/${normalizedUrl.split("/images/").pop() || "rice.jpg"}`;
+    }
+
+    if (normalizedUrl.startsWith("images/")) {
+      return `/grains/${normalizedUrl.replace(/^images\//i, "") || "rice.jpg"}`;
     }
 
     if (normalizedUrl.startsWith("/grains/")) return normalizedUrl;

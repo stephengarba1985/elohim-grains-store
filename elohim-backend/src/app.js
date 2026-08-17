@@ -144,11 +144,12 @@ const uploadStaticDirs = [
   path.resolve(process.cwd(), "uploads"),
 ].filter(Boolean);
 
-app.get("/uploads/products/:filename", (req, res, next) => {
+app.get(["/uploads/products/:filename", "/uploads/catalog/:filename"], (req, res, next) => {
   const { filename } = req.params;
+  const folder = req.path.includes("/catalog/") ? "catalog" : "products";
 
   for (const uploadDir of uploadStaticDirs) {
-    const candidate = path.join(uploadDir, "products", filename);
+    const candidate = path.join(uploadDir, folder, filename);
     if (fs.existsSync(candidate)) {
       return res.sendFile(candidate);
     }

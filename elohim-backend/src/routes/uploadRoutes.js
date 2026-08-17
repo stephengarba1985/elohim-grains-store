@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("fs");
 const multer = require("multer");
 const path = require("path");
+const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -99,6 +100,62 @@ const upload = multer({
   },
 });
 
+const catalogUploadRoot = (() => {
+  const candidates = [
+    path.resolve(process.cwd(), "uploads/catalog"),
+    path.resolve(__dirname, "../../uploads/catalog"),
+    path.resolve("/data/uploads/catalog"),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      fs.mkdirSync(candidate, { recursive: true });
+      fs.accessSync(candidate, fs.constants.W_OK);
+      return candidate;
+    } catch (err) {
+      // Try the next candidate.
+    }
+  }
+
+  return path.resolve(process.cwd(), "uploads/catalog");
+})();
+
+const catalogStorage = multer.diskStorage({
+  destination(req, file, cb) {
+    cb(null, catalogUploadRoot);
+  },
+  filename(req, file, cb) {
+    const extension = path.extname(file.originalname || ".jpg");
+    const base = path
+      .basename(file.originalname, extension)
+      .replace(/[^a-zA-Z0-9-_]/g, "-")
+      .toLowerCase();
+
+    cb(null, `${base}-${Date.now()}${extension}`);
+  },
+});
+
+const catalogUpload = multer({
+  storage: catalogStorage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/jpg",
+    ];
+
+    if (!allowedTypes.includes(file.mimetype)) {
+      return cb(new Error("Only JPG, PNG and WebP images are allowed"));
+    }
+
+    cb(null, true);
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+});
+
 router.post(
   "/product-image",
   upload.single("image"),
@@ -121,6 +178,34 @@ router.post(
       success: true,
       image_url: `/uploads/products/${req.file.filename}`,
     });
+  }
+);
+
+router.post(
+  "/catalog",
+  verifyToken,
+  isAdmin,
+  catalogUpload.single("image"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          error: "Image is required",
+        });
+      }
+
+      const imageUrl = `/uploads/catalog/${req.file.filename}`;
+      res.status(201).json({
+        success: true,
+        image_url: imageUrl,
+        filename: req.file.filename,
+      });
+    } catch (err) {
+      console.error("IMAGE UPLOAD ERROR:", err);
+      res.status(500).json({
+        error: err.message || "Image upload failed",
+      });
+    }
   }
 );
 

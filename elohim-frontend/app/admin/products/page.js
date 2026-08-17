@@ -44,6 +44,7 @@ export default function ProductsPage() {
   const [unassignedVariants, setUnassignedVariants] = useState([]);
 
   const [loading, setLoading] = useState(false);
+  const [uploadingCategoryImage, setUploadingCategoryImage] = useState(false);
 
   const [showProductForm, setShowProductForm] = useState(false);
   const [showTypeForm, setShowTypeForm] = useState(false);
@@ -694,6 +695,38 @@ export default function ProductsPage() {
      CATEGORY
   ========================= */
 
+  const uploadCategoryImage = async (file) => {
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+      setUploadingCategoryImage(true);
+
+      const res = await API.post(
+        "/upload/catalog",
+        formData,
+        {}
+      );
+
+      setCategoryForm((current) => ({
+        ...current,
+        image: res.data.image_url,
+      }));
+
+      toast.success("Category image uploaded");
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err.response?.data?.error ||
+          "Category image upload failed"
+      );
+    } finally {
+      setUploadingCategoryImage(false);
+    }
+  };
+
   const resetCategoryForm = () => {
     setCategoryForm(emptyCategory);
     setShowCategoryForm(false);
@@ -923,22 +956,56 @@ export default function ProductsPage() {
               }
             />
 
-            <input
-              className="border rounded-lg px-3 py-2 md:col-span-2"
-              placeholder="Category image URL"
-              value={categoryForm.image}
-              onChange={(e) =>
-                setCategoryForm({
-                  ...categoryForm,
-                  image: e.target.value,
-                })
-              }
-            />
+            <div className="md:col-span-2 space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Category image
+              </label>
+
+              <div className="flex flex-col gap-3">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      uploadCategoryImage(file);
+                    }
+                  }}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-600 file:text-white"
+                />
+
+                {uploadingCategoryImage && (
+                  <span className="text-sm text-purple-700">
+                    Uploading category image...
+                  </span>
+                )}
+              </div>
+
+              <input
+                className="border rounded-lg px-3 py-2 w-full"
+                placeholder="Category image URL"
+                value={categoryForm.image}
+                onChange={(e) =>
+                  setCategoryForm({
+                    ...categoryForm,
+                    image: e.target.value,
+                  })
+                }
+              />
+            </div>
 
           </div>
 
+          {categoryForm.image && (
+            <img
+              src={normalizeImagePath(categoryForm.image)}
+              alt="Category preview"
+              className="mt-4 h-24 w-24 object-cover rounded-lg border"
+            />
+          )}
+
           <button
-            disabled={loading}
+            disabled={loading || uploadingCategoryImage}
             className="mt-4 bg-purple-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
           >
             {loading

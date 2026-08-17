@@ -552,7 +552,7 @@ router.get("/:id", async (req, res) => {
       });
     }
 
-    const result = await pool.query(
+    const productResult = await pool.query(
       `
       SELECT
         p.id,
@@ -568,56 +568,7 @@ router.get("/:id", async (req, res) => {
         p.slug,
         p.created_at,
         p.updated_at,
-        c.name AS category_name,
-        COALESCE(
-          (
-            SELECT json_agg(
-              json_build_object(
-                'id', pt.id,
-                'product_id', pt.product_id,
-                'name', pt.name,
-                'origin', pt.origin,
-                'brand', pt.brand,
-                'description', pt.description,
-                'image', pt.image,
-                'status', pt.status,
-                'variants',
-                COALESCE(
-                  (
-                    SELECT json_agg(
-                      json_build_object(
-                        'id', pv.id,
-                        'product_id', pv.product_id,
-                        'product_type_id', pv.product_type_id,
-                        'weight', pv.weight,
-                        'price', pv.price,
-                        'bulk_price', pv.bulk_price,
-                        'stock', pv.stock,
-                        'image', pv.image,
-                        'image_url', pv.image_url
-                      )
-                      ORDER BY
-                        CASE
-                          WHEN pv.weight ~ '^[0-9]+'
-                            THEN CAST(regexp_replace(pv.weight, '[^0-9]', '', 'g') AS INTEGER)
-                          ELSE 999999
-                        END,
-                        pv.id
-                    )
-                    FROM product_variants pv
-                    WHERE pv.product_type_id = pt.id
-                  ),
-                  '[]'::json
-                )
-              )
-              ORDER BY pt.name ASC
-            )
-            FROM product_types pt
-            WHERE pt.product_id = p.id
-              AND pt.status = true
-          ),
-          '[]'::json
-        ) AS types
+        c.name AS category_name
       FROM products p
       LEFT JOIN categories c
         ON c.id = p.category_id
@@ -626,14 +577,61 @@ router.get("/:id", async (req, res) => {
       [productId]
     );
 
-    if (result.rows.length === 0) {
+    if (productResult.rows.length === 0) {
       return res.status(404).json({
         error: "Product not found",
       });
     }
 
-    const product = result.rows[0];
-    const types = Array.isArray(product.types) ? product.types : [];
+    const product = productResult.rows[0];
+
+    const typesResult = await pool.query(
+      `
+      SELECT *
+      FROM product_types
+      WHERE product_id = $1
+      ORDER BY id ASC
+      `,
+      [productId]
+    );
+
+    const types = [];
+
+    for (const type of typesResult.rows) {
+      const variantsResult = await pool.query(
+        `
+        SELECT *
+        FROM product_variants
+        WHERE product_type_id = $1
+        ORDER BY id ASC
+        `,
+        [type.id]
+      );
+
+      types.push({
+        id: type.id,
+        product_id: type.product_id,
+        name: type.name,
+        origin: type.origin,
+        brand: type.brand,
+        description: type.description,
+        image: type.image,
+        status: type.status,
+        variants: variantsResult.rows.map((variant) => ({
+          id: variant.id,
+          product_id: variant.product_id,
+          product_type_id: variant.product_type_id,
+          weight: variant.weight,
+          price: Number(variant.price || 0),
+          bulk_price:
+            variant.bulk_price != null ? Number(variant.bulk_price) : null,
+          stock: Number(variant.stock || 0),
+          image: variant.image,
+          image_url: variant.image_url || "",
+        })),
+      });
+    }
+
     const legacyVariants = await pool.query(
       `
       SELECT *
@@ -649,7 +647,18 @@ router.get("/:id", async (req, res) => {
       ...product,
       category: product.category_name || null,
       types,
-      variants: legacyVariants.rows,
+      variants: legacyVariants.rows.map((variant) => ({
+        id: variant.id,
+        product_id: variant.product_id,
+        product_type_id: variant.product_type_id,
+        weight: variant.weight,
+        price: Number(variant.price || 0),
+        bulk_price:
+          variant.bulk_price != null ? Number(variant.bulk_price) : null,
+        stock: Number(variant.stock || 0),
+        image: variant.image,
+        image_url: variant.image_url || "",
+      })),
       price: Number(product.price || 0),
       bulk_price: product.bulk_price ? Number(product.bulk_price) : null,
       stock_quantity: Number(product.stock_quantity || 0),

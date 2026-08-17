@@ -33,7 +33,9 @@ export default function ProductDetails() {
 
   const [user, setUser] = useState(null);
   const [product, setProduct] = useState(null);
+  const [productTypes, setProductTypes] = useState([]);
   const [variants, setVariants] = useState([]);
+  const [selectedTypeId, setSelectedTypeId] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [loading, setLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -60,25 +62,46 @@ export default function ProductDetails() {
   useEffect(() => {
     const fetchProductAndVariants = async () => {
       try {
+        setLoading(true);
         const productRes = await API.get(`/products/${id}`);
         const found = productRes.data;
 
         setProduct(found);
+        setProductTypes(Array.isArray(found?.types) ? found.types : []);
 
-        const productVariants = found?.variants || [];
-        setVariants(productVariants);
+        const legacyVariants = Array.isArray(found?.variants) ? found.variants : [];
+        const typeVariants = (Array.isArray(found?.types) ? found.types : []).flatMap(
+          (type) => Array.isArray(type.variants) ? type.variants : []
+        );
+        const allVariants = [...typeVariants, ...legacyVariants];
 
-        if (productVariants.length > 0) {
-          const highestStockVariant = [...productVariants].sort(
+        setVariants(allVariants);
+
+        if (allVariants.length > 0) {
+          const highestStockVariant = [...allVariants].sort(
             (a, b) => Number(b.stock || 0) - Number(a.stock || 0)
           )[0];
 
           setSelectedVariant(highestStockVariant);
-        }
 
+          if (found?.types?.length > 0) {
+            const preferredType = found.types.find((type) =>
+              (type.variants || []).some((variant) => variant.id === highestStockVariant.id)
+            );
+
+            if (preferredType) {
+              setSelectedTypeId(Number(preferredType.id));
+            }
+          }
+        } else {
+          setSelectedVariant(null);
+          setSelectedTypeId(null);
+        }
       } catch (err) {
         console.error("PRODUCT FETCH ERROR:", err);
         toast.error("Failed to load product");
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -228,6 +251,13 @@ export default function ProductDetails() {
   /* =========================
      HELPERS
   ========================= */
+  const selectedType =
+    productTypes.find((type) => String(type.id) === String(selectedTypeId)) ||
+    productTypes[0] ||
+    null;
+
+  const typeVariants = selectedType?.variants || [];
+
   const price =
     user?.role === "bulk"
       ? selectedVariant?.bulk_price ||
@@ -242,10 +272,15 @@ export default function ProductDetails() {
   const bulkPrice =
     selectedVariant?.bulk_price || product?.bulk_price || 0;
 
-  const variantStock = variants.reduce(
-    (total, variant) => total + Number(variant.stock || 0),
-    0
-  );
+  const variantStock =
+    (selectedType?.variants || []).reduce(
+      (total, variant) => total + Number(variant.stock || 0),
+      0
+    ) ||
+    variants.reduce(
+      (total, variant) => total + Number(variant.stock || 0),
+      0
+    );
   const productStock = Number(product?.stock_quantity || 0);
   const selectedStock =
     selectedVariant?.stock != null ? Number(selectedVariant.stock) : null;
@@ -330,15 +365,63 @@ export default function ProductDetails() {
         <div>
           <h2 className="font-bold text-2xl">{product.name}</h2>
 
-          {variants.length > 0 && (
+          {productTypes.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <select
+                className="border p-2 rounded w-full"
+                value={selectedType?.id ?? ""}
+                onChange={(e) => {
+                  const nextType = productTypes.find(
+                    (type) => String(type.id) === e.target.value
+                  );
+
+                  setSelectedTypeId(nextType ? Number(nextType.id) : null);
+
+                  if (nextType?.variants?.length) {
+                    const firstVariant = [...nextType.variants].sort(
+                      (a, b) => Number(b.stock || 0) - Number(a.stock || 0)
+                    )[0];
+                    setSelectedVariant(firstVariant);
+                  }
+                }}
+              >
+                {productTypes.map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.name}
+                  </option>
+                ))}
+              </select>
+
+              {typeVariants.length > 0 && (
+                <select
+                  className="border p-2 rounded w-full"
+                  value={selectedVariant?.id ?? ""}
+                  onChange={(e) => {
+                    const nextVariant = typeVariants.find(
+                      (variant) => Number(variant.id) === Number(e.target.value)
+                    );
+                    setSelectedVariant(nextVariant || null);
+                  }}
+                >
+                  {typeVariants.map((variant) => (
+                    <option key={variant.id} value={variant.id}>
+                      {variant.weight} - {Number(variant.stock || 0)} in stock
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {productTypes.length === 0 && variants.length > 0 && (
             <select
               className="border p-2 rounded mt-3 w-full"
-              value={selectedVariant?.id}
+              value={selectedVariant?.id ?? ""}
               onChange={(e) => {
                 const v = variants.find(
                   (x) => x.id === Number(e.target.value)
                 );
-                setSelectedVariant(v);
+                setSelectedVariant(v || null);
               }}
             >
               {variants.map((v) => (

@@ -552,11 +552,72 @@ router.get("/:id", async (req, res) => {
       });
     }
 
-    const productResult = await pool.query(
+    const result = await pool.query(
       `
       SELECT
-        p.*,
-        c.name AS category_name
+        p.id,
+        p.name,
+        p.description,
+        p.category_id,
+        p.image,
+        p.image_url,
+        p.price,
+        p.bulk_price,
+        p.stock_quantity,
+        p.weight,
+        p.slug,
+        p.created_at,
+        p.updated_at,
+        c.name AS category_name,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'id', pt.id,
+                'product_id', pt.product_id,
+                'name', pt.name,
+                'origin', pt.origin,
+                'brand', pt.brand,
+                'description', pt.description,
+                'image', pt.image,
+                'status', pt.status,
+                'variants',
+                COALESCE(
+                  (
+                    SELECT json_agg(
+                      json_build_object(
+                        'id', pv.id,
+                        'product_id', pv.product_id,
+                        'product_type_id', pv.product_type_id,
+                        'weight', pv.weight,
+                        'price', pv.price,
+                        'bulk_price', pv.bulk_price,
+                        'stock', pv.stock,
+                        'image', pv.image,
+                        'image_url', pv.image_url
+                      )
+                      ORDER BY
+                        CASE
+                          WHEN pv.weight ~ '^[0-9]+'
+                            THEN CAST(regexp_replace(pv.weight, '[^0-9]', '', 'g') AS INTEGER)
+                          ELSE 999999
+                        END,
+                        pv.id
+                    )
+                    FROM product_variants pv
+                    WHERE pv.product_type_id = pt.id
+                  ),
+                  '[]'::json
+                )
+              )
+              ORDER BY pt.name ASC
+            )
+            FROM product_types pt
+            WHERE pt.product_id = p.id
+              AND pt.status = true
+          ),
+          '[]'::json
+        ) AS types
       FROM products p
       LEFT JOIN categories c
         ON c.id = p.category_id
@@ -565,43 +626,14 @@ router.get("/:id", async (req, res) => {
       [productId]
     );
 
-    if (productResult.rows.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({
         error: "Product not found",
       });
     }
 
-    const product = productResult.rows[0];
-
-    const typesResult = await pool.query(
-      `
-      SELECT *
-      FROM product_types
-      WHERE product_id = $1
-      ORDER BY id ASC
-      `,
-      [productId]
-    );
-
-    const types = [];
-
-    for (const type of typesResult.rows) {
-      const variants = await pool.query(
-        `
-        SELECT *
-        FROM product_variants
-        WHERE product_type_id = $1
-        ORDER BY id ASC
-        `,
-        [type.id]
-      );
-
-      types.push({
-        ...type,
-        variants: variants.rows,
-      });
-    }
-
+    const product = result.rows[0];
+    const types = Array.isArray(product.types) ? product.types : [];
     const legacyVariants = await pool.query(
       `
       SELECT *
@@ -618,12 +650,15 @@ router.get("/:id", async (req, res) => {
       category: product.category_name || null,
       types,
       variants: legacyVariants.rows,
+      price: Number(product.price || 0),
+      bulk_price: product.bulk_price ? Number(product.bulk_price) : null,
+      stock_quantity: Number(product.stock_quantity || 0),
     });
   } catch (err) {
     console.error("FETCH SINGLE PRODUCT ERROR:", err);
 
     res.status(500).json({
-      error: err.message,
+      error: "Failed to load product",
     });
   }
 });

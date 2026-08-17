@@ -45,6 +45,7 @@ const paymentRoutes = require("./routes/paymentRoutes");
 
 const app = express();
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
 
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 app.use(

@@ -553,6 +553,8 @@ router.get("/:id", async (req, res) => {
       });
     }
 
+    const hasUpdatedAtColumn = await columnExists("products", "updated_at");
+
     const productResult = await pool.query(
       `
       SELECT
@@ -567,8 +569,7 @@ router.get("/:id", async (req, res) => {
         p.stock_quantity,
         p.weight,
         p.slug,
-        p.created_at,
-        p.updated_at,
+        p.created_at${hasUpdatedAtColumn ? ", p.updated_at" : ""},
         c.name AS category_name
       FROM products p
       LEFT JOIN categories c

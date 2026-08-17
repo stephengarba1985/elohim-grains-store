@@ -16,6 +16,7 @@ const { verifyToken, isAdmin } = require("../middleware/auth");
 ========================= */
 router.post("/create", verifyToken, async (req, res) => {
   const client = await pool.connect();
+  let transactionStarted = false;
 
   try {
     const { reference, user_id } = req.body;
@@ -146,6 +147,7 @@ router.post("/create", verifyToken, async (req, res) => {
     const verifiedPayment = paymentTx.rows[0];
 
     await client.query("BEGIN");
+    transactionStarted = true;
 
     const orderRes = hasReferenceColumn
       ? hasIsBulkColumn
@@ -230,63 +232,67 @@ router.post("/create", verifyToken, async (req, res) => {
     }
 
     await client.query("COMMIT");
-/* =========================
-   SEND ORDER CONFIRMATION EMAIL
-========================= */
-try {
-  // Get customer information
-  const userRes = await pool.query(
-    `
-    SELECT
-      name,
-      email
-    FROM users
-    WHERE id = $1
-    `,
-    [user_id]
-  );
+    transactionStarted = false;
 
-  if (userRes.rows.length > 0) {
-    const customer = userRes.rows[0];
+    try {
+      const userRes = await pool.query(
+        `
+        SELECT
+          name,
+          email
+        FROM users
+        WHERE id = $1
+        `,
+        [user_id]
+      );
 
-    // Get ordered items
-    const itemsRes = await pool.query(
-      `
-      SELECT
-        p.name,
-        oi.quantity,
-        oi.price,
-        COALESCE(pv.weight, p.weight) AS weight
-      FROM order_items oi
-      JOIN products p
-        ON oi.product_id = p.id
-      LEFT JOIN product_variants pv
-        ON oi.variant_id = pv.id
-      WHERE oi.order_id = $1
-      `,
-      [orderId]
-    );
+      if (userRes.rows.length > 0) {
+        const customer = userRes.rows[0];
 
-    await sendOrderConfirmationEmail(customer.email, {
-      customerName: customer.name,
-      orderId,
-      totalAmount,
-      items: itemsRes.rows,
-    });
-  }
-} catch (emailErr) {
-  console.error(
-    "ORDER CONFIRMATION EMAIL ERROR:",
-    emailErr.message
-  );
-}
+        const itemsRes = await pool.query(
+          `
+          SELECT
+            p.name,
+            oi.quantity,
+            oi.price,
+            pv.weight,
+            pt.name AS product_type
+          FROM order_items oi
+          JOIN products p
+            ON oi.product_id = p.id
+          LEFT JOIN product_variants pv
+            ON oi.variant_id = pv.id
+          LEFT JOIN product_types pt
+            ON pv.product_type_id = pt.id
+          WHERE oi.order_id = $1
+          `,
+          [orderId]
+        );
+
+        await sendOrderConfirmationEmail(customer.email, {
+          customerName: customer.name,
+          orderId,
+          totalAmount,
+          items: itemsRes.rows,
+        });
+      }
+    } catch (emailErr) {
+      console.error("ORDER CONFIRMATION EMAIL ERROR:", emailErr.message);
+    }
+
     res.json({
       message: "Order created successfully",
       orderId,
       totalAmount,
     });
   } catch (err) {
-    await client.query("ROLLBACK");
+    if (transactionStarted) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackErr) {
+        console.error("ROLLBACK ERROR:", rollbackErr);
+      }
+    }
 
     console.error("ORDER ERROR:", err.message);
 
@@ -297,6 +303,11 @@ try {
     client.release();
   }
 });
+
+
+/* =========================
+   GET ALL ORDERS (ADMIN ONLY)
+========================= */
 
 /* =========================
    GET ALL ORDERS (ADMIN ONLY)

@@ -23,7 +23,18 @@ router.post('/', async (req, res) => {
 
     if (variantId) {
       const variantRes = await pool.query(
-        'SELECT * FROM product_variants WHERE id = $1',
+        `
+        SELECT
+          pv.id,
+          pv.product_id,
+          pv.product_type_id,
+          pv.stock,
+          pt.product_id AS type_product_id
+        FROM product_variants pv
+        LEFT JOIN product_types pt
+          ON pv.product_type_id = pt.id
+        WHERE pv.id = $1
+        `,
         [variantId]
       )
 
@@ -31,12 +42,21 @@ router.post('/', async (req, res) => {
         return res.status(404).json({ error: "Variant not found" })
       }
 
-      stock = Number(variantRes.rows[0].stock)
+      const variant = variantRes.rows[0]
+      stock = Number(variant.stock || 0)
 
-      if (Number(variantRes.rows[0].product_id) !== productId) {
+      if (Number(variant.product_id) !== productId) {
         return res.status(400).json({ error: "Variant mismatch" })
       }
 
+      if (
+        variant.type_product_id !== null &&
+        Number(variant.type_product_id) !== productId
+      ) {
+        return res.status(400).json({
+          error: "Product type does not belong to product",
+        })
+      }
     } else {
       const productRes = await pool.query(
         'SELECT stock_quantity FROM products WHERE id = $1',
@@ -108,21 +128,80 @@ router.get('/:user_id', async (req, res) => {
     const { user_id } = req.params
 
     const result = await pool.query(`
-      SELECT 
-        cart.*,
-        products.name,
-        products.image_url,
-        COALESCE(product_variants.weight, products.weight) AS weight,
-        COALESCE(product_variants.price, products.price) AS price
+      SELECT
+        cart.id,
+        cart.product_id,
+        cart.user_id,
+        cart.variant_id,
+        cart.quantity,
+        cart.created_at,
+        products.name AS product_name,
+        products.image_url AS product_image,
+        products.category_id,
+        categories.name AS category_name,
+        product_types.id AS product_type_id,
+        product_types.name AS product_type_name,
+        product_types.origin AS product_type_origin,
+        product_types.brand AS product_type_brand,
+        product_types.image AS product_type_image,
+        product_variants.weight AS variant_weight,
+        product_variants.price AS variant_price,
+        product_variants.stock AS variant_stock,
+        product_variants.image_url AS variant_image
       FROM cart
       JOIN products ON cart.product_id = products.id
+      LEFT JOIN categories ON products.category_id = categories.id
+      LEFT JOIN product_types ON product_types.id = (
+        SELECT pt.id
+        FROM product_types pt
+        WHERE pt.product_id = products.id
+        ORDER BY pt.id ASC
+        LIMIT 1
+      )
       LEFT JOIN product_variants ON cart.variant_id = product_variants.id
       WHERE cart.user_id = $1
       ORDER BY cart.created_at DESC
     `, [user_id])
 
-    res.json(result.rows)
+    const cart = result.rows.map((item) => ({
+      id: item.id,
+      user_id: Number(item.user_id),
+      product_id: Number(item.product_id),
+      variant_id: item.variant_id ? Number(item.variant_id) : null,
+      quantity: Number(item.quantity),
+      product: {
+        id: item.product_id,
+        name: item.product_name,
+        image: item.product_image || "",
+      },
+      category: {
+        id: item.category_id,
+        name: item.category_name || "",
+      },
+      product_type: item.product_type_id
+        ? {
+            id: item.product_type_id,
+            name: item.product_type_name,
+            origin: item.product_type_origin || "",
+            brand: item.product_type_brand || "",
+            image: item.product_type_image || "",
+          }
+        : null,
+      variant: item.variant_id
+        ? {
+            id: item.variant_id,
+            weight: item.variant_weight || "",
+            price: Number(item.variant_price || 0),
+            stock: Number(item.variant_stock || 0),
+            image: item.variant_image || "",
+          }
+        : null,
+      price: Number(item.variant_price || 0),
+      weight: item.variant_weight || "",
+      stock: Number(item.variant_stock || 0),
+    }))
 
+    res.json(cart)
   } catch (err) {
     console.error("FETCH CART ERROR:", err)
     res.status(500).json({ error: err.message })

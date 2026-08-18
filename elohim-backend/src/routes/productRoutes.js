@@ -365,138 +365,81 @@ router.get("/", async (req, res) => {
   try {
     await ensureCatalogColumns();
 
-    const productsResult = await pool.query(`
+    const result = await pool.query(`
       SELECT
-        p.*,
-        c.name AS category_name
+        p.id,
+        p.name,
+        p.description,
+        p.image,
+        p.image_url,
+        p.price,
+        p.stock_quantity,
+        p.weight,
+        p.category_id,
+        c.name AS category_name,
+        c.slug AS category_slug,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'id', pt.id,
+                'name', pt.name,
+                'origin', COALESCE(pt.origin, ''),
+                'brand', COALESCE(pt.brand, ''),
+                'description', COALESCE(pt.description, ''),
+                'image', COALESCE(pt.image, ''),
+                'status', COALESCE(pt.status, true),
+                'variants', COALESCE(
+                  (
+                    SELECT json_agg(
+                      json_build_object(
+                        'id', pv.id,
+                        'weight', COALESCE(pv.weight, ''),
+                        'price', COALESCE(pv.price, 0),
+                        'stock', COALESCE(pv.stock, 0)
+                      )
+                      ORDER BY pv.id
+                    )
+                    FROM product_variants pv
+                    WHERE pv.product_type_id = pt.id
+                  ),
+                  '[]'::json
+                )
+              )
+              ORDER BY pt.id
+            )
+            FROM product_types pt
+            WHERE pt.product_id = p.id
+          ),
+          '[]'::json
+        ) AS types
       FROM products p
       LEFT JOIN categories c
         ON c.id = p.category_id
-      ORDER BY p.id DESC
+      ORDER BY p.id ASC
     `);
 
-    const products = [];
-
-    for (const product of productsResult.rows) {
-      const typesResult = await pool.query(
-        `
-        SELECT *
-        FROM product_types
-        WHERE product_id = $1
-        ORDER BY id ASC
-        `,
-        [product.id]
-      );
-
-      const types = [];
-
-      for (const type of typesResult.rows) {
-        const variantsResult = await pool.query(
-          `
-          SELECT *
-          FROM product_variants
-          WHERE product_type_id = $1
-          ORDER BY id ASC
-          `,
-          [type.id]
-        );
-
-        types.push({
-          id: type.id,
-          name: type.name,
-          origin: type.origin,
-          brand: type.brand,
-          description: type.description,
-          image: type.image,
-          status: type.status,
-          variants: variantsResult.rows.map((variant) => ({
-            id: variant.id,
-            product_id: variant.product_id,
-            product_type_id: variant.product_type_id,
-            weight: variant.weight,
-            price: Number(variant.price || 0),
-            bulk_price:
-              variant.bulk_price != null
-                ? Number(variant.bulk_price)
-                : null,
-            stock: Number(variant.stock || 0),
-            image_url: variant.image_url || "",
-          })),
-        });
-      }
-
-      /*
-       * Legacy variants:
-       *
-       * These are existing variants that have product_id
-       * but do not yet have product_type_id.
-       *
-       * We preserve them.
-       */
-      const legacyVariantsResult = await pool.query(
-        `
-        SELECT *
-        FROM product_variants
-        WHERE product_id = $1
-        AND product_type_id IS NULL
-        ORDER BY id ASC
-        `,
-        [product.id]
-      );
-
-      products.push({
-        id: product.id,
-        name: product.name,
-        slug: product.slug || "",
-        description: product.description || "",
-        category: product.category_name || null,
-        category_id: product.category_id || null,
-
-        price: Number(product.price || 0),
-
-        bulk_price:
-          product.bulk_price != null
-            ? Number(product.bulk_price)
-            : null,
-
-        stock_quantity: Number(product.stock_quantity || 0),
-
-        weight: product.weight || "",
-
-        image_url:
-          product.image_url ||
-          product.image ||
-          "",
-
-        image:
-          product.image ||
-          product.image_url ||
-          "",
-
-        types,
-
-        variants: legacyVariantsResult.rows.map((variant) => ({
-          id: variant.id,
-          product_id: variant.product_id,
-          product_type_id: variant.product_type_id,
-          weight: variant.weight,
-          price: Number(variant.price || 0),
-          bulk_price:
-            variant.bulk_price != null
-              ? Number(variant.bulk_price)
-              : null,
-          stock: Number(variant.stock || 0),
-          image_url: variant.image_url || "",
-        })),
-      });
-    }
+    const products = result.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description || "",
+      image: row.image || "",
+      image_url: row.image_url || "",
+      price: Number(row.price || 0),
+      stock_quantity: Number(row.stock_quantity || 0),
+      weight: row.weight || "",
+      category_id: row.category_id || null,
+      category: row.category_name || null,
+      category_slug: row.category_slug || null,
+      types: Array.isArray(row.types) ? row.types : [],
+    }));
 
     res.json(products);
   } catch (err) {
     console.error("FETCH PRODUCTS ERROR:", err);
 
     res.status(500).json({
-      error: err.message,
+      error: err.message || "Failed to load products",
     });
   }
 });

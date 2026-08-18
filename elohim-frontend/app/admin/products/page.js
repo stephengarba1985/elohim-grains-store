@@ -143,9 +143,25 @@ export default function ProductsPage() {
   const fetchProducts = async () => {
     try {
       const res = await API.get("/products");
+      const list = Array.isArray(res.data) ? res.data : [];
 
-      setProducts(
-        Array.isArray(res.data) ? res.data : []
+      setProducts(list);
+
+      const allFlattenedTypes = list.flatMap((product) =>
+        Array.isArray(product.types)
+          ? product.types.map((type) => ({
+              ...type,
+              product_id: type.product_id ?? product.id,
+              variant_count: Number(type.variant_count || type.variants?.length || 0),
+            }))
+          : []
+      );
+
+      setProductTypes(allFlattenedTypes);
+      setProductVariants(
+        allFlattenedTypes.flatMap((type) =>
+          Array.isArray(type.variants) ? type.variants : []
+        )
       );
     } catch (err) {
       console.error(err);
@@ -248,6 +264,20 @@ export default function ProductsPage() {
   };
 
   const getTypesForProduct = (productId) => {
+    const productRecord = products.find(
+      (product) => String(product.id) === String(productId)
+    );
+
+    if (Array.isArray(productRecord?.types)) {
+      return productRecord.types.map((type) => ({
+        ...type,
+        product_id: type.product_id ?? productId,
+        variant_count: Number(
+          type.variant_count || type.variants?.length || 0
+        ),
+      }));
+    }
+
     return productTypes.filter(
       (type) =>
         String(type.product_id) === String(productId)

@@ -383,20 +383,33 @@ router.get("/", async (req, res) => {
             SELECT json_agg(
               json_build_object(
                 'id', pt.id,
+                'product_id', pt.product_id,
                 'name', pt.name,
                 'origin', COALESCE(pt.origin, ''),
                 'brand', COALESCE(pt.brand, ''),
                 'description', COALESCE(pt.description, ''),
                 'image', COALESCE(pt.image, ''),
                 'status', COALESCE(pt.status, true),
+                'variant_count', COALESCE(
+                  (
+                    SELECT COUNT(*)
+                    FROM product_variants pv
+                    WHERE pv.product_type_id = pt.id
+                  ),
+                  0
+                ),
                 'variants', COALESCE(
                   (
                     SELECT json_agg(
                       json_build_object(
                         'id', pv.id,
+                        'product_id', pv.product_id,
+                        'product_type_id', pv.product_type_id,
                         'weight', COALESCE(pv.weight, ''),
                         'price', COALESCE(pv.price, 0),
-                        'stock', COALESCE(pv.stock, 0)
+                        'stock', COALESCE(pv.stock, 0),
+                        'image', COALESCE(pv.image, ''),
+                        'image_url', COALESCE(pv.image_url, '')
                       )
                       ORDER BY pv.id
                     )

@@ -66,9 +66,49 @@ const STABLE_GRAIN_IMAGE_SLUGS = new Set([
 
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
+const getProductVariants = (product) => {
+  const directVariants = Array.isArray(product?.variants) ? product.variants : [];
+  const nestedVariants = (Array.isArray(product?.types) ? product.types : []).flatMap(
+    (type) => (Array.isArray(type?.variants) ? type.variants : [])
+  );
+
+  return [...nestedVariants, ...directVariants];
+};
+
+const getDisplayVariant = (product) => {
+  const variants = getProductVariants(product);
+
+  if (!variants.length) return null;
+
+  const prioritized = [...variants].sort(
+    (a, b) => Number(b.stock || 0) - Number(a.stock || 0)
+  );
+
+  return prioritized.find((variant) => Number(variant.stock || 0) > 0) || prioritized[0];
+};
+
+const getProductWeight = (product) => {
+  if (product?.weight) return product.weight;
+
+  const displayVariant = getDisplayVariant(product);
+  if (displayVariant?.weight) return displayVariant.weight;
+
+  const firstType = Array.isArray(product?.types) ? product.types[0] : null;
+  if (firstType?.name) return firstType.name;
+
+  return "Standard bag";
+};
+
 const getProductPrice = (product) => {
-  const variantPrice = product?.variants?.[0]?.price;
-  return Number(product?.price || variantPrice || 0);
+  const variants = getProductVariants(product);
+  const displayVariant = getDisplayVariant(product);
+
+  return Number(
+    product?.price ||
+      displayVariant?.price ||
+      variants[0]?.price ||
+      0
+  );
 };
 
 const normalizeImagePath = (imageUrl) => {
@@ -123,7 +163,8 @@ const getProductImage = (product) => {
 };
 
 const getProductStock = (product) => {
-  const variantStock = (product?.variants || []).reduce(
+  const variants = getProductVariants(product);
+  const variantStock = variants.reduce(
     (total, variant) => total + Number(variant.stock || 0),
     0
   );
@@ -189,7 +230,7 @@ function ProductTile({ product }) {
           <div>
             <h3 className="font-bold text-slate-950">{product.name}</h3>
             <p className="mt-1 text-sm text-slate-500">
-              {product.weight || product?.variants?.[0]?.name || "Standard bag"}
+              {getProductWeight(product)}
             </p>
           </div>
           <span className="rounded-md bg-green-50 px-2 py-1 text-xs font-semibold text-green-700">

@@ -44,25 +44,29 @@ const quickActions = [
   { label: "Track Prices", href: "/price-insights" },
 ];
 
-const STABLE_GRAIN_IMAGE_SLUGS = new Set([
-  "beans-(oloyin)",
-  "beans",
-  "chia-seeds",
-  "cowpea",
-  "garri",
-  "groundnut",
-  "kidney-beans",
-  "local-rice",
-  "maize",
-  "millet",
-  "ogbono",
-  "plantain-flour",
-  "rice",
-  "sorghum",
-  "soybeans",
-  "wheat",
-  "yam-flour(amala)",
-]);
+const STATIC_GRAIN_ASSET_PATHS = {
+  "abakaliki rice": "/grains/Abakaliki Rice.jpg",
+  "ofada rice": "/grains/Ofada rice.jfif",
+  "beans-(oloyin)": "/grains/beans-(oloyin).jpg",
+  "beans": "/grains/beans.jpg",
+  "chia-seeds": "/grains/chia-seeds.jpg",
+  "cowpea": "/grains/cowpea.jpg",
+  "garri": "/grains/garri.jpg",
+  "groundnut": "/grains/groundnut.jpg",
+  "kidney-beans": "/grains/kidney-beans.jpg",
+  "local-rice": "/grains/local-rice.jpg",
+  "maize": "/grains/maize.jpg",
+  "millet": "/grains/millet.jpg",
+  "ogbono": "/grains/ogbono.jpg",
+  "plantain-flour": "/grains/plantain-flour.jpg",
+  "rice": "/grains/rice.jpg",
+  "sorghum": "/grains/sorghum.jpg",
+  "soybeans": "/grains/soybeans.jpg",
+  "wheat": "/grains/wheat.jpg",
+  "yam-flour(amala)": "/grains/yam-flour(amala).jpg",
+};
+
+const STABLE_GRAIN_IMAGE_SLUGS = new Set(Object.keys(STATIC_GRAIN_ASSET_PATHS));
 
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
@@ -138,12 +142,12 @@ const normalizeImagePath = (imageUrl) => {
 };
 
 const getStableImageOverride = (productName) => {
-  const slug = String(productName || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-");
+  const normalized = String(productName || "").trim().toLowerCase();
+  if (STATIC_GRAIN_ASSET_PATHS[normalized]) return STATIC_GRAIN_ASSET_PATHS[normalized];
 
-  if (STABLE_GRAIN_IMAGE_SLUGS.has(slug)) return `/grains/${slug}.jpg`;
+  const slug = normalized.replace(/\s+/g, "-");
+
+  if (STABLE_GRAIN_IMAGE_SLUGS.has(slug)) return STATIC_GRAIN_ASSET_PATHS[slug];
 
   return null;
 };

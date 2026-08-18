@@ -4,6 +4,28 @@ import { useEffect, useMemo, useState } from "react";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
 
+const STATIC_GRAIN_ASSET_PATHS = {
+  "abakaliki rice": "/grains/Abakaliki Rice.jpg",
+  "ofada rice": "/grains/Ofada rice.jfif",
+  "beans-(oloyin)": "/grains/beans-(oloyin).jpg",
+  "beans": "/grains/beans.jpg",
+  "chia-seeds": "/grains/chia-seeds.jpg",
+  "cowpea": "/grains/cowpea.jpg",
+  "garri": "/grains/garri.jpg",
+  "groundnut": "/grains/groundnut.jpg",
+  "kidney-beans": "/grains/kidney-beans.jpg",
+  "local-rice": "/grains/local-rice.jpg",
+  "maize": "/grains/maize.jpg",
+  "millet": "/grains/millet.jpg",
+  "ogbono": "/grains/ogbono.jpg",
+  "plantain-flour": "/grains/plantain-flour.jpg",
+  "rice": "/grains/rice.jpg",
+  "sorghum": "/grains/sorghum.jpg",
+  "soybeans": "/grains/soybeans.jpg",
+  "wheat": "/grains/wheat.jpg",
+  "yam-flour(amala)": "/grains/yam-flour(amala).jpg",
+};
+
 const emptyProduct = {
   name: "",
   description: "",
@@ -107,6 +129,21 @@ export default function ProductsPage() {
 
     if (normalized.startsWith("http")) {
       return normalized;
+    }
+
+    const exactLookup = normalized
+      .replace(/^\//, "")
+      .replace(/^grains\//i, "")
+      .replace(/\.[a-z0-9]+$/i, "")
+      .trim()
+      .toLowerCase();
+
+    if (STATIC_GRAIN_ASSET_PATHS[exactLookup]) {
+      return STATIC_GRAIN_ASSET_PATHS[exactLookup];
+    }
+
+    if (STATIC_GRAIN_ASSET_PATHS[normalized.toLowerCase()]) {
+      return STATIC_GRAIN_ASSET_PATHS[normalized.toLowerCase()];
     }
 
     if (normalized.startsWith("/uploads/")) {

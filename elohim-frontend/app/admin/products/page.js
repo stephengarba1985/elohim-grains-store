@@ -50,6 +50,11 @@ const emptyVariant = {
   image: "",
 };
 
+const emptyVariantUpdate = {
+  price: "",
+  add_stock: "",
+};
+
 const emptyCategory = {
   name: "",
   slug: "",
@@ -88,6 +93,8 @@ export default function ProductsPage() {
   const [expandedProducts, setExpandedProducts] = useState({});
   const [assigningVariant, setAssigningVariant] = useState(null);
   const [assignTypeId, setAssignTypeId] = useState("");
+  const [editingVariant, setEditingVariant] = useState(null);
+  const [variantUpdateForm, setVariantUpdateForm] = useState(emptyVariantUpdate);
 
   /* =========================
      IMAGE HELPERS
@@ -612,6 +619,23 @@ export default function ProductsPage() {
     setShowVariantForm(false);
   };
 
+  const openEditVariant = (productId, variant) => {
+    setEditingVariant({
+      ...variant,
+      product_id: productId,
+    });
+
+    setVariantUpdateForm({
+      price: String(Number(variant.price || 0)),
+      add_stock: "",
+    });
+  };
+
+  const resetVariantUpdateForm = () => {
+    setEditingVariant(null);
+    setVariantUpdateForm(emptyVariantUpdate);
+  };
+
   const handleVariantSubmit = async (e) => {
     e.preventDefault();
 
@@ -713,6 +737,69 @@ export default function ProductsPage() {
         err.response?.data?.error ||
           "Failed to delete variant"
       );
+    }
+  };
+
+  const handleVariantUpdate = async (e) => {
+    e.preventDefault();
+
+    if (!editingVariant) {
+      toast.error("Variant not selected");
+      return;
+    }
+
+    const newPrice = Number(variantUpdateForm.price);
+    const addStock = Number(variantUpdateForm.add_stock || 0);
+
+    if (!Number.isFinite(newPrice) || newPrice < 0) {
+      toast.error("Enter a valid price");
+      return;
+    }
+
+    if (!Number.isInteger(addStock) || addStock < 0) {
+      toast.error("Stock increase must be a valid whole number");
+      return;
+    }
+
+    const currentPrice = Number(editingVariant.price || 0);
+    const currentStock = Number(editingVariant.stock || 0);
+    const newStock = currentStock + addStock;
+
+    if (newPrice === currentPrice && addStock === 0) {
+      toast.error("No changes to save");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      await API.put(
+        `/products/variants/${editingVariant.id}`,
+        {
+          product_type_id: editingVariant.product_type_id || null,
+          weight: editingVariant.weight || "",
+          price: newPrice,
+          bulk_price: editingVariant.bulk_price ?? null,
+          stock: newStock,
+          image_url:
+            editingVariant.image_url ||
+            editingVariant.image ||
+            "",
+        }
+      );
+
+      toast.success("Variant updated");
+      resetVariantUpdateForm();
+      await refreshAll();
+    } catch (err) {
+      console.error(err);
+
+      toast.error(
+        err.response?.data?.error ||
+          "Failed to update variant"
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1566,6 +1653,102 @@ export default function ProductsPage() {
         </form>
       )}
 
+      {editingVariant && (
+        <form
+          onSubmit={handleVariantUpdate}
+          className="bg-white rounded-xl shadow p-5 border border-green-200"
+        >
+          <div className="flex justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Update Variant Price & Stock
+              </h2>
+              <p className="text-sm text-gray-500">
+                {editingVariant.weight} • Current stock: {Number(editingVariant.stock || 0)}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={resetVariantUpdateForm}
+              className="text-gray-500"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">
+                New price
+              </label>
+
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={variantUpdateForm.price}
+                onChange={(e) =>
+                  setVariantUpdateForm((current) => ({
+                    ...current,
+                    price: e.target.value,
+                  }))
+                }
+                className="w-full border rounded-lg px-3 py-2"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">
+                Increase stock by
+              </label>
+
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={variantUpdateForm.add_stock}
+                onChange={(e) =>
+                  setVariantUpdateForm((current) => ({
+                    ...current,
+                    add_stock: e.target.value,
+                  }))
+                }
+                placeholder="0"
+                className="w-full border rounded-lg px-3 py-2"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">
+                New total stock
+              </label>
+
+              <div className="h-10 px-3 rounded-lg border bg-gray-50 flex items-center font-semibold text-gray-700">
+                {Number(editingVariant.stock || 0) + Number(variantUpdateForm.add_stock || 0)}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-4">
+            <button
+              disabled={loading}
+              className="bg-green-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
+            >
+              {loading ? "Saving..." : "Save Changes"}
+            </button>
+
+            <button
+              type="button"
+              onClick={resetVariantUpdateForm}
+              className="bg-gray-200 px-5 py-2 rounded-lg"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
       {assigningVariant && (
         <div className="bg-white rounded-xl shadow p-5 border border-blue-200">
           <div className="flex justify-between items-center mb-4">
@@ -2057,6 +2240,19 @@ export default function ProductsPage() {
                                               </td>
 
                                               <td className="px-3 py-2 space-y-2">
+
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    openEditVariant(
+                                                      product.id,
+                                                      variant
+                                                    )
+                                                  }
+                                                  className="bg-green-600 text-white px-2 py-1 rounded text-xs"
+                                                >
+                                                  Edit Price/Stock
+                                                </button>
 
                                                 <button
                                                   type="button"

@@ -25,6 +25,7 @@ const ensureCatalogColumns = async () => {
     ALTER TABLE product_variants
       ADD COLUMN IF NOT EXISTS product_type_id INTEGER,
       ADD COLUMN IF NOT EXISTS bulk_price NUMERIC,
+      ADD COLUMN IF NOT EXISTS image TEXT,
       ADD COLUMN IF NOT EXISTS image_url TEXT
   `);
 
@@ -1261,7 +1262,79 @@ router.put(
         bulk_price,
         stock,
         image_url,
+        image,
       } = req.body;
+
+      const existingVariant = await pool.query(
+        `
+        SELECT
+          id,
+          product_type_id,
+          weight,
+          price,
+          bulk_price,
+          stock,
+          image,
+          image_url
+        FROM product_variants
+        WHERE id = $1
+        `,
+        [variant_id]
+      );
+
+      if (existingVariant.rows.length === 0) {
+        return res.status(404).json({
+          error: "Variant not found",
+        });
+      }
+
+      const current = existingVariant.rows[0];
+
+      const nextProductTypeId =
+        product_type_id === undefined
+          ? current.product_type_id
+          : product_type_id === "" || product_type_id == null
+            ? null
+            : Number(product_type_id);
+
+      const nextWeight =
+        weight === undefined
+          ? String(current.weight || "")
+          : String(weight || "").trim();
+
+      const currentPrice = parseNumber(current.price);
+      const nextPrice =
+        price === undefined
+          ? currentPrice
+          : parseNumber(price, currentPrice);
+
+      const currentBulkPrice =
+        current.bulk_price == null
+          ? null
+          : parseNumber(current.bulk_price);
+
+      const nextBulkPrice =
+        bulk_price === undefined
+          ? currentBulkPrice
+          : bulk_price === "" || bulk_price == null
+            ? null
+            : parseNumber(
+                bulk_price,
+                currentBulkPrice == null ? 0 : currentBulkPrice
+              );
+
+      const currentStock = parseNumber(current.stock);
+      const nextStock =
+        stock === undefined
+          ? currentStock
+          : parseNumber(stock, currentStock);
+
+      const hasIncomingImage =
+        image_url !== undefined || image !== undefined;
+
+      const nextImageValue = hasIncomingImage
+        ? String(image_url ?? image ?? "").trim()
+        : String(current.image_url || current.image || "").trim();
 
       const result = await pool.query(
         `
@@ -1272,28 +1345,22 @@ router.put(
           price = $3,
           bulk_price = $4,
           stock = $5,
-          image_url = $6
-        WHERE id = $7
+          image = $6,
+          image_url = $7
+        WHERE id = $8
         RETURNING *
         `,
         [
-          product_type_id || null,
-          weight || "",
-          parseNumber(price),
-          bulk_price === "" || bulk_price == null
-            ? null
-            : parseNumber(bulk_price),
-          parseNumber(stock),
-          image_url || "",
+          nextProductTypeId,
+          nextWeight,
+          nextPrice,
+          nextBulkPrice,
+          nextStock,
+          nextImageValue,
+          nextImageValue,
           variant_id,
         ]
       );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          error: "Variant not found",
-        });
-      }
 
       res.json(result.rows[0]);
     } catch (err) {

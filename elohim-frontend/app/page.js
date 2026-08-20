@@ -156,7 +156,21 @@ const getProductImage = (product) => {
   const stableOverride = getStableImageOverride(product?.name);
   if (stableOverride) return stableOverride;
 
-  if (product?.image_url) return normalizeImagePath(product.image_url);
+  const candidateSources = [
+    product?.image_url,
+    product?.image,
+    product?.types?.[0]?.image,
+    product?.types?.[0]?.image_url,
+    product?.variants?.[0]?.image_url,
+    product?.variants?.[0]?.image,
+  ].filter(Boolean);
+
+  for (const candidate of candidateSources) {
+    const normalized = normalizeImagePath(candidate);
+    if (normalized && normalized !== "/grains/rice.jpg") {
+      return normalized;
+    }
+  }
 
   const fileName = String(product?.name || "Rice")
     .trim()

@@ -352,11 +352,13 @@ export default function ProductDetails() {
       selectedVariant?.image,
       product?.image_url,
       product?.image,
+      selectedType?.image,
+      selectedType?.image_url,
     ].filter(Boolean);
 
     for (const candidate of candidateSources) {
       const normalized = normalizeImagePath(candidate);
-      if (normalized && normalized !== "/placeholder.jpg") {
+      if (normalized && normalized !== "/grains/rice.jpg") {
         return normalized;
       }
     }

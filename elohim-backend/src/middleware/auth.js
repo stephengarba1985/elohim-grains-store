@@ -8,13 +8,18 @@ const jwtSecret = process.env.JWT_SECRET || "elohim_123456";
 ========================= */
 const verifyToken = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers.authorization || req.headers.Authorization;
 
-    if (!authHeader) {
+    if (!authHeader || typeof authHeader !== "string") {
       return res.status(401).json({ error: "No token provided" });
     }
 
-    const token = authHeader.split(" ")[1];
+    const parts = authHeader.split(" ");
+    const token = parts.length === 2 ? parts[1] : authHeader;
+
+    if (!token || token === "undefined" || token === "null") {
+      return res.status(401).json({ error: "Invalid token format" });
+    }
 
     const decoded = jwt.verify(token, jwtSecret);
 
@@ -31,8 +36,8 @@ const verifyToken = async (req, res, next) => {
     next();
 
   } catch (err) {
-    console.error(err);
-    res.status(401).json({ error: "Invalid token" });
+    console.error("JWT VERIFY ERROR:", err.message);
+    res.status(401).json({ error: "Invalid or expired token" });
   }
 };
 

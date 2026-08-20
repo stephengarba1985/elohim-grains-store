@@ -59,6 +59,21 @@ API.interceptors.response.use(
       const status = error.response.status;
       const log = status >= 500 ? console.error : console.warn;
       log("API ERROR:", status, error.response.data);
+
+      if (status === 401 || status === 403) {
+        if (typeof window !== "undefined") {
+          const pathname = window.location.pathname;
+          const isAuthPage = pathname === "/login" || pathname === "/forgot-password" || pathname === "/reset-password";
+
+          if (!isAuthPage) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            sessionStorage.clear();
+            window.dispatchEvent(new Event("auth:changed"));
+            window.location.href = "/login";
+          }
+        }
+      }
     } else if (error.request) {
       const offline = typeof window !== "undefined" && !window.navigator.onLine;
       if (offline) {

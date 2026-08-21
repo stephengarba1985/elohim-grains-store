@@ -1,39 +1,25 @@
-const axios = require("axios");
-
-/* =========================
-   BREVO SEND FUNCTION
-========================= */
+const nodemailer = require("nodemailer");
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST,
+  port: Number(process.env.EMAIL_PORT),
+  secure: false, // Port 587 uses STARTTLS
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 const sendEmail = async ({ to, subject, htmlContent }) => {
   try {
-    const response = await axios.post(
-      "https://api.brevo.com/v3/smtp/email",
-      {
-        sender: {
-          name: "Elohim Grains Store",
-          email: process.env.EMAIL_FROM,
-        },
-        to: [{ email: to }],
-        subject,
-        htmlContent,
-      },
-      {
-        headers: {
-          "api-key": process.env.BREVO_API_KEY,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    return response.data;
+    const info = await transporter.sendMail({
+      from: `"Elohim Grains Store" <${process.env.EMAIL_FROM}>`,
+      to,
+      subject,
+      html: htmlContent,
+    });
+    console.log("EMAIL SENT:", info.messageId);
+    return info;
   } catch (error) {
-    console.error("EMAIL ERROR:");
-
-    if (error.response) {
-      console.error(error.response.data);
-    } else {
-      console.error(error.message);
-    }
-
+    console.error("EMAIL ERROR:", error);
     throw error;
   }
 };
@@ -62,7 +48,6 @@ const sendPasswordResetEmail = async (email, resetLink) => {
     </p>
 
     <p>If the button doesn't work:</p>
-
     <p>${resetLink}</p>
 
     <p>This link expires in 1 hour.</p>
@@ -210,6 +195,7 @@ const sendOrderConfirmationEmail = async (email, order) => {
 };
 
 module.exports = {
+  sendEmail,
   sendPasswordResetEmail,
   sendVerificationEmail,
   sendOrderConfirmationEmail,

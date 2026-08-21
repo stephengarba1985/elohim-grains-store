@@ -45,6 +45,29 @@ const ensureAuthColumns = async () => {
   `);
 };
 
+const sendVerificationEmailSafely = async (email, verifyLink, userId) => {
+  try {
+    await sendVerificationEmail(email, verifyLink);
+    return { emailSent: true, autoVerified: false };
+  } catch (error) {
+    console.error("VERIFICATION EMAIL FAILED; auto-activating account:", error);
+
+    if (userId) {
+      await pool.query(
+        `
+        UPDATE users
+        SET email_verified = TRUE,
+            verification_token = NULL
+        WHERE id = $1
+        `,
+        [userId]
+      );
+    }
+
+    return { emailSent: false, autoVerified: true };
+  }
+};
+
 /* =========================
    REGISTER
 ========================= */
@@ -99,12 +122,13 @@ router.post("/register", async (req, res) => {
 
       const frontendBaseUrl = resolveFrontendBaseUrl(req);
       const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
-      await sendVerificationEmail(normalizedEmail, verifyLink);
+      const emailResult = await sendVerificationEmailSafely(normalizedEmail, verifyLink, foundUser.id);
 
       return res.status(200).json({
         success: true,
-        message:
-          "This email is already registered but not verified. A new verification email has been sent.",
+        message: emailResult.autoVerified
+          ? "This email is already registered. The account was reactivated because email delivery failed, so you can log in immediately."
+          : "This email is already registered but not verified. A new verification email has been sent.",
       });
     }
 
@@ -115,7 +139,7 @@ router.post("/register", async (req, res) => {
     const verificationToken = crypto.randomBytes(32).toString("hex");
 
     // Save user
-    await pool.query(
+    const insertResult = await pool.query(
       `
       INSERT INTO users
       (
@@ -131,6 +155,7 @@ router.post("/register", async (req, res) => {
       (
         $1,$2,$3,$4,$5,FALSE,$6
       )
+      RETURNING id
       `,
       [
         name.trim(),
@@ -147,12 +172,13 @@ router.post("/register", async (req, res) => {
     const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
 
     // Send verification email
-    await sendVerificationEmail(normalizedEmail, verifyLink);
+    const emailResult = await sendVerificationEmailSafely(normalizedEmail, verifyLink, insertResult.rows[0].id);
 
     return res.status(201).json({
       success: true,
-      message:
-        "Registration successful. Please check your email to verify your account.",
+      message: emailResult.autoVerified
+        ? "Registration successful. Your account is active and ready to log in because the verification email could not be delivered."
+        : "Registration successful. Please check your email to verify your account.",
     });
 
   } catch (err) {
@@ -280,11 +306,13 @@ router.post("/resend-verification", async (req, res) => {
     const frontendBaseUrl = resolveFrontendBaseUrl(req);
     const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
 
-    await sendVerificationEmail(user.email, verifyLink);
+    const emailResult = await sendVerificationEmailSafely(user.email, verifyLink, user.id);
 
     return res.json({
       success: true,
-      message: "A new verification email has been sent.",
+      message: emailResult.autoVerified
+        ? "A new verification email could not be sent, but your account was reactivated for immediate access."
+        : "A new verification email has been sent.",
     });
 
   } catch (err) {

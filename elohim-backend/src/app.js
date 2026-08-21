@@ -105,35 +105,59 @@ const adminLimiter = rateLimit({
   },
 });
 
-app.use("/api", apiLimiter);
-app.use("/api/auth", authLimiter);
-
 const isDev = process.env.NODE_ENV === "development";
 const uploadsRoot = process.env.UPLOADS_ROOT;
 const railwayVolumeRoot = process.env.RAILWAY_VOLUME_MOUNT_PATH;
-const allowedOrigins = [
+const allowedOrigins = new Set([
   "https://elohimgrains.com",
   "https://www.elohimgrains.com",
+  "https://elohim-grains-store-production.up.railway.app",
+  "https://elohim-grains-store.up.railway.app",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
+  "https://localhost:3000",
+  "https://localhost:3001",
   process.env.FRONTEND_URL,
-].filter(Boolean);
+].filter(Boolean));
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.has(origin)) {
+      return callback(null, true);
+    }
+
+    const isAllowedHost =
+      origin.includes("localhost") ||
+      origin.endsWith(".railway.app") ||
+      origin.endsWith(".vercel.app") ||
+      origin.endsWith(".elohimgrains.com");
+
+    if (isAllowedHost) {
+      return callback(null, true);
+    }
+
+    const corsError = new Error("Not allowed by CORS");
+    corsError.status = 403;
+    return callback(corsError);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+};
 
 /* =========================
    MIDDLEWARE
 ========================= */
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      const corsError = new Error("Not allowed by CORS");
-      corsError.status = 403;
-      return callback(corsError);
-    },
-    credentials: true,
-  })
-);
+app.use(cors(corsOptions));
+app.options(/^(.*)$/, cors(corsOptions));
+app.use("/api", apiLimiter);
+app.use("/api/auth", authLimiter);
 
 app.use("/api/payment/webhook", express.raw({ type: "application/json" }));
 app.use("/api/wallet/webhook", express.raw({ type: "application/json" }));

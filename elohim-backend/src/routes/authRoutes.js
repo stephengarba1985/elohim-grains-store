@@ -48,23 +48,20 @@ const ensureAuthColumns = async () => {
 const sendVerificationEmailSafely = async (email, verifyLink, userId) => {
   try {
     await sendVerificationEmail(email, verifyLink);
-    return { emailSent: true, autoVerified: false };
+    return {
+      emailSent: true,
+      autoVerified: false,
+    };
   } catch (error) {
-    console.error("VERIFICATION EMAIL FAILED; auto-activating account:", error);
-
-    if (userId) {
-      await pool.query(
-        `
-        UPDATE users
-        SET email_verified = TRUE,
-            verification_token = NULL
-        WHERE id = $1
-        `,
-        [userId]
-      );
-    }
-
-    return { emailSent: false, autoVerified: true };
+    console.error("VERIFICATION EMAIL FAILED:", error);
+    // IMPORTANT:
+    // Never automatically verify a user's email when
+    // the verification email could not be delivered.
+    return {
+      emailSent: false,
+      autoVerified: false,
+      error: "Verification email could not be sent.",
+    };
   }
 };
 

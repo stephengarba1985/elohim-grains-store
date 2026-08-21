@@ -10,6 +10,26 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar VARCHAR(500);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
 
+WITH ranked_users AS (
+  SELECT
+    id,
+    ROW_NUMBER() OVER (
+      PARTITION BY LOWER(email)
+      ORDER BY email_verified DESC, created_at DESC, id DESC
+    ) AS row_num
+  FROM users
+  WHERE email IS NOT NULL
+)
+DELETE FROM users
+WHERE id IN (
+  SELECT id
+  FROM ranked_users
+  WHERE row_num > 1
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique_idx
+ON users (LOWER(email));
+
 -- Ensure stock_history table exists
 CREATE TABLE IF NOT EXISTS stock_history (
   id SERIAL PRIMARY KEY,

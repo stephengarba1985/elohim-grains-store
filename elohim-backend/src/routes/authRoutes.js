@@ -30,6 +30,32 @@ const resolveFrontendBaseUrl = (req) => {
   return "http://localhost:3000";
 };
 
+const ensureUserEmailUniqueness = async () => {
+  await pool.query(`
+    WITH ranked_users AS (
+      SELECT
+        id,
+        ROW_NUMBER() OVER (
+          PARTITION BY LOWER(email)
+          ORDER BY email_verified DESC, created_at DESC, id DESC
+        ) AS row_num
+      FROM users
+      WHERE email IS NOT NULL
+    )
+    DELETE FROM users
+    WHERE id IN (
+      SELECT id
+      FROM ranked_users
+      WHERE row_num > 1
+    );
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique_idx
+    ON users (LOWER(email));
+  `);
+};
+
 const ensureAuthColumns = async () => {
   await pool.query(`
     ALTER TABLE users
@@ -43,6 +69,8 @@ const ensureAuthColumns = async () => {
     SET email_verified = TRUE
     WHERE email_verified IS NULL
   `);
+
+  await ensureUserEmailUniqueness();
 };
 
 const sendVerificationEmailSafely = async (email, verifyLink, userId) => {
@@ -181,10 +209,26 @@ router.post("/register", async (req, res) => {
   } catch (err) {
     console.error("REGISTER ERROR:", err);
 
-    if (err.code === "23505" && String(err.constraint || "").includes("phone")) {
-      return res.status(409).json({
-        error: "Phone number is already in use.",
-      });
+    if (err.code === "23505") {
+      const constraintName = String(err.constraint || "").toLowerCase();
+      const errorDetail = String(err.detail || "").toLowerCase();
+
+      if (constraintName.includes("phone") || errorDetail.includes("phone")) {
+        return res.status(409).json({
+          error: "Phone number is already in use.",
+        });
+      }
+
+      if (
+        constraintName.includes("email") ||
+        errorDetail.includes("email") ||
+        constraintName.includes("users_email_lower_unique_idx") ||
+        errorDetail.includes("lower")
+      ) {
+        return res.status(409).json({
+          error: "Email already registered.",
+        });
+      }
     }
 
     return res.status(500).json({

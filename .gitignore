@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 node_modules/
 .next/
 out/
@@ -22,7 +21,15 @@ next-dev.err.log
 
 .DS_Store
 Thumbs.db
-=======
+
+# Uploaded media should live in a persistent storage volume, not in Git.
+elohim-backend/uploads/
+elohim-backend/uploads/**
+!elohim-backend/uploads/.gitkeep
+
+# VS Code / editor artifacts
+.vscode/
+
 ### AL ###
 #Template for AL projects for Dynamics 365 Business Central
 #launch.json folder
@@ -46,4 +53,3 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
->>>>>>> f152629a4bf69e4edf736b7b15cc06adbc9f2850

@@ -1,26 +1,87 @@
 const nodemailer = require("nodemailer");
+
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: Number(process.env.EMAIL_PORT),
-  secure: true,
+  // Port 587 uses STARTTLS, not implicit SSL, so this must be false.
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  // Truehost's SMTP server can be slow to respond, so we give it more
+  // time before giving up on the connection/socket.
+  connectionTimeout: 15000, // 15s
+  socketTimeout: 15000, // 15s
+  // Reuse SMTP connections instead of opening a new one per email.
+  pool: true,
+  maxConnections: 5,
+  tls: {
+    // Truehost uses a certificate chain that doesn't always validate
+    // cleanly, so we relax certificate checking for compatibility.
+    rejectUnauthorized: false,
+  },
 });
+
+// Errors that are safe to retry - transient network/connection issues.
+// Anything else (e.g. auth failures) should fail fast.
+const RETRYABLE_ERROR_CODES = [
+  "ETIMEDOUT",
+  "ECONNECTION",
+  "ECONNREFUSED",
+  "ESOCKET",
+  "ECONNRESET",
+  "EDNS",
+];
+
+const isRetryableError = (error) => {
+  if (!error) return false;
+  if (RETRYABLE_ERROR_CODES.includes(error.code)) return true;
+
+  const message = (error.message || "").toLowerCase();
+  return (
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("connection")
+  );
+};
+
+const RETRY_DELAYS_MS = [2000, 4000, 8000];
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const sendEmail = async ({ to, subject, htmlContent }) => {
-  try {
-    const info = await transporter.sendMail({
-      from: `"Elohim Grains Store" <${process.env.EMAIL_FROM}>`,
-      to,
-      subject,
-      html: htmlContent,
-    });
-    console.log("EMAIL SENT:", info.messageId);
-    return info;
-  } catch (error) {
-    console.error("EMAIL ERROR:", error);
-    throw error;
+  const maxAttempts = RETRY_DELAYS_MS.length + 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`📧 Sending email (attempt ${attempt}/${maxAttempts})...`);
+
+      const info = await transporter.sendMail({
+        from: `"Elohim Grains Store" <${process.env.EMAIL_FROM}>`,
+        to,
+        subject,
+        html: htmlContent,
+      });
+
+      console.log("EMAIL SENT:", info.messageId);
+      return info;
+    } catch (error) {
+      console.error(
+        `EMAIL ERROR (attempt ${attempt}/${maxAttempts}):`,
+        error
+      );
+
+      const canRetry = attempt < maxAttempts && isRetryableError(error);
+
+      if (!canRetry) {
+        throw error;
+      }
+
+      const delay = RETRY_DELAYS_MS[attempt - 1];
+      console.log(`⏳ Retrying in ${delay}ms...`);
+      await wait(delay);
+    }
   }
 };
 

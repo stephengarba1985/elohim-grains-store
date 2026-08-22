@@ -23,65 +23,22 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Errors that are safe to retry - transient network/connection issues.
-// Anything else (e.g. auth failures) should fail fast.
-const RETRYABLE_ERROR_CODES = [
-  "ETIMEDOUT",
-  "ECONNECTION",
-  "ECONNREFUSED",
-  "ESOCKET",
-  "ECONNRESET",
-  "EDNS",
-];
-
-const isRetryableError = (error) => {
-  if (!error) return false;
-  if (RETRYABLE_ERROR_CODES.includes(error.code)) return true;
-
-  const message = (error.message || "").toLowerCase();
-  return (
-    message.includes("timeout") ||
-    message.includes("timed out") ||
-    message.includes("connection")
-  );
-};
-
-const RETRY_DELAYS_MS = [2000, 4000, 8000];
-
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const sendEmail = async ({ to, subject, htmlContent }) => {
-  const maxAttempts = RETRY_DELAYS_MS.length + 1;
+  try {
+    console.log("📧 Sending email...");
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      console.log(`📧 Sending email (attempt ${attempt}/${maxAttempts})...`);
+    const info = await transporter.sendMail({
+      from: `"Elohim Grains Store" <${process.env.EMAIL_FROM}>`,
+      to,
+      subject,
+      html: htmlContent,
+    });
 
-      const info = await transporter.sendMail({
-        from: `"Elohim Grains Store" <${process.env.EMAIL_FROM}>`,
-        to,
-        subject,
-        html: htmlContent,
-      });
-
-      console.log("EMAIL SENT:", info.messageId);
-      return info;
-    } catch (error) {
-      console.error(
-        `EMAIL ERROR (attempt ${attempt}/${maxAttempts}):`,
-        error
-      );
-
-      const canRetry = attempt < maxAttempts && isRetryableError(error);
-
-      if (!canRetry) {
-        throw error;
-      }
-
-      const delay = RETRY_DELAYS_MS[attempt - 1];
-      console.log(`⏳ Retrying in ${delay}ms...`);
-      await wait(delay);
-    }
+    console.log("EMAIL SENT:", info.messageId);
+    return info;
+  } catch (error) {
+    console.error("EMAIL ERROR:", error);
+    throw error;
   }
 };
 

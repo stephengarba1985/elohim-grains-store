@@ -1,4 +1,6 @@
 const nodemailer = require("nodemailer");
+
+// Enhanced transporter with retry logic and timeouts
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: Number(process.env.EMAIL_PORT),
@@ -7,17 +9,60 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  // Enhanced timeout and connection settings
+  connectionTimeout: 15000, // 15 seconds (increased from default 5s)
+  socketTimeout: 15000,      // 15 seconds
+  pool: {
+    maxConnections: 5,
+    maxMessages: 100,
+    rateDelta: 1000,           // 1 message per second
+    rateLimit: true,
+  },
+  tls: {
+    rejectUnauthorized: false, // Allow self-signed certs (if needed by Truehost)
+  },
 });
+
+// Retry wrapper for email sending
+const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`📧 Sending email (attempt ${attempt}/${maxRetries})...`);
+      const info = await transporter.sendMail(mailOptions);
+      console.log("✅ EMAIL SENT:", info.messageId);
+      return info;
+    } catch (error) {
+      lastError = error;
+      console.warn(`⚠️  Email send failed (attempt ${attempt}/${maxRetries}):`, error.message);
+      
+      // Don't retry on auth errors, only on timeout/connection errors
+      if (error.code === 'EAUTH' || error.code === 'ENOTFOUND') {
+        throw error;
+      }
+      
+      // Wait before retry (exponential backoff: 2s, 4s, 8s)
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`⏳ Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  console.error("❌ EMAIL FAILED after all retries:", lastError);
+  throw lastError;
+};
+
 const sendEmail = async ({ to, subject, htmlContent }) => {
   try {
-    const info = await transporter.sendMail({
+    return await sendEmailWithRetry({
       from: `"Elohim Grains Store" <${process.env.EMAIL_FROM}>`,
       to,
       subject,
       html: htmlContent,
     });
-    console.log("EMAIL SENT:", info.messageId);
-    return info;
   } catch (error) {
     console.error("EMAIL ERROR:", error);
     throw error;
@@ -200,3 +245,4 @@ module.exports = {
   sendVerificationEmail,
   sendOrderConfirmationEmail,
 };
+

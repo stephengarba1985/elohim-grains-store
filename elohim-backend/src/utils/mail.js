@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const dns = require("dns");
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
@@ -20,6 +21,12 @@ const transporter = nodemailer.createTransport({
   // sometimes resolves to an IPv6 address, causing ENETUNREACH errors.
   // Forcing IPv4 avoids this entirely.
   family: 4,
+  // `family: 4` alone isn't always enough to stop Node from attempting
+  // an IPv6 connection, so we also override the DNS lookup used by the
+  // underlying socket to only ever resolve IPv4 addresses.
+  lookup: (host, options, callback) => {
+    dns.lookup(host, { family: 4 }, callback);
+  },
   tls: {
     // Truehost uses a certificate chain that doesn't always validate
     // cleanly, so we relax certificate checking for compatibility.

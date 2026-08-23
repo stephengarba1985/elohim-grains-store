@@ -101,11 +101,19 @@ const upload = multer({
 });
 
 const catalogUploadRoot = (() => {
+  const persistentCatalogRoot = process.env.UPLOAD_CATALOG_DIR
+    ? path.resolve(process.env.UPLOAD_CATALOG_DIR)
+    : uploadsRoot
+      ? path.resolve(uploadsRoot, "catalog")
+      : null;
+
   const candidates = [
+    persistentCatalogRoot,
+    railwayVolumeRoot ? path.resolve(railwayVolumeRoot, "uploads/catalog") : null,
+    path.resolve("/data/uploads/catalog"),
     path.resolve(process.cwd(), "uploads/catalog"),
     path.resolve(__dirname, "../../uploads/catalog"),
-    path.resolve("/data/uploads/catalog"),
-  ];
+  ].filter(Boolean);
 
   for (const candidate of candidates) {
     try {

@@ -123,102 +123,111 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Check if email already exists
-    const existingUser = await pool.query(
-      `
-      SELECT id, email_verified
-      FROM users
-      WHERE LOWER(email) = LOWER($1)
-      ORDER BY
-        CASE WHEN is_admin = TRUE THEN 0 ELSE 1 END DESC,
-        email_verified DESC,
-        created_at DESC,
-        id DESC
-      LIMIT 1
-      `,
-      [normalizedEmail]
-    );
+    const client = await pool.connect();
 
-    if (existingUser.rows.length > 0) {
-      const foundUser = existingUser.rows[0];
+    try {
+      await client.query("BEGIN");
 
-      if (foundUser.email_verified) {
-        return res.status(400).json({
-          error: "Email already registered.",
+      const existingUser = await client.query(
+        `
+        SELECT id, email_verified
+        FROM users
+        WHERE LOWER(email) = LOWER($1)
+        ORDER BY
+          CASE WHEN is_admin = TRUE THEN 0 ELSE 1 END DESC,
+          email_verified DESC,
+          created_at DESC,
+          id DESC
+        LIMIT 1
+        FOR UPDATE
+        `,
+        [normalizedEmail]
+      );
+
+      if (existingUser.rows.length > 0) {
+        const foundUser = existingUser.rows[0];
+
+        if (foundUser.email_verified) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({
+            error: "Email already registered.",
+          });
+        }
+
+        const verificationToken = crypto.randomBytes(32).toString("hex");
+
+        await client.query(
+          `
+          UPDATE users
+          SET verification_token = $1
+          WHERE id = $2
+          `,
+          [verificationToken, foundUser.id]
+        );
+
+        await client.query("COMMIT");
+
+        const frontendBaseUrl = resolveFrontendBaseUrl(req);
+        const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
+        const emailResult = await sendVerificationEmailSafely(normalizedEmail, verifyLink, foundUser.id);
+
+        return res.status(200).json({
+          success: true,
+          message: emailResult.autoVerified
+            ? "This email is already registered. The account was reactivated because email delivery failed, so you can log in immediately."
+            : "This email is already registered but not verified. A new verification email has been sent.",
         });
       }
 
+      const hashedPassword = await bcrypt.hash(password, 10);
       const verificationToken = crypto.randomBytes(32).toString("hex");
 
-      await pool.query(
+      const insertResult = await client.query(
         `
-        UPDATE users
-        SET verification_token = $1
-        WHERE id = $2
+        INSERT INTO users
+        (
+          name,
+          email,
+          phone,
+          password,
+          role,
+          email_verified,
+          verification_token
+        )
+        VALUES
+        (
+          $1,$2,$3,$4,$5,FALSE,$6
+        )
+        RETURNING id
         `,
-        [verificationToken, foundUser.id]
+        [
+          name.trim(),
+          normalizedEmail,
+          normalizedPhone,
+          hashedPassword,
+          normalizedRole,
+          verificationToken,
+        ]
       );
+
+      await client.query("COMMIT");
 
       const frontendBaseUrl = resolveFrontendBaseUrl(req);
       const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
-      const emailResult = await sendVerificationEmailSafely(normalizedEmail, verifyLink, foundUser.id);
+      const emailResult = await sendVerificationEmailSafely(normalizedEmail, verifyLink, insertResult.rows[0].id);
 
-      return res.status(200).json({
+      return res.status(201).json({
         success: true,
         message: emailResult.autoVerified
-          ? "This email is already registered. The account was reactivated because email delivery failed, so you can log in immediately."
-          : "This email is already registered but not verified. A new verification email has been sent.",
+          ? "Registration successful. Your account is active and ready to log in because the verification email could not be delivered."
+          : "Registration successful. Please check your email to verify your account.",
       });
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
     }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Generate verification token
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-
-    // Save user
-    const insertResult = await pool.query(
-      `
-      INSERT INTO users
-      (
-        name,
-        email,
-        phone,
-        password,
-        role,
-        email_verified,
-        verification_token
-      )
-      VALUES
-      (
-        $1,$2,$3,$4,$5,FALSE,$6
-      )
-      RETURNING id
-      `,
-      [
-        name.trim(),
-        normalizedEmail,
-        normalizedPhone,
-        hashedPassword,
-        normalizedRole,
-        verificationToken,
-      ]
-    );
-
-    // Build verification URL
-    const frontendBaseUrl = resolveFrontendBaseUrl(req);
-    const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
-
-    // Send verification email
-    const emailResult = await sendVerificationEmailSafely(normalizedEmail, verifyLink, insertResult.rows[0].id);
-
-    return res.status(201).json({
-      success: true,
-      message: emailResult.autoVerified
-        ? "Registration successful. Your account is active and ready to log in because the verification email could not be delivered."
-        : "Registration successful. Please check your email to verify your account.",
-    });
 
   } catch (err) {
     console.error("REGISTER ERROR:", err);

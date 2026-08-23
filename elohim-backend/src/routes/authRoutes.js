@@ -174,9 +174,10 @@ router.post("/register", async (req, res) => {
 
         return res.status(200).json({
           success: true,
-          message: emailResult.autoVerified
-            ? "This email is already registered. The account was reactivated because email delivery failed, so you can log in immediately."
-            : "This email is already registered but not verified. A new verification email has been sent.",
+          emailSent: emailResult.emailSent,
+          message: emailResult.emailSent
+            ? "This email is already registered but not verified. A new verification email has been sent."
+            : "This email is already registered but not verified. We could not send the verification email. Please try again.",
         });
       }
 
@@ -219,9 +220,10 @@ router.post("/register", async (req, res) => {
 
       return res.status(201).json({
         success: true,
-        message: emailResult.autoVerified
-          ? "Registration successful. Your account is active and ready to log in because the verification email could not be delivered."
-          : "Registration successful. Please check your email to verify your account.",
+        emailSent: emailResult.emailSent,
+        message: emailResult.emailSent
+          ? "Registration successful. Please check your email to verify your account."
+          : "Registration successful, but we could not send the verification email. Please try resending it.",
       });
     } catch (err) {
       await client.query("ROLLBACK").catch(() => {});
@@ -381,9 +383,10 @@ router.post("/resend-verification", async (req, res) => {
 
     return res.json({
       success: true,
-      message: emailResult.autoVerified
-        ? "A new verification email could not be sent, but your account was reactivated for immediate access."
-        : "A new verification email has been sent.",
+      emailSent: emailResult.emailSent,
+      message: emailResult.emailSent
+        ? "A new verification email has been sent."
+        : "We could not send the verification email. Please try again.",
     });
 
   } catch (err) {

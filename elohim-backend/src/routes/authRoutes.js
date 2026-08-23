@@ -78,21 +78,18 @@ const ensureAuthColumns = async () => {
   await ensureUserEmailUniqueness();
 };
 
-const sendVerificationEmailSafely = async (email, verifyLink, userId) => {
+const sendVerificationEmailSafely = async (email, verifyLink) => {
   try {
     await sendVerificationEmail(email, verifyLink);
+
     return {
       emailSent: true,
-      autoVerified: false,
     };
   } catch (error) {
     console.error("VERIFICATION EMAIL FAILED:", error);
-    // IMPORTANT:
-    // Never automatically verify a user's email when
-    // the verification email could not be delivered.
+
     return {
       emailSent: false,
-      autoVerified: false,
       error: "Verification email could not be sent.",
     };
   }
@@ -170,7 +167,7 @@ router.post("/register", async (req, res) => {
 
         const frontendBaseUrl = resolveFrontendBaseUrl(req);
         const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
-        const emailResult = await sendVerificationEmailSafely(normalizedEmail, verifyLink, foundUser.id);
+        const emailResult = await sendVerificationEmailSafely(normalizedEmail, verifyLink);
 
         return res.status(200).json({
           success: true,
@@ -216,7 +213,7 @@ router.post("/register", async (req, res) => {
 
       const frontendBaseUrl = resolveFrontendBaseUrl(req);
       const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
-      const emailResult = await sendVerificationEmailSafely(normalizedEmail, verifyLink, insertResult.rows[0].id);
+      const emailResult = await sendVerificationEmailSafely(normalizedEmail, verifyLink);
 
       return res.status(201).json({
         success: true,
@@ -379,7 +376,7 @@ router.post("/resend-verification", async (req, res) => {
     const frontendBaseUrl = resolveFrontendBaseUrl(req);
     const verifyLink = `${frontendBaseUrl}/verify-email?token=${verificationToken}`;
 
-    const emailResult = await sendVerificationEmailSafely(user.email, verifyLink, user.id);
+    const emailResult = await sendVerificationEmailSafely(user.email, verifyLink);
 
     return res.json({
       success: true,

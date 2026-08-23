@@ -1,54 +1,47 @@
-const nodemailer = require("nodemailer");
-const dns = require("dns");
+const axios = require("axios");
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: Number(process.env.EMAIL_PORT),
-  // Port 587 uses STARTTLS, not implicit SSL, so this must be false.
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  // Truehost's SMTP server can be slow to respond, so we give it more
-  // time before giving up on the connection/socket.
-  connectionTimeout: 15000, // 15s
-  socketTimeout: 15000, // 15s
-  // Reuse SMTP connections instead of opening a new one per email.
-  pool: true,
-  maxConnections: 5,
-  // Railway containers can't reach IPv6 addresses, but Gmail's DNS
-  // sometimes resolves to an IPv6 address, causing ENETUNREACH errors.
-  // Forcing IPv4 avoids this entirely.
-  family: 4,
-  // `family: 4` alone isn't always enough to stop Node from attempting
-  // an IPv6 connection, so we also override the DNS lookup used by the
-  // underlying socket to only ever resolve IPv4 addresses.
-  lookup: (host, options, callback) => {
-    dns.lookup(host, { family: 4 }, callback);
-  },
-  tls: {
-    // Truehost uses a certificate chain that doesn't always validate
-    // cleanly, so we relax certificate checking for compatibility.
-    rejectUnauthorized: false,
-  },
-});
+/* =========================
+   BREVO HTTPS EMAIL API
+========================= */
 
 const sendEmail = async ({ to, subject, htmlContent }) => {
   try {
-    console.log("📧 Sending email...");
+    console.log("📧 Sending email via Brevo API...");
 
-    const info = await transporter.sendMail({
-      from: `"Elohim Grains Store" <${process.env.EMAIL_FROM}>`,
-      to,
-      subject,
-      html: htmlContent,
-    });
+    const response = await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      {
+        sender: {
+          name: "Elohim Grains Store",
+          email: process.env.EMAIL_FROM,
+        },
+        to: [{ email: to }],
+        subject,
+        htmlContent,
+      },
+      {
+        headers: {
+          accept: "application/json",
+          "api-key": process.env.BREVO_API_KEY,
+          "content-type": "application/json",
+        },
+        timeout: 15000,
+      }
+    );
 
-    console.log("✅ EMAIL SENT:", info.messageId);
-    return info;
+    console.log("✅ EMAIL SENT:", response.data.messageId);
+
+    return response.data;
   } catch (error) {
-    console.error("❌ EMAIL ERROR:", error);
+    console.error("❌ EMAIL ERROR:");
+
+    if (error.response) {
+      console.error("Brevo status:", error.response.status);
+      console.error("Brevo response:", error.response.data);
+    } else {
+      console.error(error.message);
+    }
+
     throw error;
   }
 };

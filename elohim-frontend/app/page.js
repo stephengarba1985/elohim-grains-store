@@ -58,6 +58,8 @@ const STATIC_GRAIN_ASSET_PATHS = {
   "maize": "/grains/maize.jpg",
   "millet": "/grains/millet.jpg",
   "ogbono": "/grains/ogbono.jpg",
+  "pigeon pea": "/grains/Pigeon Pea.jpg",
+  "pigeon-pea": "/grains/Pigeon Pea.jpg",
   "plantain-flour": "/grains/plantain-flour.jpg",
   "rice": "/grains/rice.jpg",
   "sorghum": "/grains/sorghum.jpg",
@@ -67,6 +69,124 @@ const STATIC_GRAIN_ASSET_PATHS = {
 };
 
 const STABLE_GRAIN_IMAGE_SLUGS = new Set(Object.keys(STATIC_GRAIN_ASSET_PATHS));
+
+const normalizeGrainNameKey = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_]+/g, " ")
+    .replace(/[-]+/g, " ")
+    .replace(/[()]/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const buildImageNameVariants = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+
+  const normalized = normalizeGrainNameKey(raw);
+  if (!normalized) return [];
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  const title = tokens
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+  const variants = [
+    raw,
+    raw.replace(/[_]+/g, " "),
+    raw.replace(/[-]+/g, " "),
+    raw.replace(/[()]/g, " "),
+    normalized,
+    normalized.replace(/\s+/g, "-"),
+    normalized.replace(/\s+/g, "_"),
+    normalized.replace(/\s+/g, ""),
+    title,
+    title.replace(/\s+/g, "-"),
+    title.replace(/\s+/g, "_"),
+    title.replace(/\s+/g, ""),
+    tokens.join(""),
+    tokens.join("-"),
+    tokens.join("_"),
+  ];
+
+  return Array.from(new Set(variants)).filter(Boolean);
+};
+
+const buildImageCandidatesFromName = (value) => {
+  const variants = buildImageNameVariants(value);
+  const extensions = [".jpg", ".jpeg", ".png", ".jfif", ".webp"];
+  const candidates = [];
+
+  variants.forEach((variant) => {
+    const withSpaces = String(variant).trim();
+    const withDashes = withSpaces.replace(/\s+/g, "-");
+    const withUnderscore = withSpaces.replace(/\s+/g, "_");
+    const compact = withSpaces.replace(/\s+/g, "");
+
+    [withSpaces, withDashes, withUnderscore, compact].forEach((name) => {
+      if (!name) return;
+      extensions.forEach((ext) => {
+        candidates.push(`/grains/${name}${ext}`);
+      });
+    });
+  });
+
+  return Array.from(new Set(candidates));
+};
+
+const getStaticGrainAssetMatch = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const normalized = normalizeGrainNameKey(raw);
+  if (!normalized) return null;
+
+  const lookupMap = new Map(
+    Object.entries(STATIC_GRAIN_ASSET_PATHS).map(([key, path]) => [
+      normalizeGrainNameKey(key),
+      path,
+    ])
+  );
+
+  const candidates = Array.from(
+    new Set([
+      ...buildImageNameVariants(raw),
+      ...buildImageNameVariants(normalized),
+      normalized,
+      normalized.replace(/\s+/g, "-"),
+      normalized.replace(/\s+/g, "_"),
+      normalized.replace(/\s+/g, ""),
+    ])
+  );
+
+  for (const candidate of candidates) {
+    const key = normalizeGrainNameKey(candidate);
+    if (lookupMap.has(key)) return lookupMap.get(key);
+    if (lookupMap.has(key.replace(/\s+/g, "-"))) {
+      return lookupMap.get(key.replace(/\s+/g, "-"));
+    }
+    if (lookupMap.has(key.replace(/\s+/g, "_"))) {
+      return lookupMap.get(key.replace(/\s+/g, "_"));
+    }
+  }
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  for (const [key, path] of Object.entries(STATIC_GRAIN_ASSET_PATHS)) {
+    const staticTokens = normalizeGrainNameKey(key).split(" ").filter(Boolean);
+    if (
+      tokens.length > 0 &&
+      staticTokens.length > 0 &&
+      tokens.every((token) => staticTokens.includes(token))
+    ) {
+      return path;
+    }
+  }
+
+  return null;
+};
 
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
@@ -142,14 +262,60 @@ const normalizeImagePath = (imageUrl) => {
 };
 
 const getStableImageOverride = (productName) => {
-  const normalized = String(productName || "").trim().toLowerCase();
-  if (STATIC_GRAIN_ASSET_PATHS[normalized]) return STATIC_GRAIN_ASSET_PATHS[normalized];
+  const normalized = String(productName || "").trim();
+  if (!normalized) return null;
 
-  const slug = normalized.replace(/\s+/g, "-");
+  const direct = getStaticGrainAssetMatch(normalized);
+  if (direct) return direct;
 
+  const slug = normalizeGrainNameKey(normalized).replace(/\s+/g, "-");
   if (STABLE_GRAIN_IMAGE_SLUGS.has(slug)) return STATIC_GRAIN_ASSET_PATHS[slug];
 
   return null;
+};
+
+const getImageCandidateList = (productName) => {
+  const candidates = [];
+  const addCandidate = (candidate) => {
+    const value = String(candidate || "").trim();
+    if (!value || candidates.includes(value)) return;
+    candidates.push(value);
+  };
+
+  const stableOverride = getStableImageOverride(productName);
+  if (stableOverride) addCandidate(stableOverride);
+
+  buildImageCandidatesFromName(productName).forEach(addCandidate);
+
+  const candidateSources = [
+    productName,
+    productName?.image_url,
+    productName?.image,
+  ].filter(Boolean);
+
+  candidateSources.forEach((source) => {
+    const normalized = normalizeImagePath(source);
+    if (normalized && normalized !== "/grains/rice.jpg") {
+      addCandidate(normalized);
+    }
+  });
+
+  addCandidate("/grains/rice.jpg");
+
+  return candidates;
+};
+
+const getNextImageCandidate = (productName, currentSrc) => {
+  const candidates = getImageCandidateList(productName);
+  const current = String(currentSrc || "").trim();
+
+  if (!candidates.length) return "/grains/rice.jpg";
+  if (!current) return candidates[0];
+
+  const index = candidates.indexOf(current);
+  if (index >= 0) return candidates[index + 1] || candidates[0];
+
+  return candidates[0];
 };
 
 const getProductImage = (product) => {
@@ -172,12 +338,7 @@ const getProductImage = (product) => {
     }
   }
 
-  const fileName = String(product?.name || "Rice")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^\w().-]/g, "");
-
-  return normalizeImagePath(fileName);
+  return getImageCandidateList(product?.name)[0] || "/grains/rice.jpg";
 };
 
 const getProductStock = (product) => {
@@ -235,6 +396,12 @@ function ProductTile({ product }) {
           unoptimized
           sizes="(min-width: 1536px) 20vw, (min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
           className="object-cover transition duration-500 group-hover:scale-110"
+          onError={(event) => {
+            const next = getNextImageCandidate(product?.name, event.currentTarget.getAttribute("src"));
+            if (next && next !== event.currentTarget.getAttribute("src")) {
+              event.currentTarget.src = next;
+            }
+          }}
         />
         <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm">
           {stock > 0 ? `${stock} in stock` : "Check stock"}

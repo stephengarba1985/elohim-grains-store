@@ -70,10 +70,12 @@ export default function AuthPage() {
       localStorage.removeItem("user");
       window.dispatchEvent(new Event("auth:changed"));
 
-      toast.error(
+      const serverMessage =
+        err.response?.data?.message ||
         err.response?.data?.error ||
-          (isLogin ? "Login failed" : "Registration failed")
-      );
+        (isLogin ? "Login failed" : "Registration failed");
+
+      toast.error(serverMessage);
     }
   };
 

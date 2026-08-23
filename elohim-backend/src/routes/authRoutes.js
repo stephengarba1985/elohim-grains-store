@@ -67,10 +67,11 @@ const ensureAuthColumns = async () => {
       ADD COLUMN IF NOT EXISTS verification_token TEXT
   `);
 
-  // Preserve access for legacy rows from older schemas.
+  // Legacy rows without an explicit verification flag must stay unverified
+  // until the user completes email verification.
   await pool.query(`
     UPDATE users
-    SET email_verified = TRUE
+    SET email_verified = FALSE
     WHERE email_verified IS NULL
   `);
 
@@ -434,14 +435,11 @@ router.post("/login", async (req, res) => {
 
     const user = result.rows[0];
 
-    // Email verification check
-    // Admin accounts are often seeded manually and may not carry a verification flag.
-    const isAdmin = Boolean(user.is_admin);
-    const isEmailVerified = user.email_verified === true;
-
-    if (!isAdmin && !isEmailVerified) {
+    // Email verification is required for all users before login is allowed.
+    if (!user.email_verified) {
       return res.status(403).json({
-        error: "Please verify your email before logging in.",
+        message: "Please verify your email before logging in.",
+        emailVerified: false,
       });
     }
 

@@ -37,7 +37,11 @@ const ensureUserEmailUniqueness = async () => {
         id,
         ROW_NUMBER() OVER (
           PARTITION BY LOWER(email)
-          ORDER BY email_verified DESC, created_at DESC, id DESC
+          ORDER BY
+            CASE WHEN is_admin = TRUE THEN 0 ELSE 1 END DESC,
+            email_verified DESC,
+            created_at DESC,
+            id DESC
         ) AS row_num
       FROM users
       WHERE email IS NOT NULL
@@ -121,7 +125,17 @@ router.post("/register", async (req, res) => {
 
     // Check if email already exists
     const existingUser = await pool.query(
-      "SELECT id, email_verified FROM users WHERE LOWER(email) = LOWER($1)",
+      `
+      SELECT id, email_verified
+      FROM users
+      WHERE LOWER(email) = LOWER($1)
+      ORDER BY
+        CASE WHEN is_admin = TRUE THEN 0 ELSE 1 END DESC,
+        email_verified DESC,
+        created_at DESC,
+        id DESC
+      LIMIT 1
+      `,
       [normalizedEmail]
     );
 
@@ -314,6 +328,12 @@ router.post("/resend-verification", async (req, res) => {
       SELECT id, email, email_verified
       FROM users
       WHERE LOWER(email) = LOWER($1)
+      ORDER BY
+        CASE WHEN is_admin = TRUE THEN 0 ELSE 1 END DESC,
+        email_verified DESC,
+        created_at DESC,
+        id DESC
+      LIMIT 1
       `,
       [normalizedEmail]
     );
@@ -387,6 +407,12 @@ router.post("/login", async (req, res) => {
       SELECT *
       FROM users
       WHERE LOWER(email) = LOWER($1)
+      ORDER BY
+        CASE WHEN is_admin = TRUE THEN 0 ELSE 1 END DESC,
+        email_verified DESC,
+        created_at DESC,
+        id DESC
+      LIMIT 1
       `,
       [normalizedEmail]
     );

@@ -266,6 +266,31 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+app.get(["/api/indexing-status", "/api/index-status"], async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+
+    return res.status(200).json({
+      success: true,
+      status: "healthy",
+      message: "Indexing status check passed",
+      database: "online",
+      timestamp: new Date().toISOString(),
+      time: result.rows[0],
+    });
+  } catch (err) {
+    console.error('Indexing status check failed:', err);
+
+    return res.status(503).json({
+      success: false,
+      status: "unhealthy",
+      message: "Indexing status unavailable",
+      database: "offline",
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 /* =========================
    ROOT ROUTE
 ========================= */

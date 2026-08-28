@@ -10,6 +10,18 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
+  images: {
+    remotePatterns: [
+      { protocol: "http", hostname: "localhost" },
+      { protocol: "https", hostname: "localhost" },
+      { protocol: "http", hostname: "127.0.0.1" },
+      { protocol: "https", hostname: "127.0.0.1" },
+      { protocol: "https", hostname: "elohimgrains.com" },
+      { protocol: "https", hostname: "www.elohimgrains.com" },
+      { protocol: "https", hostname: "**.railway.app" },
+      { protocol: "https", hostname: "**.vercel.app" },
+    ],
+  },
   async rewrites() {
     return [
       {

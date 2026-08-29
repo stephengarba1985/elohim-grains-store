@@ -28,6 +28,26 @@ const STATIC_GRAIN_ASSET_PATHS = {
   "soybeans": "/grains/soybeans.jpg",
   "wheat": "/grains/wheat.jpg",
   "yam-flour(amala)": "/grains/yam-flour(amala).jpg",
+  "flour": "/grains/Flour.jpg",
+  "flours": "/grains/Flour.jpg",
+  "oil": "/grains/Oil.png",
+  "cooking oil": "/grains/Oil.png",
+  "leaf spices": "/grains/Leaf spices.jpg",
+  "leaf-spices": "/grains/Leaf spices.jpg",
+  "berry fruits": "/grains/Berry.jpg",
+  "berry-fruits": "/grains/Berry.jpg",
+  "bark spices": "/grains/BerkSpices.jpg",
+  "bark-spices": "/grains/BerkSpices.jpg",
+  "root spices": "/grains/RootSpices.jpg",
+  "root-spices": "/grains/RootSpices.jpg",
+  "indigenous fruits": "/grains/IndigenousFruits.jpg",
+  "indigenous-fruits": "/grains/IndigenousFruits.jpg",
+  "melon fruits": "/grains/Melon.jpg",
+  "melon-fruits": "/grains/Melon.jpg",
+  "seed spices": "/grains/Seed Spices.jpg",
+  "flower spices": "/grains/Flower Spices.jpg",
+  "fruit spices": "/grains/Fruit Spices.jpg",
+  "root and tuber": "/grains/Root & Tuber.jpg",
 };
 
 const STABLE_GRAIN_IMAGE_SLUGS = new Set(Object.keys(STATIC_GRAIN_ASSET_PATHS));
@@ -447,21 +467,20 @@ export default function ProductDetails() {
       return normalized;
     }
 
+    const sanitized = normalized.replace(/^\/+/, "");
+    const cleanPath = sanitized.replace(/^admin\//i, "").replace(/^grains\//i, "");
+
+    if (sanitized.startsWith("uploads/")) return `/${sanitized}`;
+    if (sanitized.startsWith("grains/uploads/")) return `/${cleanPath}`;
+    if (sanitized.startsWith("images/")) return `/grains/${sanitized.replace(/^images\//i, "") || "rice.jpg"}`;
+    if (sanitized.startsWith("grains/")) return `/${sanitized}`;
     if (normalized.startsWith("/uploads/")) return normalized;
-    if (normalized.startsWith("uploads/")) return `/${normalized}`;
-    if (normalized.startsWith("/images/")) return `/grains/${normalized.split("/images/").pop() || "rice.jpg"}`;
-    if (normalized.startsWith("images/")) return `/grains/${normalized.replace(/^images\//i, "") || "rice.jpg"}`;
     if (normalized.startsWith("/grains/")) return normalized;
-    if (normalized.startsWith("grains/")) return `/${normalized}`;
+    if (normalized.startsWith("/")) return normalized;
+    if (cleanPath.includes("/uploads/")) return `/${cleanPath}`;
+    if (cleanPath.includes("/")) return `/${cleanPath}`;
 
-    const withoutLeadingSlash = normalized.replace(/^\/+/, "");
-    const withoutAdminPrefix = withoutLeadingSlash.replace(/^admin\//i, "");
-    const withoutGrainsPrefix = withoutAdminPrefix.replace(/^grains\//i, "");
-    const cleaned = withoutGrainsPrefix.replace(/^\/+/, "");
-    const leaf = cleaned.split("/").pop();
-    const fileName = leaf || "rice.jpg";
-
-    return `/grains/${fileName}`;
+    return `/grains/${cleanPath || "rice.jpg"}`;
   };
 
   const getStableImageOverride = (productName) => {

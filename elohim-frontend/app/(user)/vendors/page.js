@@ -34,21 +34,20 @@ const normalizeImagePath = (imageUrl) => {
     return normalized;
   }
 
+  const sanitized = normalized.replace(/^\/+/, "");
+  const cleanPath = sanitized.replace(/^admin\//i, "").replace(/^grains\//i, "");
+
+  if (sanitized.startsWith("uploads/")) return `/${sanitized}`;
+  if (sanitized.startsWith("grains/uploads/")) return `/${cleanPath}`;
+  if (sanitized.startsWith("images/")) return `/grains/${sanitized.replace(/^images\//i, "") || "rice.jpg"}`;
+  if (sanitized.startsWith("grains/")) return `/${sanitized}`;
   if (normalized.startsWith("/uploads/")) return normalized;
-  if (normalized.startsWith("uploads/")) return `/${normalized}`;
-  if (normalized.startsWith("/images/")) return `/grains/${normalized.split("/images/").pop() || "rice.jpg"}`;
-  if (normalized.startsWith("images/")) return `/grains/${normalized.replace(/^images\//i, "") || "rice.jpg"}`;
   if (normalized.startsWith("/grains/")) return normalized;
-  if (normalized.startsWith("grains/")) return `/${normalized}`;
+  if (normalized.startsWith("/")) return normalized;
+  if (cleanPath.includes("/uploads/")) return `/${cleanPath}`;
+  if (cleanPath.includes("/")) return `/${cleanPath}`;
 
-  const withoutLeadingSlash = normalized.replace(/^\/+/, "");
-  const withoutAdminPrefix = withoutLeadingSlash.replace(/^admin\//i, "");
-  const withoutGrainsPrefix = withoutAdminPrefix.replace(/^grains\//i, "");
-  const cleaned = withoutGrainsPrefix.replace(/^\/+/, "");
-  const leaf = cleaned.split("/").pop();
-  const fileName = leaf || "rice.jpg";
-
-  return `/grains/${fileName}`;
+  return `/grains/${cleanPath || "rice.jpg"}`;
 };
 
 export default function VendorMarketplacePage() {

@@ -161,24 +161,20 @@ export default function InventoryPage() {
       return normalizedUrl;
     }
 
+    const sanitized = normalizedUrl.replace(/^\/+/, "");
+    const cleanPath = sanitized.replace(/^admin\//i, "").replace(/^grains\//i, "");
+
+    if (sanitized.startsWith("uploads/")) return `/${sanitized}`;
+    if (sanitized.startsWith("grains/uploads/")) return `/${cleanPath}`;
+    if (sanitized.startsWith("images/")) return `/grains/${sanitized.replace(/^images\//i, "") || "rice.jpg"}`;
+    if (sanitized.startsWith("grains/")) return `/${sanitized}`;
     if (normalizedUrl.startsWith("/uploads/")) return normalizedUrl;
-    if (normalizedUrl.startsWith("uploads/")) return `/${normalizedUrl}`;
-
-    if (normalizedUrl.startsWith("/images/")) {
-      return `/grains/${normalizedUrl.split("/images/").pop() || "rice.jpg"}`;
-    }
-
-    if (normalizedUrl.startsWith("images/")) {
-      return `/grains/${normalizedUrl.replace(/^images\//i, "") || "rice.jpg"}`;
-    }
-
     if (normalizedUrl.startsWith("/grains/")) return normalizedUrl;
-    if (normalizedUrl.startsWith("grains/")) return `/${normalizedUrl}`;
     if (normalizedUrl.startsWith("/")) return normalizedUrl;
+    if (cleanPath.includes("/uploads/")) return `/${cleanPath}`;
+    if (cleanPath.includes("/")) return `/${cleanPath}`;
 
-    const normalized = normalizedUrl.replace(/^grains\//i, "");
-
-    return `/grains/${normalized || "rice.jpg"}`;
+    return `/grains/${cleanPath || "rice.jpg"}`;
   };
 
   const getTotalStock = (product) => {

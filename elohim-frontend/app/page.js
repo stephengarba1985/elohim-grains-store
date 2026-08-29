@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import HomeWalletCard from "@/components/HomeWalletCard";
 
@@ -236,7 +235,7 @@ const getProductPrice = (product) => {
 };
 
 const normalizeImagePath = (imageUrl) => {
-  if (!imageUrl) return "";
+  if (!imageUrl) return "/grains/rice.jpg";
 
   const normalized = String(imageUrl)
     .replace(/\\/g, "/")
@@ -246,10 +245,12 @@ const normalizeImagePath = (imageUrl) => {
 
   if (!normalized || normalized === "/") return "/grains/rice.jpg";
   if (normalized.startsWith("http")) return normalized;
-  if (normalized.startsWith("/uploads/")) return `${backendRootUrl}${normalized}`;
-  if (normalized.startsWith("uploads/")) return `${backendRootUrl}/${normalized}`;
+  if (normalized.startsWith("/uploads/")) return normalized;
+  if (normalized.startsWith("uploads/")) return `/${normalized}`;
   if (normalized.startsWith("/images/")) return `/grains/${normalized.split("/images/").pop() || "rice.jpg"}`;
   if (normalized.startsWith("images/")) return `/grains/${normalized.replace(/^images\//i, "") || "rice.jpg"}`;
+  if (normalized.startsWith("/grains/")) return normalized;
+  if (normalized.startsWith("grains/")) return `/${normalized}`;
 
   const withoutLeadingSlash = normalized.replace(/^\/+/, "");
   const withoutAdminPrefix = withoutLeadingSlash.replace(/^admin\//i, "");
@@ -389,13 +390,10 @@ function ProductTile({ product }) {
       className="group block overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
     >
       <div className="relative h-44 bg-slate-100">
-        <Image
+        <img
           src={getProductImage(product)}
           alt={product.name}
-          fill
-          unoptimized
-          sizes="(min-width: 1536px) 20vw, (min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-          className="object-cover transition duration-500 group-hover:scale-110"
+          className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
         />
         <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm">
           {stock > 0 ? `${stock} in stock` : "Check stock"}
@@ -436,13 +434,10 @@ export default async function Home() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#f0fdf4_0%,#f8fafc_40%,#f8fafc_100%)] text-slate-950">
       <section className="relative overflow-hidden bg-slate-950">
         <div className="absolute inset-0">
-          <Image
+          <img
             src={heroImage}
             alt="Bags of rice and grains"
-            fill
-            priority
-            className="object-cover opacity-35"
-            sizes="100vw"
+            className="h-full w-full object-cover opacity-35"
           />
           <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(2,6,23,0.98),rgba(15,23,42,0.88),rgba(20,83,45,0.62))]" />
           <div className="absolute -left-10 top-10 h-44 w-44 rounded-full bg-green-400/20 blur-3xl" />

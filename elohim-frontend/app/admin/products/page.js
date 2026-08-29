@@ -284,7 +284,15 @@ export default function ProductsPage() {
 
     if (!normalized || normalized === "/") return "/grains/rice.jpg";
 
-    if (normalized.startsWith("http")) {
+    if (/^https?:\/\//i.test(normalized)) {
+      try {
+        const parsed = new URL(normalized);
+        const pathname = parsed.pathname || "";
+        if (pathname.startsWith("/uploads/")) return pathname;
+        if (pathname.startsWith("/grains/")) return pathname;
+      } catch (_) {
+        // ignore invalid URLs and fall through to the static asset handler
+      }
       return normalized;
     }
 
@@ -318,26 +326,17 @@ export default function ProductsPage() {
       }
     }
 
-    if (normalized.startsWith("/uploads/")) {
-      return `${getBackendRootUrl()}${normalized}`;
-    }
-
-    if (normalized.startsWith("uploads/")) {
-      return `${getBackendRootUrl()}/${normalized}`;
-    }
-
+    if (normalized.startsWith("/uploads/")) return normalized;
+    if (normalized.startsWith("uploads/")) return `/${normalized}`;
     if (normalized.startsWith("/images/")) {
       return `/grains/${normalized.split("/images/").pop() || "rice.jpg"}`;
     }
-
     if (normalized.startsWith("images/")) {
       return `/grains/${normalized.replace(/^images\//i, "") || "rice.jpg"}`;
     }
-
     if (normalized.startsWith("/grains/")) {
       return normalized;
     }
-
     if (normalized.startsWith("/")) {
       return normalized;
     }

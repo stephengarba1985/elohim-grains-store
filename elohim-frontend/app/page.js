@@ -245,7 +245,20 @@ const normalizeImagePath = (imageUrl) => {
     .trim();
 
   if (!normalized || normalized === "/") return "/grains/rice.jpg";
-  if (normalized.startsWith("http")) return normalized;
+
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      const parsed = new URL(normalized);
+      const pathname = parsed.pathname || "";
+      if (pathname.startsWith("/uploads/")) return pathname;
+      if (pathname.startsWith("/grains/")) return pathname;
+    } catch (_) {
+      // fall through for non-URL values
+    }
+
+    return normalized;
+  }
+
   if (normalized.startsWith("/uploads/")) return normalized;
   if (normalized.startsWith("uploads/")) return `/${normalized}`;
   if (normalized.startsWith("/images/")) return `/grains/${normalized.split("/images/").pop() || "rice.jpg"}`;

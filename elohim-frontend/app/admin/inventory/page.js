@@ -139,7 +139,7 @@ export default function InventoryPage() {
     `₦${Number(price || 0).toLocaleString()}`;
 
   const normalizeImagePath = (imageUrl) => {
-    if (!imageUrl) return "/placeholder.jpg";
+    if (!imageUrl) return "/grains/rice.jpg";
 
     const normalizedUrl = String(imageUrl)
       .replace(/\\/g, "/")
@@ -148,15 +148,21 @@ export default function InventoryPage() {
       .trim();
 
     if (!normalizedUrl || normalizedUrl === "/") return "/grains/rice.jpg";
-    if (normalizedUrl.startsWith("http")) return normalizedUrl;
 
-    if (normalizedUrl.startsWith("/uploads/")) {
-      return `${getBackendRootUrl()}${normalizedUrl}`;
+    if (/^https?:\/\//i.test(normalizedUrl)) {
+      try {
+        const parsed = new URL(normalizedUrl);
+        const pathname = parsed.pathname || "";
+        if (pathname.startsWith("/uploads/")) return pathname;
+        if (pathname.startsWith("/grains/")) return pathname;
+      } catch (_) {
+        // fall through to the default path handling below
+      }
+      return normalizedUrl;
     }
 
-    if (normalizedUrl.startsWith("uploads/")) {
-      return `${getBackendRootUrl()}/${normalizedUrl}`;
-    }
+    if (normalizedUrl.startsWith("/uploads/")) return normalizedUrl;
+    if (normalizedUrl.startsWith("uploads/")) return `/${normalizedUrl}`;
 
     if (normalizedUrl.startsWith("/images/")) {
       return `/grains/${normalizedUrl.split("/images/").pop() || "rice.jpg"}`;
@@ -167,12 +173,12 @@ export default function InventoryPage() {
     }
 
     if (normalizedUrl.startsWith("/grains/")) return normalizedUrl;
-
+    if (normalizedUrl.startsWith("grains/")) return `/${normalizedUrl}`;
     if (normalizedUrl.startsWith("/")) return normalizedUrl;
 
     const normalized = normalizedUrl.replace(/^grains\//i, "");
 
-    return `/grains/${normalized}`;
+    return `/grains/${normalized || "rice.jpg"}`;
   };
 
   const getTotalStock = (product) => {

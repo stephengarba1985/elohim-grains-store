@@ -22,14 +22,14 @@ const normalizeImagePath = (imageUrl) => {
 
   if (!normalized || normalized === "/") return "/grains/rice.jpg";
 
-  if (normalized.startsWith("http")) {
+  if (/^https?:\/\//i.test(normalized)) {
     try {
       const parsed = new URL(normalized);
-      if (parsed.pathname.startsWith("/uploads/")) {
-        return parsed.pathname;
-      }
+      const pathname = parsed.pathname || "";
+      if (pathname.startsWith("/uploads/")) return pathname;
+      if (pathname.startsWith("/grains/")) return pathname;
     } catch (_) {
-      // ignore invalid URLs and fall through to the static asset handler
+      // fall through to the default path handling below
     }
     return normalized;
   }

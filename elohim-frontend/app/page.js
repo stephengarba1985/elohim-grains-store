@@ -396,12 +396,6 @@ function ProductTile({ product }) {
           unoptimized
           sizes="(min-width: 1536px) 20vw, (min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
           className="object-cover transition duration-500 group-hover:scale-110"
-          onError={(event) => {
-            const next = getNextImageCandidate(product?.name, event.currentTarget.getAttribute("src"));
-            if (next && next !== event.currentTarget.getAttribute("src")) {
-              event.currentTarget.src = next;
-            }
-          }}
         />
         <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm">
           {stock > 0 ? `${stock} in stock` : "Check stock"}

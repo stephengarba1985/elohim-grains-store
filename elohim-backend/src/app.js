@@ -300,6 +300,13 @@ app.get('/', (req, res) => {
   });
 });
 
+app.get('/robots.txt', (req, res) => {
+  const siteUrl = process.env.FRONTEND_URL || "https://www.elohimgrains.com";
+
+  res.type('text/plain');
+  res.send(`User-agent: *\nAllow: /\nSitemap: ${siteUrl}/sitemap.xml\n`);
+});
+
 /* =========================
    404 HANDLER (VERY IMPORTANT)
 ========================= */

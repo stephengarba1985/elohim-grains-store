@@ -2,6 +2,21 @@ const pool = require("../config/db");
 const axios = require("axios");
 const sendWhatsApp = require("./sendWhatsApp");
 
+const userHasColumn = async (columnName) => {
+  const result = await pool.query(
+    `
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'users'
+        AND column_name = $1
+    `,
+    [columnName]
+  );
+
+  return Number(result.rowCount || 0) > 0;
+};
+
 const runSubscriptions = async () => {
   try {
     console.log("Running subscription job...");
@@ -14,19 +29,22 @@ const runSubscriptions = async () => {
       AND s.status = 'active'
     `);
 
+    const hasAuthorizationCodeColumn = await userHasColumn("authorization_code");
+
     for (const sub of dueSubs.rows) {
       console.log(`Processing sub ID: ${sub.id}`);
 
       const total = Number(sub.price || 0) * Number(sub.quantity || 0);
 
-      const billingUserRes = await pool.query(
-        "SELECT email, authorization_code, phone, name FROM users WHERE id = $1",
-        [sub.user_id]
-      );
+      const billingQuery = hasAuthorizationCodeColumn
+        ? "SELECT email, authorization_code, phone, name FROM users WHERE id = $1"
+        : "SELECT email, phone, name FROM users WHERE id = $1";
 
+      const billingUserRes = await pool.query(billingQuery, [sub.user_id]);
       const user = billingUserRes.rows[0];
+      const authorizationCode = user?.authorization_code || null;
 
-      if (!user?.email || !user?.authorization_code) {
+      if (!user?.email || !authorizationCode) {
         console.log(`Skipping subscription ${sub.id}: missing saved card details`);
         continue;
       }
@@ -34,7 +52,7 @@ const runSubscriptions = async () => {
       await axios.post(
         "https://api.paystack.co/transaction/charge_authorization",
         {
-          authorization_code: user.authorization_code,
+          authorization_code: authorizationCode,
           email: user.email,
           amount: total * 100,
         },

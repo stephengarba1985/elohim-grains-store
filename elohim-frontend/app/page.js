@@ -256,7 +256,9 @@ const getProductPrice = (product) => {
 };
 
 const normalizeImagePath = (imageUrl) => {
-  if (!imageUrl) return "/grains/rice.jpg";
+  if (!imageUrl) {
+    return "/grains/rice.jpg";
+  }
 
   const normalized = String(imageUrl)
     .replace(/\\/g, "/")
@@ -264,35 +266,60 @@ const normalizeImagePath = (imageUrl) => {
     .split("#")[0]
     .trim();
 
-  if (!normalized || normalized === "/") return "/grains/rice.jpg";
+  if (!normalized || normalized === "/") {
+    return "/grains/rice.jpg";
+  }
 
+  // Full external URL
   if (/^https?:\/\//i.test(normalized)) {
-    try {
-      const parsed = new URL(normalized);
-      const pathname = parsed.pathname || "";
-      if (pathname.startsWith("/uploads/")) return pathname;
-      if (pathname.startsWith("/grains/")) return pathname;
-    } catch (_) {
-      // fall through for non-URL values
-    }
-
     return normalized;
   }
 
-  const sanitized = normalized.replace(/^\/+/, "");
-  const cleanPath = sanitized.replace(/^admin\//i, "").replace(/^grains\//i, "");
+  // Backend uploaded images
+  if (
+    normalized.startsWith("/uploads/") ||
+    normalized.startsWith("uploads/")
+  ) {
+    const backendRoot = getBackendRootUrl();
 
-  if (sanitized.startsWith("uploads/")) return `/${sanitized}`;
-  if (sanitized.startsWith("grains/uploads/")) return `/${cleanPath}`;
-  if (sanitized.startsWith("images/")) return `/grains/${sanitized.replace(/^images\//i, "") || "rice.jpg"}`;
-  if (sanitized.startsWith("grains/")) return `/${sanitized}`;
-  if (normalized.startsWith("/uploads/")) return normalized;
-  if (normalized.startsWith("/grains/")) return normalized;
-  if (normalized.startsWith("/")) return normalized;
-  if (cleanPath.includes("/uploads/")) return `/${cleanPath}`;
-  if (cleanPath.includes("/")) return `/${cleanPath}`;
+    return normalized.startsWith("/")
+      ? `${backendRoot}${normalized}`
+      : `${backendRoot}/${normalized}`;
+  }
 
-  return `/grains/${cleanPath || "rice.jpg"}`;
+  // Existing frontend grain images
+  if (normalized.startsWith("/grains/")) {
+    return normalized;
+  }
+
+  if (normalized.startsWith("grains/")) {
+    return `/${normalized}`;
+  }
+
+  // Legacy /images/... paths
+  if (normalized.startsWith("/images/")) {
+    return `/grains/${
+      normalized.split("/images/").pop() ||
+      "rice.jpg"
+    }`;
+  }
+
+  if (normalized.startsWith("images/")) {
+    return `/grains/${
+      normalized.replace(/^images\//i, "") ||
+      "rice.jpg"
+    }`;
+  }
+
+  // Other absolute frontend paths
+  if (normalized.startsWith("/")) {
+    return normalized;
+  }
+
+  return `/grains/${normalized.replace(
+    /^grains\//i,
+    ""
+  )}`;
 };
 
 const getStableImageOverride = (productName) => {

@@ -294,7 +294,9 @@ export default function ProductsPage() {
   };
 
   const normalizeImagePath = (imageUrl) => {
-    if (!imageUrl) return "/grains/rice.jpg";
+    if (!imageUrl) {
+      return "/grains/rice.jpg";
+    }
 
     const normalized = String(imageUrl)
       .replace(/\\/g, "/")
@@ -302,64 +304,60 @@ export default function ProductsPage() {
       .split("#")[0]
       .trim();
 
-    if (!normalized || normalized === "/") return "/grains/rice.jpg";
+    if (!normalized || normalized === "/") {
+      return "/grains/rice.jpg";
+    }
 
+    // Full external URL
     if (/^https?:\/\//i.test(normalized)) {
-      try {
-        const parsed = new URL(normalized);
-        const pathname = parsed.pathname || "";
-        if (pathname.startsWith("/uploads/")) return pathname;
-        if (pathname.startsWith("/grains/")) return pathname;
-      } catch (_) {
-        // ignore invalid URLs and fall through to the static asset handler
-      }
       return normalized;
     }
 
-    const exactLookup = normalized
-      .replace(/^\//, "")
-      .replace(/^grains\//i, "")
-      .replace(/\.[a-z0-9]+$/i, "")
-      .trim()
-      .toLowerCase();
+    // Backend uploaded images
+    if (
+      normalized.startsWith("/uploads/") ||
+      normalized.startsWith("uploads/")
+    ) {
+      const backendRoot = getBackendRootUrl();
 
-    if (STATIC_GRAIN_ASSET_PATHS[exactLookup]) {
-      return STATIC_GRAIN_ASSET_PATHS[exactLookup];
+      return normalized.startsWith("/")
+        ? `${backendRoot}${normalized}`
+        : `${backendRoot}/${normalized}`;
     }
 
-    if (STATIC_GRAIN_ASSET_PATHS[normalized.toLowerCase()]) {
-      return STATIC_GRAIN_ASSET_PATHS[normalized.toLowerCase()];
+    // Existing frontend grain images
+    if (normalized.startsWith("/grains/")) {
+      return normalized;
     }
 
-    const staticMatch = getStaticGrainAssetMatch(normalized);
-    if (staticMatch) {
-      return staticMatch;
+    if (normalized.startsWith("grains/")) {
+      return `/${normalized}`;
     }
 
-    const generated = buildImageCandidatesFromName(normalized);
-    for (const candidate of generated) {
-      if (STATIC_GRAIN_ASSET_PATHS[candidate.replace(/^\/grains\//i, "").toLowerCase()]) {
-        return STATIC_GRAIN_ASSET_PATHS[candidate.replace(/^\/grains\//i, "").toLowerCase()];
-      }
-      if (candidate && candidate !== "/grains/rice.jpg") {
-        return candidate;
-      }
+    // Legacy /images/... paths
+    if (normalized.startsWith("/images/")) {
+      return `/grains/${
+        normalized.split("/images/").pop() ||
+        "rice.jpg"
+      }`;
     }
 
-    const sanitized = normalized.replace(/^\/+/, "");
-    const cleanPath = sanitized.replace(/^admin\//i, "").replace(/^grains\//i, "");
+    if (normalized.startsWith("images/")) {
+      return `/grains/${
+        normalized.replace(/^images\//i, "") ||
+        "rice.jpg"
+      }`;
+    }
 
-    if (sanitized.startsWith("uploads/")) return `/${sanitized}`;
-    if (sanitized.startsWith("grains/uploads/")) return `/${cleanPath}`;
-    if (sanitized.startsWith("images/")) return `/grains/${sanitized.replace(/^images\//i, "") || "rice.jpg"}`;
-    if (sanitized.startsWith("grains/")) return `/${sanitized}`;
-    if (normalized.startsWith("/uploads/")) return normalized;
-    if (normalized.startsWith("/grains/")) return normalized;
-    if (normalized.startsWith("/")) return normalized;
-    if (cleanPath.includes("/uploads/")) return `/${cleanPath}`;
-    if (cleanPath.includes("/")) return `/${cleanPath}`;
+    // Other absolute frontend paths
+    if (normalized.startsWith("/")) {
+      return normalized;
+    }
 
-    return `/grains/${cleanPath || "rice.jpg"}`;
+    return `/grains/${normalized.replace(
+      /^grains\//i,
+      ""
+    )}`;
   };
 
   /* =========================

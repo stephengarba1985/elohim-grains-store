@@ -139,7 +139,9 @@ export default function InventoryPage() {
     `₦${Number(price || 0).toLocaleString()}`;
 
   const normalizeImagePath = (imageUrl) => {
-    if (!imageUrl) return "/grains/rice.jpg";
+    if (!imageUrl) {
+      return "/grains/rice.jpg";
+    }
 
     const normalizedUrl = String(imageUrl)
       .replace(/\\/g, "/")
@@ -147,34 +149,60 @@ export default function InventoryPage() {
       .split("#")[0]
       .trim();
 
-    if (!normalizedUrl || normalizedUrl === "/") return "/grains/rice.jpg";
+    if (!normalizedUrl || normalizedUrl === "/") {
+      return "/grains/rice.jpg";
+    }
 
+    // Full external URL
     if (/^https?:\/\//i.test(normalizedUrl)) {
-      try {
-        const parsed = new URL(normalizedUrl);
-        const pathname = parsed.pathname || "";
-        if (pathname.startsWith("/uploads/")) return pathname;
-        if (pathname.startsWith("/grains/")) return pathname;
-      } catch (_) {
-        // fall through to the default path handling below
-      }
       return normalizedUrl;
     }
 
-    const sanitized = normalizedUrl.replace(/^\/+/, "");
-    const cleanPath = sanitized.replace(/^admin\//i, "").replace(/^grains\//i, "");
+    // Backend uploaded images
+    if (
+      normalizedUrl.startsWith("/uploads/") ||
+      normalizedUrl.startsWith("uploads/")
+    ) {
+      const backendRoot = getBackendRootUrl();
 
-    if (sanitized.startsWith("uploads/")) return `/${sanitized}`;
-    if (sanitized.startsWith("grains/uploads/")) return `/${cleanPath}`;
-    if (sanitized.startsWith("images/")) return `/grains/${sanitized.replace(/^images\//i, "") || "rice.jpg"}`;
-    if (sanitized.startsWith("grains/")) return `/${sanitized}`;
-    if (normalizedUrl.startsWith("/uploads/")) return normalizedUrl;
-    if (normalizedUrl.startsWith("/grains/")) return normalizedUrl;
-    if (normalizedUrl.startsWith("/")) return normalizedUrl;
-    if (cleanPath.includes("/uploads/")) return `/${cleanPath}`;
-    if (cleanPath.includes("/")) return `/${cleanPath}`;
+      return normalizedUrl.startsWith("/")
+        ? `${backendRoot}${normalizedUrl}`
+        : `${backendRoot}/${normalizedUrl}`;
+    }
 
-    return `/grains/${cleanPath || "rice.jpg"}`;
+    // Existing frontend grain images
+    if (normalizedUrl.startsWith("/grains/")) {
+      return normalizedUrl;
+    }
+
+    if (normalizedUrl.startsWith("grains/")) {
+      return `/${normalizedUrl}`;
+    }
+
+    // Legacy /images/... paths
+    if (normalizedUrl.startsWith("/images/")) {
+      return `/grains/${
+        normalizedUrl.split("/images/").pop() ||
+        "rice.jpg"
+      }`;
+    }
+
+    if (normalizedUrl.startsWith("images/")) {
+      return `/grains/${
+        normalizedUrl.replace(/^images\//i, "") ||
+        "rice.jpg"
+      }`;
+    }
+
+    // Other absolute frontend paths
+    if (normalizedUrl.startsWith("/")) {
+      return normalizedUrl;
+    }
+
+    return `/grains/${normalizedUrl.replace(
+      /^grains\//i,
+      ""
+    )}`;
   };
 
   const getTotalStock = (product) => {

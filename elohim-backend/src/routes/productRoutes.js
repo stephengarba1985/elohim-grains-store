@@ -83,6 +83,57 @@ const parseNumber = (value, fallback = 0) => {
   return Number.isFinite(number) ? number : fallback;
 };
 
+const isStaleUploadFilenameReference = (value) => {
+  const normalized = String(value || "")
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
+
+  if (!normalized) return false;
+
+  const candidate = normalized
+    .replace(/^https?:\/\/[^/]+/i, "")
+    .replace(/^\/+/, "");
+
+  if (!candidate) return false;
+
+  return (
+    /(?:^|\/)[a-z0-9._-]+-\d{10,}\.(?:jpe?g|png|webp|jfif)$/i.test(candidate) ||
+    /(?:^|\/)[a-z0-9._-]+-\d{10,}\.(?:jpe?g|png|webp|jfif)\.(?:jpe?g|png|webp|jfif)$/i.test(candidate) ||
+    /(?:^|\/)[a-z0-9._-]+\.(?:jpe?g|png|webp|jfif)\.(?:jpe?g|png|webp|jfif)$/i.test(candidate)
+  );
+};
+
+const normalizeStoredImageReference = (value) => {
+  if (value === null || value === undefined) return "";
+
+  const normalized = String(value).trim();
+  if (!normalized) return "";
+
+  const sanitized = normalized
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
+
+  if (!sanitized || sanitized === "/") return "";
+
+  const canonicalPath = sanitized.replace(/^https?:\/\/[^/]+/i, "");
+
+  if (isStaleUploadFilenameReference(canonicalPath)) return "";
+
+  if (/(?:\.(?:jpe?g|png|webp|jfif))\.(?:jpe?g|png|webp|jfif)$/i.test(canonicalPath)) {
+    return "";
+  }
+
+  if (canonicalPath.startsWith("/grains/uploads/") || canonicalPath.startsWith("grains/uploads/")) {
+    return `/${canonicalPath.replace(/^\/?grains\//i, "")}`;
+  }
+
+  return sanitized;
+};
+
 /* =========================================================
    CATEGORY
 ========================================================= */
@@ -314,6 +365,8 @@ router.post("/", verifyToken, isAdmin, async (req, res) => {
     stock_quantity = parseNumber(stock_quantity);
 
     const productSlug = slugify(slug || name);
+    const safeImageUrl = normalizeStoredImageReference(image_url || image || "");
+    const safeImage = normalizeStoredImageReference(image || image_url || "");
 
     const result = await pool.query(
       `
@@ -342,13 +395,17 @@ router.post("/", verifyToken, isAdmin, async (req, res) => {
         bulk_price,
         stock_quantity,
         weight || "",
-        image_url || image || "",
-        image || image_url || "",
+        safeImageUrl,
+        safeImage,
         productSlug,
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({
+      ...result.rows[0],
+      image: normalizeStoredImageReference(result.rows[0].image),
+      image_url: normalizeStoredImageReference(result.rows[0].image_url),
+    });
   } catch (err) {
     console.error("CREATE PRODUCT ERROR:", err);
 
@@ -437,15 +494,27 @@ router.get("/", async (req, res) => {
       id: row.id,
       name: row.name,
       description: row.description || "",
-      image: row.image || "",
-      image_url: row.image_url || "",
+      image: normalizeStoredImageReference(row.image),
+      image_url: normalizeStoredImageReference(row.image_url),
       price: Number(row.price || 0),
       stock_quantity: Number(row.stock_quantity || 0),
       weight: row.weight || "",
       category_id: row.category_id || null,
       category: row.category_name || null,
       category_slug: row.category_slug || null,
-      types: Array.isArray(row.types) ? row.types : [],
+      types: Array.isArray(row.types)
+        ? row.types.map((type) => ({
+            ...type,
+            image: normalizeStoredImageReference(type.image),
+            variants: Array.isArray(type.variants)
+              ? type.variants.map((variant) => ({
+                  ...variant,
+                  image: normalizeStoredImageReference(variant.image),
+                  image_url: normalizeStoredImageReference(variant.image_url),
+                }))
+              : [],
+          }))
+        : [],
     }));
 
     res.json(products);
@@ -542,7 +611,11 @@ router.get("/:id", async (req, res) => {
       });
     }
 
-    const product = productResult.rows[0];
+    const product = {
+      ...productResult.rows[0],
+      image: normalizeStoredImageReference(productResult.rows[0].image),
+      image_url: normalizeStoredImageReference(productResult.rows[0].image_url),
+    };
     const productTypesTableExists = await tableExists("public.product_types");
     const hasProductTypeIdColumn = await columnExists(
       "product_variants",
@@ -580,7 +653,7 @@ router.get("/:id", async (req, res) => {
           origin: type.origin,
           brand: type.brand,
           description: type.description,
-          image: type.image,
+          image: normalizeStoredImageReference(type.image),
           status: type.status,
           variants: variantsResult.rows.map((variant) => ({
             id: variant.id,
@@ -591,8 +664,8 @@ router.get("/:id", async (req, res) => {
             bulk_price:
               variant.bulk_price != null ? Number(variant.bulk_price) : null,
             stock: Number(variant.stock || 0),
-            image: variant.image,
-            image_url: variant.image_url || "",
+            image: normalizeStoredImageReference(variant.image),
+            image_url: normalizeStoredImageReference(variant.image_url),
           })),
         });
       }
@@ -640,8 +713,8 @@ router.get("/:id", async (req, res) => {
         bulk_price:
           variant.bulk_price != null ? Number(variant.bulk_price) : null,
         stock: Number(variant.stock || 0),
-        image: variant.image,
-        image_url: variant.image_url || "",
+        image: normalizeStoredImageReference(variant.image),
+        image_url: normalizeStoredImageReference(variant.image_url),
       })),
       price: Number(product.price || 0),
       bulk_price: product.bulk_price ? Number(product.bulk_price) : null,
@@ -692,6 +765,9 @@ router.put("/:id", verifyToken, isAdmin, async (req, res) => {
       slug,
     } = req.body;
 
+    image_url = normalizeStoredImageReference(image_url);
+    image = normalizeStoredImageReference(image);
+
     const categoryId =
       category_id === "" || category_id === null || category_id === undefined
         ? null
@@ -705,6 +781,9 @@ router.put("/:id", verifyToken, isAdmin, async (req, res) => {
         : parseNumber(bulk_price);
 
     stock_quantity = parseNumber(stock_quantity);
+
+    const safeImageUrl = normalizeStoredImageReference(image_url || image || "");
+    const safeImage = normalizeStoredImageReference(image || image_url || "");
 
     const updated = await pool.query(
       `
@@ -731,8 +810,8 @@ router.put("/:id", verifyToken, isAdmin, async (req, res) => {
         bulk_price,
         stock_quantity,
         weight || "",
-        image_url || image || "",
-        image || image_url || "",
+        safeImageUrl,
+        safeImage,
         slugify(slug || name || current.name),
         productId,
       ]
@@ -769,7 +848,11 @@ router.put("/:id", verifyToken, isAdmin, async (req, res) => {
       }
     }
 
-    res.json(updated.rows[0]);
+    res.json({
+      ...updated.rows[0],
+      image: normalizeStoredImageReference(updated.rows[0].image),
+      image_url: normalizeStoredImageReference(updated.rows[0].image_url),
+    });
   } catch (err) {
     console.error("UPDATE PRODUCT ERROR:", err);
 
@@ -863,7 +946,12 @@ router.get("/:id/types", async (req, res) => {
       [productId]
     );
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map((type) => ({
+        ...type,
+        image: normalizeStoredImageReference(type.image),
+      }))
+    );
   } catch (err) {
     console.error("GET PRODUCT TYPES ERROR:", err);
 
@@ -910,6 +998,8 @@ router.post("/:id/types", verifyToken, isAdmin, async (req, res) => {
       });
     }
 
+    const safeImage = normalizeStoredImageReference(image);
+
     const result = await pool.query(
       `
       INSERT INTO product_types
@@ -932,12 +1022,15 @@ router.post("/:id/types", verifyToken, isAdmin, async (req, res) => {
         origin || "",
         brand || "",
         description || "",
-        image || "",
+        safeImage,
         Boolean(status),
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({
+      ...result.rows[0],
+      image: normalizeStoredImageReference(result.rows[0].image),
+    });
   } catch (err) {
     console.error("CREATE PRODUCT TYPE ERROR:", err);
 
@@ -973,6 +1066,8 @@ router.put(
         });
       }
 
+      const safeImage = normalizeStoredImageReference(image);
+
       const result = await pool.query(
         `
         UPDATE product_types
@@ -991,7 +1086,7 @@ router.put(
           origin || "",
           brand || "",
           description || "",
-          image || "",
+          safeImage,
           status !== undefined ? Boolean(status) : true,
           typeId,
         ]
@@ -1003,7 +1098,10 @@ router.put(
         });
       }
 
-      res.json(result.rows[0]);
+      res.json({
+        ...result.rows[0],
+        image: normalizeStoredImageReference(result.rows[0].image),
+      });
     } catch (err) {
       console.error("UPDATE PRODUCT TYPE ERROR:", err);
 
@@ -1098,7 +1196,13 @@ router.get("/:id/variants", verifyToken, isAdmin, async (req, res) => {
       [productId]
     );
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map((variant) => ({
+        ...variant,
+        image: normalizeStoredImageReference(variant.image),
+        image_url: normalizeStoredImageReference(variant.image_url),
+      }))
+    );
   } catch (err) {
     console.error("GET VARIANTS ERROR:", err);
 
@@ -1129,7 +1233,13 @@ router.get("/:id/variants/public", async (req, res) => {
       [productId]
     );
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map((variant) => ({
+        ...variant,
+        image: normalizeStoredImageReference(variant.image),
+        image_url: normalizeStoredImageReference(variant.image_url),
+      }))
+    );
   } catch (err) {
     console.error("GET PUBLIC VARIANTS ERROR:", err);
 
@@ -1205,6 +1315,9 @@ router.post("/:id/variants", verifyToken, isAdmin, async (req, res) => {
       }
     }
 
+    const safeImage = normalizeStoredImageReference(image || image_url || "");
+    const safeImageUrl = normalizeStoredImageReference(image_url || image || "");
+
     const result = await pool.query(
       `
       INSERT INTO product_variants
@@ -1229,12 +1342,16 @@ router.post("/:id/variants", verifyToken, isAdmin, async (req, res) => {
         numericPrice,
         bulk_price === "" || bulk_price == null ? null : parseNumber(bulk_price),
         numericStock,
-        image || image_url || "",
-        image_url || image || "",
+        safeImage,
+        safeImageUrl,
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({
+      ...result.rows[0],
+      image: normalizeStoredImageReference(result.rows[0].image),
+      image_url: normalizeStoredImageReference(result.rows[0].image_url),
+    });
   } catch (err) {
     console.error("ADD VARIANT ERROR:", err);
 
@@ -1335,6 +1452,7 @@ router.put(
       const nextImageValue = hasIncomingImage
         ? String(image_url ?? image ?? "").trim()
         : String(current.image_url || current.image || "").trim();
+      const safeImageValue = normalizeStoredImageReference(nextImageValue);
 
       const result = await pool.query(
         `
@@ -1356,13 +1474,17 @@ router.put(
           nextPrice,
           nextBulkPrice,
           nextStock,
-          nextImageValue,
-          nextImageValue,
+          safeImageValue,
+          safeImageValue,
           variant_id,
         ]
       );
 
-      res.json(result.rows[0]);
+      res.json({
+        ...result.rows[0],
+        image: normalizeStoredImageReference(result.rows[0].image),
+        image_url: normalizeStoredImageReference(result.rows[0].image_url),
+      });
     } catch (err) {
       console.error("UPDATE VARIANT ERROR:", err);
 

@@ -37,6 +37,57 @@ const columnExists = async (tableName, columnName) => {
   return Boolean(result.rows[0]?.exists);
 };
 
+const isStaleUploadFilenameReference = (value) => {
+  const normalized = String(value || "")
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
+
+  if (!normalized) return false;
+
+  const candidate = normalized
+    .replace(/^https?:\/\/[^/]+/i, "")
+    .replace(/^\/+/, "");
+
+  if (!candidate) return false;
+
+  return (
+    /(?:^|\/)[a-z0-9._-]+-\d{10,}\.(?:jpe?g|png|webp|jfif)$/i.test(candidate) ||
+    /(?:^|\/)[a-z0-9._-]+-\d{10,}\.(?:jpe?g|png|webp|jfif)\.(?:jpe?g|png|webp|jfif)$/i.test(candidate) ||
+    /(?:^|\/)[a-z0-9._-]+\.(?:jpe?g|png|webp|jfif)\.(?:jpe?g|png|webp|jfif)$/i.test(candidate)
+  );
+};
+
+const normalizeStoredProductTypeImage = (value) => {
+  if (value === null || value === undefined) return "";
+
+  const normalized = String(value).trim();
+  if (!normalized) return "";
+
+  const sanitized = normalized
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
+
+  if (!sanitized || sanitized === "/") return "";
+
+  const canonicalPath = sanitized.replace(/^https?:\/\/[^/]+/i, "");
+
+  if (isStaleUploadFilenameReference(canonicalPath)) return "";
+
+  if (/(?:\.(?:jpe?g|png|webp|jfif))\.(?:jpe?g|png|webp|jfif)$/i.test(canonicalPath)) {
+    return "";
+  }
+
+  if (canonicalPath.startsWith("/grains/uploads/") || canonicalPath.startsWith("grains/uploads/")) {
+    return `/${canonicalPath.replace(/^\/?grains\//i, "")}`;
+  }
+
+  return sanitized;
+};
+
 /* =========================
    GET ALL PRODUCT TYPES
 ========================= */
@@ -103,7 +154,12 @@ router.get("/", async (req, res) => {
         pt.name ASC
     `);
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map((row) => ({
+        ...row,
+        image: normalizeStoredProductTypeImage(row.image),
+      }))
+    );
 
   } catch (err) {
     console.error(
@@ -171,7 +227,18 @@ router.get(
         [productId]
       );
 
-      res.json(result.rows);
+      res.json(
+        result.rows.map((row) => ({
+          ...row,
+          image: normalizeStoredProductTypeImage(row.image),
+          variants: Array.isArray(row.variants)
+            ? row.variants.map((variant) => ({
+                ...variant,
+                image: normalizeStoredProductTypeImage(variant.image),
+              }))
+            : [],
+        }))
+      );
     } catch (err) {
       console.error("LOAD PRODUCT TYPES ERROR:", err);
 
@@ -260,6 +327,8 @@ router.post(
         });
       }
 
+      const safeImage = normalizeStoredProductTypeImage(image);
+
       const result = await pool.query(
         `
         INSERT INTO product_types
@@ -282,11 +351,14 @@ router.post(
           origin || "",
           brand || "",
           description || "",
-          image || "",
+          safeImage,
         ]
       );
 
-      res.status(201).json(result.rows[0]);
+      res.status(201).json({
+        ...result.rows[0],
+        image: normalizeStoredProductTypeImage(result.rows[0].image),
+      });
 
     } catch (err) {
       console.error(
@@ -356,6 +428,8 @@ router.put(
       const newProductId =
         product_id || current.product_id;
 
+      const safeImage = normalizeStoredProductTypeImage(image);
+
       const result = await pool.query(
         `
         UPDATE product_types
@@ -376,7 +450,7 @@ router.put(
           origin || "",
           brand || "",
           description || "",
-          image || "",
+          safeImage,
           status !== undefined
             ? Boolean(status)
             : current.status,
@@ -384,7 +458,10 @@ router.put(
         ]
       );
 
-      res.json(result.rows[0]);
+      res.json({
+        ...result.rows[0],
+        image: normalizeStoredProductTypeImage(result.rows[0].image),
+      });
 
     } catch (err) {
       console.error(

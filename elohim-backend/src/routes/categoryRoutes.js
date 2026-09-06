@@ -131,7 +131,12 @@ router.get("/:id", async (req, res) => {
       });
     }
 
-    res.json(result.rows[0]);
+    const category = result.rows[0];
+
+    res.json({
+      ...category,
+      image: normalizeStoredCategoryImage(category.image),
+    });
   } catch (err) {
     console.error("GET CATEGORY ERROR:", err);
 
@@ -238,7 +243,10 @@ router.post(
         ]
       );
 
-      res.status(201).json(result.rows[0]);
+      res.status(201).json({
+        ...result.rows[0],
+        image: normalizeStoredCategoryImage(result.rows[0].image),
+      });
     } catch (err) {
       console.error(
         "CREATE CATEGORY ERROR:",
@@ -336,6 +344,8 @@ router.put(
         });
       }
 
+      const safeImage = normalizeStoredCategoryImage(image);
+
       const result = await pool.query(
         `
         UPDATE categories
@@ -352,7 +362,7 @@ router.put(
           categoryName,
           categorySlug,
           description || "",
-          image || "",
+          safeImage,
           status !== undefined
             ? Boolean(status)
             : existing.rows[0].status,

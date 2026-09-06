@@ -82,6 +82,35 @@ const normalizeStoredCategoryImage = (value) => {
   return sanitized;
 };
 
+const normalizeStoredProductImage = (value) => {
+  if (value === null || value === undefined) return "";
+
+  const normalized = String(value).trim();
+  if (!normalized) return "";
+
+  const sanitized = normalized
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
+
+  if (!sanitized || sanitized === "/") return "";
+
+  const canonicalPath = sanitized.replace(/^https?:\/\/[^/]+/i, "");
+
+  if (isStaleUploadFilenameReference(canonicalPath)) return "";
+
+  if (/(?:\.(?:jpe?g|png|webp|jfif))\.(?:jpe?g|png|webp|jfif)$/i.test(canonicalPath)) {
+    return "";
+  }
+
+  if (canonicalPath.startsWith("/grains/uploads/") || canonicalPath.startsWith("grains/uploads/")) {
+    return `/${canonicalPath.replace(/^\/?grains\//i, "")}`;
+  }
+
+  return sanitized;
+};
+
 /* =========================================================
    GET COMPLETE CATALOG
    CATEGORY → PRODUCT → TYPE → VARIANT
@@ -101,11 +130,6 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
       FROM categories
       ORDER BY name ASC
     `);
-
-    const sanitizedCategories = categories.rows.map((category) => ({
-      ...category,
-      image: normalizeStoredCategoryImage(category.image),
-    }));
 
     const products = await pool.query(`
       SELECT
@@ -148,16 +172,36 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
         pv.weight,
         pv.price,
         pv.stock,
+        pv.image,
+        pv.image_url,
         pv.created_at
       FROM product_variants pv
       ORDER BY pv.weight ASC
     `);
 
+    const sanitizedCategories = categories.rows.map((category) => ({
+      ...category,
+      image: normalizeStoredCategoryImage(category.image),
+    }));
+
+    const sanitizedProducts = products.rows.map((product) => ({
+      ...product,
+      image: normalizeStoredProductImage(product.image),
+      image_url: normalizeStoredProductImage(product.image_url),
+    }));
+
     res.json({
       categories: sanitizedCategories,
-      products: products.rows,
-      product_types: types.rows,
-      variants: variants.rows,
+      products: sanitizedProducts,
+      product_types: types.rows.map((type) => ({
+        ...type,
+        image: normalizeStoredProductImage(type.image),
+      })),
+      variants: variants.rows.map((variant) => ({
+        ...variant,
+        image: normalizeStoredProductImage(variant.image),
+        image_url: normalizeStoredProductImage(variant.image_url),
+      })),
     });
   } catch (err) {
     console.error("CATALOG FETCH ERROR:", err);

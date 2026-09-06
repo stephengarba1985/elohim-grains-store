@@ -18,6 +18,8 @@ const backendRootUrl = (
   "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
 
+const getBackendRootUrl = () => backendRootUrl;
+
 const trustMetrics = [
   { label: "Fintech services", value: "8+" },
   { label: "Staple categories", value: "6" },

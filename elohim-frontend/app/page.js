@@ -102,6 +102,22 @@ const normalizeGrainNameKey = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const isPathLikeImageReference = (value) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) return false;
+
+  return (
+    normalized.startsWith("data:") ||
+    /^https?:\/\//i.test(normalized) ||
+    normalized.startsWith("/uploads/") ||
+    normalized.startsWith("uploads/") ||
+    normalized.startsWith("/images/") ||
+    normalized.startsWith("images/") ||
+    normalized.includes("/") ||
+    normalized.includes("\\")
+  );
+};
+
 const buildImageNameVariants = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return [];
@@ -136,6 +152,11 @@ const buildImageNameVariants = (value) => {
 };
 
 const buildImageCandidatesFromName = (value) => {
+  if (!value || isPathLikeImageReference(value)) return [];
+
+  const staticMatch = getStaticGrainAssetMatch(value);
+  if (!staticMatch) return [];
+
   const variants = buildImageNameVariants(value);
   const extensions = [".jpg", ".jpeg", ".png", ".jfif", ".webp"];
   const candidates = [];
@@ -159,7 +180,7 @@ const buildImageCandidatesFromName = (value) => {
 
 const getStaticGrainAssetMatch = (value) => {
   const raw = String(value || "").trim();
-  if (!raw) return null;
+  if (!raw || isPathLikeImageReference(raw)) return null;
 
   const normalized = normalizeGrainNameKey(raw);
   if (!normalized) return null;
@@ -287,6 +308,18 @@ const normalizeImagePath = (imageUrl) => {
       : `${backendRoot}/${normalized}`;
   }
 
+  if (
+    normalized.startsWith("/grains/uploads/") ||
+    normalized.startsWith("grains/uploads/")
+  ) {
+    const backendPath = normalized.startsWith("/grains/")
+      ? normalized.replace(/^\/grains/i, "")
+      : normalized.replace(/^grains\//i, "/");
+    const backendRoot = getBackendRootUrl();
+
+    return `${backendRoot}${backendPath.startsWith("/") ? backendPath : `/${backendPath}`}`;
+  }
+
   // Existing frontend grain images
   if (normalized.startsWith("/grains/")) {
     return normalized;
@@ -343,10 +376,28 @@ const getImageCandidateList = (productName) => {
     candidates.push(value);
   };
 
+  const rawName = String(productName || "").trim();
+  if (rawName && isPathLikeImageReference(rawName)) {
+    const normalized = normalizeImagePath(rawName);
+    if (normalized && normalized !== "/grains/rice.jpg") {
+      addCandidate(normalized);
+    }
+    addCandidate("/grains/rice.jpg");
+    return candidates;
+  }
+
   const stableOverride = getStableImageOverride(productName);
   if (stableOverride) addCandidate(stableOverride);
 
-  buildImageCandidatesFromName(productName).forEach(addCandidate);
+  const knownMatch = getStaticGrainAssetMatch(rawName);
+  if (knownMatch) addCandidate(knownMatch);
+
+  if (!knownMatch && !stableOverride) {
+    addCandidate("/grains/rice.jpg");
+    return candidates;
+  }
+
+  buildImageCandidatesFromName(rawName).forEach(addCandidate);
 
   const candidateSources = [
     productName,

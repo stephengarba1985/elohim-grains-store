@@ -88,12 +88,39 @@ const STATIC_GRAIN_ASSET_PATHS = {
   "flower spices": "/grains/Flower Spices.jpg",
   "fruit spices": "/grains/Fruit Spices.jpg",
   "root and tuber": "/grains/Root & Tuber.jpg",
+  "root-tuber": "/grains/Root & Tuber.jpg",
+  "root tuber": "/grains/Root & Tuber.jpg",
+  "bambara groundnuts": "/grains/bambara_groundnuts.png",
+  "bambara-groundnuts": "/grains/bambara_groundnuts.png",
+  "bambara_groundnuts": "/grains/bambara_groundnuts.png",
+  "turmeric root": "/grains/Turmeric+Root.jpg",
+  "turmeric-root": "/grains/Turmeric+Root.jpg",
+  "turmeric_root": "/grains/Turmeric+Root.jpg",
+  "stone fruits": "/grains/Stone Fruits.jpg",
+  "stone-fruits": "/grains/Stone Fruits.jpg",
+  "tropical fruits": "/grains/Tropical Fruits.jpg",
+  "tropical-fruits": "/grains/Tropical Fruits.jpg",
+  "leafy vegetables": "/grains/Leafy Vegetables.jpg",
+  "leafy-vegetables": "/grains/Leafy Vegetables.jpg",
+  "fruiting vegetables": "/grains/Fruiting Vegetables.jpg",
+  "fruiting-vegetables": "/grains/Fruiting Vegetables.jpg",
+  "nut crops": "/grains/Nut Crops.jpg",
+  "nut-crops": "/grains/Nut Crops.jpg",
+  "citrus fruits": "/grains/Ciprus.jpg",
+  "citrus-fruits": "/grains/Ciprus.jpg",
+  "citrus_fruits": "/grains/Ciprus.jpg",
 };
 
 const STABLE_GRAIN_IMAGE_SLUGS = new Set(Object.keys(STATIC_GRAIN_ASSET_PATHS));
 
+const stripFileExtension = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return raw;
+  return raw.replace(/\.[a-z0-9]{2,5}$/i, "");
+};
+
 const normalizeGrainNameKey = (value) =>
-  String(value || "")
+  String(stripFileExtension(value) || "")
     .trim()
     .toLowerCase()
     .replace(/[_]+/g, " ")
@@ -115,7 +142,11 @@ const isStaleUploadFilenameReference = (value) => {
 
   const candidate = normalized.replace(/^\/+/, "");
 
-  return /(?:^|\/)[a-z0-9._-]+-\d{13,}\.(?:jpe?g|png|webp|jfif)$/i.test(candidate);
+  return (
+    /(?:^|\/)[a-z0-9._-]+-\d{13,}\.(?:jpe?g|png|webp|jfif)$/i.test(candidate) ||
+    /(?:^|\/)[a-z0-9._-]+\.(?:jpe?g|png|webp|jfif)\.(?:jpe?g|png|webp|jfif)$/i.test(candidate) ||
+    /(?:^|\/)[a-z0-9._-]+-\d{13,}\.(?:jpe?g|png|webp|jfif)\.(?:jpe?g|png|webp|jfif)$/i.test(candidate)
+  );
 };
 
 const isPathLikeImageReference = (value) => {
@@ -170,11 +201,13 @@ const buildImageNameVariants = (value) => {
 const buildImageCandidatesFromName = (value) => {
   if (!value || isPathLikeImageReference(value)) return [];
 
-  const staticMatch = getStaticGrainAssetMatch(value);
+  const cleanValue = stripFileExtension(value);
+  const staticMatch = getStaticGrainAssetMatch(cleanValue);
   if (!staticMatch) return [];
 
-  const variants = buildImageNameVariants(value);
-  const extensions = [".jpg", ".jpeg", ".png", ".jfif", ".webp"];
+  const variants = buildImageNameVariants(cleanValue);
+  const hasExtension = /\.(?:jpe?g|png|webp|jfif)$/i.test(String(value));
+  const extensions = hasExtension ? [""] : [".jpg", ".jpeg", ".png", ".jfif", ".webp"];
   const candidates = [];
 
   variants.forEach((variant) => {
@@ -307,7 +340,10 @@ const normalizeImagePath = (imageUrl) => {
     return "/grains/rice.jpg";
   }
 
-  if (isStaleUploadFilenameReference(normalized)) {
+  if (
+    isStaleUploadFilenameReference(normalized) ||
+    /(?:\.(?:jpe?g|png|webp|jfif))\.(?:jpe?g|png|webp|jfif)$/i.test(normalized)
+  ) {
     return "/grains/rice.jpg";
   }
 

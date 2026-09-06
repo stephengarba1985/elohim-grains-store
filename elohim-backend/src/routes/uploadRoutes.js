@@ -270,17 +270,34 @@ const validateImageFile = (file) => {
    SAFE FILENAME
 ========================================================= */
 
-const createSafeCatalogFilename = (originalName) => {
-  const extension =
-    path.extname(originalName || ".jpg").toLowerCase();
+const stripTrailingImageExtension = (value) => {
+  const rawName = String(value || "").trim();
+  if (!rawName) return "";
 
-  const originalBase = path.basename(
-    originalName || "catalog-image",
-    extension
+  const basename = rawName.replace(/\\/g, "/").split("/").pop() || rawName;
+
+  return basename.replace(
+    /(?:\.(?:jpe?g|png|webp|jfif))+$/i,
+    ""
   );
+};
+
+const getSafeImageExtension = (value, fallback = ".jpg") => {
+  const rawName = String(value || "").trim();
+  if (!rawName) return fallback;
+
+  const basename = rawName.replace(/\\/g, "/").split("/").pop() || rawName;
+  const match = basename.match(/\.((?:jpe?g|png|webp|jfif))$/i);
+
+  return match ? `.${match[1].toLowerCase()}` : fallback;
+};
+
+const createSafeCatalogFilename = (originalName) => {
+  const safeBaseName = stripTrailingImageExtension(originalName) || "catalog-image";
+  const extension = getSafeImageExtension(originalName, ".jpg");
 
   const safeBase =
-    originalBase
+    safeBaseName
       .replace(/[^a-zA-Z0-9-_]+/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "")
@@ -302,8 +319,10 @@ const productStorage = multer.diskStorage({
   },
 
   filename(req, file, cb) {
-    const extension =
-      path.extname(file.originalname || ".jpg").toLowerCase();
+    const extension = getSafeImageExtension(
+      file.originalname,
+      ".jpg"
+    );
 
     const unique =
       `${Date.now()}-${Math.round(Math.random() * 1e9)}`;

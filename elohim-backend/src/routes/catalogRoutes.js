@@ -29,9 +29,17 @@ const isStaleUploadFilenameReference = (value) => {
 
   if (!normalized) return false;
 
-  const candidate = normalized.replace(/^\/+/, "");
+  const candidate = normalized
+    .replace(/^https?:\/\/[^/]+/i, "")
+    .replace(/^\/+/, "");
 
-  return /(?:^|\/)[a-z0-9._-]+-\d{13,}\.(?:jpe?g|png|webp|jfif)$/i.test(candidate);
+  if (!candidate) return false;
+
+  return (
+    /(?:^|\/)[a-z0-9._-]+-\d{10,}\.(?:jpe?g|png|webp|jfif)$/i.test(candidate) ||
+    /(?:^|\/)[a-z0-9._-]+-\d{10,}\.(?:jpe?g|png|webp|jfif)\.(?:jpe?g|png|webp|jfif)$/i.test(candidate) ||
+    /(?:^|\/)[a-z0-9._-]+\.(?:jpe?g|png|webp|jfif)\.(?:jpe?g|png|webp|jfif)$/i.test(candidate)
+  );
 };
 
 const normalizeStoredCategoryImage = (value) => {
@@ -39,9 +47,39 @@ const normalizeStoredCategoryImage = (value) => {
 
   const normalized = String(value).trim();
   if (!normalized) return "";
-  if (isStaleUploadFilenameReference(normalized)) return "";
 
-  return normalized;
+  const sanitized = normalized
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
+
+  if (!sanitized || sanitized === "/") return "";
+
+  const canonicalPath = sanitized.replace(/^https?:\/\/[^/]+/i, "");
+
+  if (isStaleUploadFilenameReference(canonicalPath)) return "";
+
+  if (/(?:\.(?:jpe?g|png|webp|jfif))+$/i.test(canonicalPath)) {
+    const singleExt = canonicalPath.replace(
+      /(?:\.(?:jpe?g|png|webp|jfif))+$/i,
+      ""
+    );
+
+    if (/(?:\.(?:jpe?g|png|webp|jfif))\.(?:jpe?g|png|webp|jfif)$/i.test(canonicalPath)) {
+      return "";
+    }
+
+    if (singleExt && /-\d{10,}$/.test(singleExt)) {
+      return "";
+    }
+  }
+
+  if (canonicalPath.startsWith("/grains/uploads/") || canonicalPath.startsWith("grains/uploads/")) {
+    return `/${canonicalPath.replace(/^\/?grains\//i, "")}`;
+  }
+
+  return sanitized;
 };
 
 /* =========================================================

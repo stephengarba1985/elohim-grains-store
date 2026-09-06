@@ -498,33 +498,23 @@ export default function ProductDetails() {
       return "/grains/rice.jpg";
     }
 
+const uploadPath = normalized.replace(/^https?:\/\/[^/]+/i, "");
+
+    if (
+      uploadPath.startsWith("/uploads/") ||
+      uploadPath.startsWith("uploads/") ||
+      uploadPath.startsWith("/grains/uploads/") ||
+      uploadPath.startsWith("grains/uploads/")
+    ) {
+      const safeUploadPath = uploadPath.replace(/^\/?grains\//i, "/");
+      return safeUploadPath.startsWith("/")
+        ? safeUploadPath
+        : `/${safeUploadPath}`;
+    }
+
     // Full external URL
     if (/^https?:\/\//i.test(normalized)) {
       return normalized;
-    }
-
-    // Backend uploaded images
-    if (
-      normalized.startsWith("/uploads/") ||
-      normalized.startsWith("uploads/")
-    ) {
-      const backendRoot = getBackendRootUrl();
-
-      return normalized.startsWith("/")
-        ? `${backendRoot}${normalized}`
-        : `${backendRoot}/${normalized}`;
-    }
-
-if (
-    normalized.startsWith("/grains/uploads/") ||
-    normalized.startsWith("grains/uploads/")
-  ) {
-    const backendPath = normalized.startsWith("/grains/")
-      ? normalized.replace(/^\/grains/i, "")
-      : normalized.replace(/^grains\//i, "/");
-    const backendRoot = getBackendRootUrl();
-
-    return `${backendRoot}${backendPath.startsWith("/") ? backendPath : `/${backendPath}`}`;
   }
 
   // Existing frontend grain images

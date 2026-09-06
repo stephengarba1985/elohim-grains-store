@@ -153,21 +153,23 @@ export default function InventoryPage() {
       return "/grains/rice.jpg";
     }
 
+    const uploadPath = normalizedUrl.replace(/^https?:\/\/[^/]+/i, "");
+
+    if (
+      uploadPath.startsWith("/uploads/") ||
+      uploadPath.startsWith("uploads/") ||
+      uploadPath.startsWith("/grains/uploads/") ||
+      uploadPath.startsWith("grains/uploads/")
+    ) {
+      const safeUploadPath = uploadPath.replace(/^\/?grains\//i, "/");
+      return safeUploadPath.startsWith("/")
+        ? safeUploadPath
+        : `/${safeUploadPath}`;
+    }
+
     // Full external URL
     if (/^https?:\/\//i.test(normalizedUrl)) {
       return normalizedUrl;
-    }
-
-    // Backend uploaded images
-    if (
-      normalizedUrl.startsWith("/uploads/") ||
-      normalizedUrl.startsWith("uploads/")
-    ) {
-      const backendRoot = getBackendRootUrl();
-
-      return normalizedUrl.startsWith("/")
-        ? `${backendRoot}${normalizedUrl}`
-        : `${backendRoot}/${normalizedUrl}`;
     }
 
     // Existing frontend grain images
@@ -464,7 +466,7 @@ export default function InventoryPage() {
 
             {previewImage && (
               <img
-                src={`${getBackendRootUrl()}${previewImage}`}
+                src={normalizeImagePath(previewImage)}
                 alt="Preview"
                 className="mt-3 h-32 rounded border object-cover"
               />

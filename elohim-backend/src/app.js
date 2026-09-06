@@ -147,7 +147,7 @@ uploadStaticRoots.forEach((dir) => {
 app.use(
   helmet({
     crossOriginResourcePolicy: {
-      policy: "cross-origin",
+      policy: "same-origin",
     },
   })
 );

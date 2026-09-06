@@ -26,21 +26,23 @@ const normalizeImagePath = (imageUrl) => {
     return "/grains/rice.jpg";
   }
 
+  const uploadPath = normalized.replace(/^https?:\/\/[^/]+/i, "");
+
+  if (
+    uploadPath.startsWith("/uploads/") ||
+    uploadPath.startsWith("uploads/") ||
+    uploadPath.startsWith("/grains/uploads/") ||
+    uploadPath.startsWith("grains/uploads/")
+  ) {
+    const safeUploadPath = uploadPath.replace(/^\/?grains\//i, "/");
+    return safeUploadPath.startsWith("/")
+      ? safeUploadPath
+      : `/${safeUploadPath}`;
+  }
+
   // Full external URL
   if (/^https?:\/\//i.test(normalized)) {
     return normalized;
-  }
-
-  // Backend uploaded images
-  if (
-    normalized.startsWith("/uploads/") ||
-    normalized.startsWith("uploads/")
-  ) {
-    const backendRoot = getBackendRootUrl();
-
-    return normalized.startsWith("/")
-      ? `${backendRoot}${normalized}`
-      : `${backendRoot}/${normalized}`;
   }
 
   // Existing frontend grain images

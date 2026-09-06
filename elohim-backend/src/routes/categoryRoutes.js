@@ -7,6 +7,30 @@ const {
   isAdmin,
 } = require("../middleware/auth");
 
+const isStaleUploadFilenameReference = (value) => {
+  const normalized = String(value || "")
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
+
+  if (!normalized) return false;
+
+  const candidate = normalized.replace(/^\/+/, "");
+
+  return /(?:^|\/)[a-z0-9._-]+-\d{13,}\.(?:jpe?g|png|webp|jfif)$/i.test(candidate);
+};
+
+const normalizeStoredCategoryImage = (value) => {
+  if (value === null || value === undefined) return "";
+
+  const normalized = String(value).trim();
+  if (!normalized) return "";
+  if (isStaleUploadFilenameReference(normalized)) return "";
+
+  return normalized;
+};
+
 /* =========================
    GET ALL CATEGORIES
    PUBLIC
@@ -26,7 +50,12 @@ router.get("/", async (req, res) => {
       ORDER BY name ASC
     `);
 
-    res.json(result.rows);
+    const categories = result.rows.map((category) => ({
+      ...category,
+      image: normalizeStoredCategoryImage(category.image),
+    }));
+
+    res.json(categories);
   } catch (err) {
     console.error("GET CATEGORIES ERROR:", err);
 
@@ -144,6 +173,8 @@ router.post(
         });
       }
 
+      const safeImage = normalizeStoredCategoryImage(image);
+
       const result = await pool.query(
         `
         INSERT INTO categories
@@ -162,7 +193,7 @@ router.post(
           categoryName,
           categorySlug,
           description || "",
-          image || "",
+          safeImage,
           status !== undefined
             ? Boolean(status)
             : true,

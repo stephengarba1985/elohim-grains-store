@@ -9,6 +9,20 @@ const getBackendRootUrl = () => {
   return apiUrl.replace(/\/api\/?$/, "");
 };
 
+const isStaleUploadFilenameReference = (value) => {
+  const normalized = String(value || "")
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
+
+  if (!normalized) return false;
+
+  const candidate = normalized.replace(/^\/+/, "");
+
+  return /(?:^|\/)[a-z0-9._-]+-\d{13,}\.(?:jpe?g|png|webp|jfif)$/i.test(candidate);
+};
+
 const normalizeImagePath = (imageUrl) => {
   if (!imageUrl) {
     return "/grains/rice.jpg";
@@ -21,6 +35,10 @@ const normalizeImagePath = (imageUrl) => {
     .trim();
 
   if (!normalized || normalized === "/") {
+    return "/grains/rice.jpg";
+  }
+
+  if (isStaleUploadFilenameReference(normalized)) {
     return "/grains/rice.jpg";
   }
 

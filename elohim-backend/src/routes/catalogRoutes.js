@@ -20,6 +20,30 @@ const parseNumber = (value, fallback = 0) => {
   return Number.isFinite(number) ? number : fallback;
 };
 
+const isStaleUploadFilenameReference = (value) => {
+  const normalized = String(value || "")
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
+
+  if (!normalized) return false;
+
+  const candidate = normalized.replace(/^\/+/, "");
+
+  return /(?:^|\/)[a-z0-9._-]+-\d{13,}\.(?:jpe?g|png|webp|jfif)$/i.test(candidate);
+};
+
+const normalizeStoredCategoryImage = (value) => {
+  if (value === null || value === undefined) return "";
+
+  const normalized = String(value).trim();
+  if (!normalized) return "";
+  if (isStaleUploadFilenameReference(normalized)) return "";
+
+  return normalized;
+};
+
 /* =========================================================
    GET COMPLETE CATALOG
    CATEGORY → PRODUCT → TYPE → VARIANT
@@ -39,6 +63,11 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
       FROM categories
       ORDER BY name ASC
     `);
+
+    const sanitizedCategories = categories.rows.map((category) => ({
+      ...category,
+      image: normalizeStoredCategoryImage(category.image),
+    }));
 
     const products = await pool.query(`
       SELECT
@@ -87,7 +116,7 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
     `);
 
     res.json({
-      categories: categories.rows,
+      categories: sanitizedCategories,
       products: products.rows,
       product_types: types.rows,
       variants: variants.rows,
@@ -146,6 +175,8 @@ router.post(
         });
       }
 
+      const safeImage = normalizeStoredCategoryImage(image);
+
       const result = await pool.query(
         `
         INSERT INTO categories
@@ -158,7 +189,7 @@ router.post(
           name.trim(),
           finalSlug,
           description || "",
-          image || "",
+          safeImage,
           Boolean(status),
         ]
       );

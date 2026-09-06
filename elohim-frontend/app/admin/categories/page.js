@@ -4,6 +4,76 @@ import { useEffect, useState } from "react";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
 
+const getBackendRootUrl = () => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  return apiUrl.replace(/\/api\/?$/, "");
+};
+
+const normalizeImagePath = (imageUrl) => {
+  if (!imageUrl) {
+    return "/grains/rice.jpg";
+  }
+
+  const normalized = String(imageUrl)
+    .replace(/\\/g, "/")
+    .split("?")[0]
+    .split("#")[0]
+    .trim();
+
+  if (!normalized || normalized === "/") {
+    return "/grains/rice.jpg";
+  }
+
+  if (/^https?:\/\//i.test(normalized)) {
+    return normalized;
+  }
+
+  if (
+    normalized.startsWith("/uploads/") ||
+    normalized.startsWith("uploads/")
+  ) {
+    const backendRoot = getBackendRootUrl();
+
+    return normalized.startsWith("/")
+      ? `${backendRoot}${normalized}`
+      : `${backendRoot}/${normalized}`;
+  }
+
+  if (
+    normalized.startsWith("/grains/uploads/") ||
+    normalized.startsWith("grains/uploads/")
+  ) {
+    const backendPath = normalized.startsWith("/grains/")
+      ? normalized.replace(/^\/grains/i, "")
+      : normalized.replace(/^grains\//i, "/");
+    const backendRoot = getBackendRootUrl();
+
+    return `${backendRoot}${backendPath.startsWith("/") ? backendPath : `/${backendPath}`}`;
+  }
+
+  if (normalized.startsWith("/grains/")) {
+    return normalized;
+  }
+
+  if (normalized.startsWith("grains/")) {
+    return `/${normalized}`;
+  }
+
+  if (normalized.startsWith("/images/")) {
+    return `/grains/${normalized.split("/images/").pop() || "rice.jpg"}`;
+  }
+
+  if (normalized.startsWith("images/")) {
+    return `/grains/${normalized.replace(/^images\//i, "") || "rice.jpg"}`;
+  }
+
+  if (normalized.startsWith("/")) {
+    return normalized;
+  }
+
+  return `/grains/${normalized.replace(/^grains\//i, "")}`;
+};
+
 export default function CategoriesPage() {
   const [categories, setCategories] = useState([]);
   const [form, setForm] = useState({ name: "", description: "", image: "", status: true });
@@ -153,7 +223,15 @@ export default function CategoriesPage() {
               <tr key={category.id} className="border-t">
                 <td className="px-4 py-3">
                   {category.image ? (
-                    <img src={category.image} alt={category.name} className="h-12 w-12 object-cover rounded" />
+                    <img
+                      src={normalizeImagePath(category.image)}
+                      alt={category.name}
+                      className="h-12 w-12 object-cover rounded"
+                      onError={(event) => {
+                        event.currentTarget.onerror = null;
+                        event.currentTarget.src = "/grains/rice.jpg";
+                      }}
+                    />
                   ) : (
                     <div className="h-12 w-12 rounded bg-gray-200 flex items-center justify-center text-xs text-gray-500">IMG</div>
                   )}

@@ -98,7 +98,7 @@ export default function Navbar({ user: initialUser }) {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 md:px-6">
         <Link href="/" onClick={() => setMobileOpen(false)} className="flex items-center gap-3">
           <img
-            src="/logo.svg"
+            src="/logo.png"
             alt="Elohim Grains logo"
             className="h-10 w-10 rounded-lg object-cover"
           />

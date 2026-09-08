@@ -125,7 +125,7 @@ export default function Navbar({ user: initialUser }) {
             </button>
 
             {pagesOpen && (
-              <div className="absolute left-0 top-full w-[560px] rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+              <div className="absolute left-0 top-full w-140 rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
                 <div className="grid grid-cols-3 gap-4">
                   {pageGroups.map((group) => (
                     <div key={group.title}>
@@ -184,7 +184,7 @@ export default function Navbar({ user: initialUser }) {
             </span>
 
             {cartCount > 0 && (
-              <span className="absolute -right-2 -top-3 rounded-full bg-red-500 px-2 py-1 text-xs text-white">
+              <span className="absolute -right-2 -top-3 rounded-full bg-green-600 px-2 py-1 text-xs text-white">
                 {cartCount}
               </span>
             )}
@@ -206,7 +206,7 @@ export default function Navbar({ user: initialUser }) {
 
               <button
                 onClick={handleLogout}
-                className="rounded-lg bg-red-500 px-3 py-2 font-semibold text-white hover:bg-red-600"
+                className="rounded-lg bg-green-600 px-3 py-2 font-semibold text-white hover:bg-green-700"
               >
                 Logout
               </button>
@@ -271,7 +271,7 @@ export default function Navbar({ user: initialUser }) {
                   </Link>
                   <button
                     onClick={handleLogout}
-                    className="rounded-lg bg-red-500 px-4 py-3 font-bold text-white"
+                    className="rounded-lg bg-green-600 px-4 py-3 font-bold text-white hover:bg-green-700"
                   >
                     Logout
                   </button>

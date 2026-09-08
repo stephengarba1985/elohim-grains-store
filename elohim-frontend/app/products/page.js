@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
+import { useCartStore } from "@/lib/cartStore";
 
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
@@ -88,6 +90,17 @@ const getProductStock = (product) => {
 };
 
 const getProductImage = (product) => {
+  const directMatch = getStaticGrainAssetMatch(product?.name || "") ||
+    getStaticGrainAssetMatch(product?.category || "") ||
+    getStaticGrainAssetMatch(product?.product_type || "");
+
+  if (directMatch) return directMatch;
+
+  const normalizedProductName = normalizeGrainNameKey(product?.name || "");
+  if (normalizedProductName && STABLE_GRAIN_IMAGE_SLUGS.has(normalizedProductName)) {
+    return STATIC_GRAIN_ASSET_PATHS[normalizedProductName];
+  }
+
   const imageList = [
     product?.image_url,
     product?.image,
@@ -118,10 +131,185 @@ const searchSuggestions = [
   "spices",
 ];
 
+const STATIC_GRAIN_ASSET_PATHS = {
+  "abakaliki rice": "/grains/Abakaliki Rice.jpg",
+  "ofada rice": "/grains/Ofada rice.jfif",
+  "beans-(oloyin)": "/grains/beans-(oloyin).jpg",
+  "beans": "/grains/beans.jpg",
+  "chia-seeds": "/grains/chia-seeds.jpg",
+  "cowpea": "/grains/cowpea.jpg",
+  "garri": "/grains/garri.jpg",
+  "groundnut": "/grains/groundnut.jpg",
+  "kidney-beans": "/grains/kidney-beans.jpg",
+  "local-rice": "/grains/local-rice.jpg",
+  "maize": "/grains/maize.jpg",
+  "millet": "/grains/millet.jpg",
+  "ogbono": "/grains/ogbono.jpg",
+  "pigeon pea": "/grains/Pigeon Pea.jpg",
+  "pigeon-pea": "/grains/Pigeon Pea.jpg",
+  "plantain-flour": "/grains/plantain-flour.jpg",
+  "rice": "/grains/rice.jpg",
+  "sorghum": "/grains/sorghum.jpg",
+  "soybeans": "/grains/soybeans.jpg",
+  "wheat": "/grains/wheat.jpg",
+  "yam-flour(amala)": "/grains/yam-flour(amala).jpg",
+  "flour": "/grains/Flour.jpg",
+  "flours": "/grains/Flour.jpg",
+  "oil": "/grains/Oil.png",
+  "cooking oil": "/grains/Oil.png",
+  "leaf spices": "/grains/Leaf spices.jpg",
+  "leaf-spices": "/grains/Leaf spices.jpg",
+  "berry fruits": "/grains/Berry.jpg",
+  "berry-fruits": "/grains/Berry.jpg",
+  "bark spices": "/grains/BerkSpices.jpg",
+  "bark-spices": "/grains/BerkSpices.jpg",
+  "root spices": "/grains/RootSpices.jpg",
+  "root-spices": "/grains/RootSpices.jpg",
+  "indigenous fruits": "/grains/IndigenousFruits.jpg",
+  "indigenous-fruits": "/grains/IndigenousFruits.jpg",
+  "melon fruits": "/grains/Melon.jpg",
+  "melon-fruits": "/grains/Melon.jpg",
+  "seed spices": "/grains/Seed Spices.jpg",
+  "flower spices": "/grains/Flower Spices.jpg",
+  "fruit spices": "/grains/Fruit Spices.jpg",
+  "root and tuber": "/grains/Root & Tuber.jpg",
+  "root-tuber": "/grains/Root & Tuber.jpg",
+  "root tuber": "/grains/Root & Tuber.jpg",
+  "bambara groundnuts": "/grains/bambara_groundnuts.png",
+  "bambara-groundnuts": "/grains/bambara_groundnuts.png",
+  "bambara_groundnuts": "/grains/bambara_groundnuts.png",
+  "turmeric root": "/grains/Turmeric+Root.jpg",
+  "turmeric-root": "/grains/Turmeric+Root.jpg",
+  "turmeric_root": "/grains/Turmeric+Root.jpg",
+  "stone fruits": "/grains/Stone Fruits.jpg",
+  "stone-fruits": "/grains/Stone Fruits.jpg",
+  "tropical fruits": "/grains/Tropical Fruits.jpg",
+  "tropical-fruits": "/grains/Tropical Fruits.jpg",
+  "leafy vegetables": "/grains/Leafy Vegetables.jpg",
+  "leafy-vegetables": "/grains/Leafy Vegetables.jpg",
+  "fruiting vegetables": "/grains/Fruiting Vegetables.jpg",
+  "fruiting-vegetables": "/grains/Fruiting Vegetables.jpg",
+  "nut crops": "/grains/Nut Crops.jpg",
+  "nut-crops": "/grains/Nut Crops.jpg",
+  "citrus fruits": "/grains/Ciprus.jpg",
+  "citrus-fruits": "/grains/Ciprus.jpg",
+  "citrus_fruits": "/grains/Ciprus.jpg",
+};
+
+const STABLE_GRAIN_IMAGE_SLUGS = new Set(Object.keys(STATIC_GRAIN_ASSET_PATHS));
+
+const stripFileExtension = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return raw;
+  return raw.replace(/\.[a-z0-9]{2,5}$/i, "");
+};
+
+const normalizeGrainNameKey = (value) =>
+  String(stripFileExtension(value) || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_]+/g, " ")
+    .replace(/[-]+/g, " ")
+    .replace(/[()]/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getStaticGrainAssetMatch = (value) => {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) return null;
+
+  const normalized = normalizeGrainNameKey(rawValue);
+  if (!normalized) return null;
+
+  const exactMatch = STATIC_GRAIN_ASSET_PATHS[normalized];
+  if (exactMatch) return exactMatch;
+
+  const tokens = normalized.split(" ").filter(Boolean);
+
+  for (const [key, path] of Object.entries(STATIC_GRAIN_ASSET_PATHS)) {
+    const staticTokens = normalizeGrainNameKey(key).split(" ").filter(Boolean);
+    if (
+      tokens.length > 0 &&
+      staticTokens.length > 0 &&
+      tokens.every((token) => staticTokens.includes(token))
+    ) {
+      return path;
+    }
+  }
+
+  return null;
+};
+
+const getProductRating = (product) => {
+  const value = Number(product?.rating ?? product?.average_rating ?? 4.8);
+  return Number.isFinite(value) ? value : 4.8;
+};
+
+const categoryTabs = [
+  { id: "all", label: "All Products", icon: "🧺" },
+  { id: "grains", label: "Grains", icon: "🌾" },
+  { id: "flours", label: "Flours", icon: "🥣" },
+  { id: "seeds-nuts", label: "Seeds & Nuts", icon: "🥜" },
+  { id: "spices", label: "Spices", icon: "🌶️" },
+  { id: "cooking-essentials", label: "Cooking Essentials", icon: "🛢️" },
+  { id: "fruits-vegetables", label: "Fruits & Vegetables", icon: "🍎" },
+  { id: "meat-poultry", label: "Meat & Poultry", icon: "🥩" },
+];
+
+const normalizeCategorySlug = (product) => {
+  const haystack = [
+    product?.category,
+    product?.type,
+    product?.product_type,
+    product?.name,
+    product?.description,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (!haystack) return "all";
+
+  if (/grain|rice|maize|beans|cassava|yam|cereal|millet|sorghum/.test(haystack)) {
+    return "grains";
+  }
+
+  if (/flour|powder|meal|semolina|yam flour/.test(haystack)) {
+    return "flours";
+  }
+
+  if (/seed|nut|groundnut|soy|melon|cashew|peanut|sesame/.test(haystack)) {
+    return "seeds-nuts";
+  }
+
+  if (/spice|pepper|ginger|turmeric|curry|seasoning|bay leaf/.test(haystack)) {
+    return "spices";
+  }
+
+  if (/oil|cooking|palm|vegetable|sauce|condiment|stock|broth/.test(haystack)) {
+    return "cooking-essentials";
+  }
+
+  if (/fruit|vegetable|leafy|tomato|onion|carrot|cabbage|okra|plantain/.test(haystack)) {
+    return "fruits-vegetables";
+  }
+
+  if (/meat|poultry|chicken|beef|fish|turkey|goat|animal/.test(haystack)) {
+    return "meat-poultry";
+  }
+
+  return "all";
+};
+
 export default function ShopPage() {
+  const { addToCart } = useCartStore();
   const [products, setProducts] = useState([]);
   const [query, setQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [quantities, setQuantities] = useState({});
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -148,11 +336,18 @@ export default function ShopPage() {
     fetchProducts();
   }, []);
 
+  const categoryFilteredProducts = useMemo(() => {
+    if (activeCategory === "all") return products;
+    return products.filter(
+      (product) => normalizeCategorySlug(product) === activeCategory
+    );
+  }, [products, activeCategory]);
+
   const filteredProducts = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return products;
+    if (!keyword) return categoryFilteredProducts;
 
-    return products.filter((product) => {
+    return categoryFilteredProducts.filter((product) => {
       const name = String(product?.name || "").toLowerCase();
       const category = String(product?.category || "").toLowerCase();
       const weight = String(getProductWeight(product) || "").toLowerCase();
@@ -163,7 +358,37 @@ export default function ShopPage() {
         weight.includes(keyword)
       );
     });
-  }, [products, query]);
+  }, [categoryFilteredProducts, query]);
+
+  const activeCategoryLabel =
+    categoryTabs.find((category) => category.id === activeCategory)?.label ||
+    "Products";
+
+  const updateQuantity = (productId, delta) => {
+    setQuantities((prev) => {
+      const current = Number(prev[String(productId)] ?? 1);
+      const next = Math.max(1, current + delta);
+      return { ...prev, [String(productId)]: next };
+    });
+  };
+
+  const handleAddToCart = async (product) => {
+    const storedUser = localStorage.getItem("user");
+
+    if (!storedUser) {
+      toast.error("Please login first");
+      return;
+    }
+
+    try {
+      const productQuantity = Number(quantities[String(product.id)] ?? 1);
+      await addToCart(product.id, productQuantity, null);
+      toast.success(`${productQuantity} item(s) added to cart`);
+    } catch (error) {
+      console.error("Add to cart error:", error);
+      toast.error("Unable to add item to cart");
+    }
+  };
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -205,6 +430,34 @@ export default function ShopPage() {
                 </button>
               ))}
             </div>
+
+            <div className="mt-6">
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-green-100">
+                Shop by category
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {categoryTabs.map((category) => {
+                  const isActive = activeCategory === category.id;
+
+                  return (
+                    <button
+                      key={category.id}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => setActiveCategory(category.id)}
+                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                        isActive
+                          ? "border-green-400 bg-green-500 text-white shadow-md"
+                          : "border-white/20 bg-white/8 text-green-50 hover:bg-white/15"
+                      }`}
+                    >
+                      <span>{category.icon}</span>
+                      {category.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -216,7 +469,11 @@ export default function ShopPage() {
               Catalogue
             </p>
             <h2 className="mt-1 text-2xl font-black text-slate-950">
-              {query ? `Results for “${query}”` : "Fresh picks for your kitchen"}
+              {query
+                ? `Results for “${query}”`
+                : activeCategory === "all"
+                  ? "Fresh picks for your kitchen"
+                  : `${activeCategoryLabel} picks`}
             </h2>
           </div>
           <p className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm">
@@ -237,45 +494,98 @@ export default function ShopPage() {
           </div>
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {filteredProducts.map((product) => (
-              <Link
-                key={product.id}
-                href={`/products/${product.id}`}
-                className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
-              >
-                <div className="relative h-52 overflow-hidden bg-slate-100">
-                  <img
-                    src={getProductImage(product)}
-                    alt={product.name}
-                    className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
-                  />
-                  <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-green-800 shadow-sm">
-                    {getProductStock(product) > 0 ? `${getProductStock(product)} in stock` : "Check stock"}
-                  </div>
-                </div>
+            {filteredProducts.map((product) => {
+              const productStock = getProductStock(product);
+              const inStock = productStock > 0;
+              const currentQuantity = Number(quantities[String(product.id)] ?? 1);
+              const rating = getProductRating(product);
 
-                <div className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-black text-slate-950">{product.name}</h3>
-                      <p className="mt-1 text-sm text-slate-500">{getProductWeight(product)}</p>
+              return (
+                <div
+                  key={product.id}
+                  className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
+                >
+                  <div className="relative h-52 overflow-hidden bg-slate-100">
+                    <img
+                      src={getProductImage(product)}
+                      alt={product.name}
+                      className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
+                    />
+                    <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-green-800 shadow-sm">
+                      {inStock ? `${productStock} available` : "Out of stock"}
                     </div>
-                    <span className="rounded-md bg-green-50 px-2 py-1 text-[10px] font-bold uppercase text-green-700">
-                      Store
-                    </span>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between">
-                    <p className="text-xl font-black text-green-700">
-                      {formatPrice(getProductPrice(product))}
-                    </p>
-                    <span className="text-sm font-semibold text-slate-700 group-hover:text-green-700">
-                      View
-                    </span>
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-black text-slate-950">{product.name}</h3>
+                        <p className="mt-1 text-sm text-slate-500">{getProductWeight(product)}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-1 text-sm font-medium text-amber-500">
+                      <span>⭐</span>
+                      <span>{rating.toFixed(1)}</span>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between gap-3">
+                      <p className="text-2xl font-black text-green-700">
+                        {formatPrice(getProductPrice(product))}
+                      </p>
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${inStock ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                        {inStock ? "In Stock" : "Out of stock"}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <span className="text-sm font-semibold text-slate-500">Qty</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(product.id, -1)}
+                          disabled={!inStock}
+                          className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-lg font-bold text-slate-700 transition hover:border-green-400 hover:text-green-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label={`Decrease quantity for ${product.name}`}
+                        >
+                          −
+                        </button>
+                        <span className="min-w-8 text-center text-base font-black text-slate-900">
+                          {currentQuantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(product.id, 1)}
+                          disabled={!inStock}
+                          className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-lg font-bold text-slate-700 transition hover:border-green-400 hover:text-green-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label={`Increase quantity for ${product.name}`}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleAddToCart(product)}
+                        disabled={!inStock}
+                        className="flex-1 rounded-xl bg-green-600 px-3 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        Add to Cart
+                      </button>
+                    </div>
+
+                    <Link
+                      href={`/products/${product.id}`}
+                      className="mt-3 block text-center text-sm font-semibold text-slate-600 transition hover:text-green-700"
+                    >
+                      View Details
+                    </Link>
                   </div>
                 </div>
-              </Link>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

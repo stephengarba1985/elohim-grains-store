@@ -83,6 +83,15 @@ const parseNumber = (value, fallback = 0) => {
   return Number.isFinite(number) ? number : fallback;
 };
 
+const flattenProductVariants = (types = []) => {
+  if (!Array.isArray(types)) return [];
+
+  return types.flatMap((type) => {
+    if (!type || !Array.isArray(type.variants)) return [];
+    return type.variants.map((variant) => ({ ...variant }));
+  });
+};
+
 const isStaleUploadFilenameReference = (value) => {
   const normalized = String(value || "")
     .replace(/\\/g, "/")
@@ -490,19 +499,8 @@ router.get("/", async (req, res) => {
       ORDER BY p.id ASC
     `);
 
-    const products = result.rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      description: row.description || "",
-      image: normalizeStoredImageReference(row.image),
-      image_url: normalizeStoredImageReference(row.image_url),
-      price: Number(row.price || 0),
-      stock_quantity: Number(row.stock_quantity || 0),
-      weight: row.weight || "",
-      category_id: row.category_id || null,
-      category: row.category_name || null,
-      category_slug: row.category_slug || null,
-      types: Array.isArray(row.types)
+    const products = result.rows.map((row) => {
+      const types = Array.isArray(row.types)
         ? row.types.map((type) => ({
             ...type,
             image: normalizeStoredImageReference(type.image),
@@ -514,8 +512,24 @@ router.get("/", async (req, res) => {
                 }))
               : [],
           }))
-        : [],
-    }));
+        : [];
+
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description || "",
+        image: normalizeStoredImageReference(row.image),
+        image_url: normalizeStoredImageReference(row.image_url),
+        price: Number(row.price || 0),
+        stock_quantity: Number(row.stock_quantity || 0),
+        weight: row.weight || "",
+        category_id: row.category_id || null,
+        category: row.category_name || null,
+        category_slug: row.category_slug || null,
+        types,
+        variants: flattenProductVariants(types),
+      };
+    });
 
     res.json(products);
   } catch (err) {
@@ -700,22 +714,27 @@ router.get("/:id", async (req, res) => {
       legacyVariants = legacyVariantsResult.rows;
     }
 
+    const allVariants = [
+      ...legacyVariants,
+      ...types.flatMap((type) => Array.isArray(type.variants) ? type.variants : []),
+    ].map((variant) => ({
+      id: variant.id,
+      product_id: variant.product_id,
+      product_type_id: variant.product_type_id,
+      weight: variant.weight,
+      price: Number(variant.price || 0),
+      bulk_price:
+        variant.bulk_price != null ? Number(variant.bulk_price) : null,
+      stock: Number(variant.stock || 0),
+      image: normalizeStoredImageReference(variant.image),
+      image_url: normalizeStoredImageReference(variant.image_url),
+    }));
+
     res.json({
       ...product,
       category: product.category_name || null,
       types,
-      variants: legacyVariants.map((variant) => ({
-        id: variant.id,
-        product_id: variant.product_id,
-        product_type_id: variant.product_type_id,
-        weight: variant.weight,
-        price: Number(variant.price || 0),
-        bulk_price:
-          variant.bulk_price != null ? Number(variant.bulk_price) : null,
-        stock: Number(variant.stock || 0),
-        image: normalizeStoredImageReference(variant.image),
-        image_url: normalizeStoredImageReference(variant.image_url),
-      })),
+      variants: allVariants,
       price: Number(product.price || 0),
       bulk_price: product.bulk_price ? Number(product.bulk_price) : null,
       stock_quantity: Number(product.stock_quantity || 0),

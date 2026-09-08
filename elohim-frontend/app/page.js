@@ -46,6 +46,112 @@ const quickActions = [
   { label: "Track Prices", href: "/price-insights" },
 ];
 
+const shopByCategory = [
+  {
+    title: "Rice",
+    description: "Staple meals, wedding catering, family pantry essentials.",
+    image: "/grains/rice.jpg",
+  },
+  {
+    title: "Beans & Legumes",
+    description: "High-protein staples for households and bulk kitchens.",
+    image: "/grains/beans.jpg",
+  },
+  {
+    title: "Maize & Flour",
+    description: "Breakfast, porridge, and everyday baking supplies.",
+    image: "/grains/maize.jpg",
+  },
+  {
+    title: "Oil & Seasoning",
+    description: "Cooking essentials and pantry finishing ingredients.",
+    image: "/grains/Oil.png",
+  },
+  {
+    title: "Spices",
+    description: "Flavour-rich ingredients for traditional and modern cooking.",
+    image: "/grains/Seed Spices.jpg",
+  },
+  {
+    title: "Fruit & Veg",
+    description: "Fresh produce and value packs for healthier food planning.",
+    image: "/grains/Leafy Vegetables.jpg",
+  },
+];
+
+const savingsHighlights = [
+  {
+    title: "Food savings",
+    text: "Set aside funds in advance for household staples and seasonal price spikes.",
+    href: "/plans",
+  },
+  {
+    title: "Wallet top-up",
+    text: "Keep buying cashless and structured with wallet funding for routine restocking.",
+    href: "/wallet",
+  },
+  {
+    title: "Price AI",
+    text: "Monitor crop trends and buy at the right time before costs rise.",
+    href: "/price-insights",
+  },
+];
+
+const subscriptionPlans = [
+  {
+    title: "Weekly Supply",
+    text: "Automated staples delivered on your buying rhythm.",
+    tag: "Popular",
+  },
+  {
+    title: "Family Pantry",
+    text: "Smart refills for rice, beans, oil, and essentials.",
+    tag: "Flexible",
+  },
+  {
+    title: "Business Restock",
+    text: "Keep your shop or kitchen stocked with predictable delivery windows.",
+    tag: "Best for teams",
+  },
+];
+
+const whyChooseUs = [
+  {
+    title: "Verified supply",
+    text: "Every purchase is backed by transparent pricing and reliable stock availability.",
+  },
+  {
+    title: "Faster financing",
+    text: "Buy now and extend cash flow with BNPL, savings, and wallet funding tools.",
+  },
+  {
+    title: "Local-first logistics",
+    text: "Route planning and bulk coordination are built around real delivery needs.",
+  },
+  {
+    title: "Community trust",
+    text: "Cooperatives, households, and merchants can buy together at stronger prices.",
+  },
+];
+
+const customerReviews = [
+  {
+    name: "Ada M.",
+    role: "Home manager",
+    quote: "The ordering flow is simple and the pricing is consistent. I can restock without second-guessing.",
+  },
+  {
+    name: "Tunde O.",
+    role: "Restaurant owner",
+    quote: "We buy in bulk from Elohim and the process is predictable. That alone helps our budget planning.",
+  },
+  {
+    name: "Ruth A.",
+    role: "Cooperative buyer",
+    quote: "Our group saves more because we can plan purchases and track prices before buying in volume.",
+  },
+];
+
 const STATIC_GRAIN_ASSET_PATHS = {
   "abakaliki rice": "/grains/Abakaliki Rice.jpg",
   "ofada rice": "/grains/Ofada rice.jfif",
@@ -586,6 +692,7 @@ function ProductTile({ product }) {
 
 export default async function Home() {
   const products = await getProducts();
+  const featuredProducts = products.slice(0, 4);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#f0fdf4_0%,#f8fafc_40%,#f8fafc_100%)] text-slate-950">
@@ -601,32 +708,31 @@ export default async function Home() {
           <div className="absolute -right-10 bottom-10 h-52 w-52 rounded-full bg-amber-300/20 blur-3xl" />
         </div>
 
-        <div className="relative mx-auto grid min-h-150 max-w-7xl items-center gap-8 px-4 py-14 md:px-6 lg:grid-cols-[1fr_420px]">
+        <div className="relative mx-auto grid min-h-[32rem] max-w-7xl items-center gap-8 px-4 py-14 md:px-6 lg:grid-cols-[1.2fr_420px]">
           <div className="max-w-3xl text-white">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wide text-green-200 backdrop-blur">
-              Agro Commerce + Fintech
+              ELOHIM GRAINS
             </div>
             <h1 className="mt-4 text-4xl font-black leading-tight text-white [text-shadow:0_3px_14px_rgba(0,0,0,0.55)] md:text-6xl">
-              Buy grains, save for food goals, and pay with confidence.
+              Fresh staples, smart buying, and better food planning.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-100">
-              A modern grain marketplace with wallet funding, smart savings,
-              BNPL, escrow protection, cooperative buying, and payment gateway
-              options built into one store.
+              Shop grain essentials, fund your wallet, save toward food security,
+              and buy in bulk with confidence through one trusted platform.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
-                href="#marketplace"
+                href="#shop-by-category"
                 className="rounded-xl bg-green-700 px-6 py-3 text-center font-bold text-white shadow-sm transition hover:bg-green-800"
               >
-                Shop Grains
+                Shop Now
               </Link>
               <Link
-                href="/wallet"
+                href="/bulk"
                 className="rounded-xl bg-white px-6 py-3 text-center font-bold text-slate-950 shadow-sm transition hover:bg-slate-100"
               >
-                Open Wallet
+                Buy in Bulk
               </Link>
             </div>
 
@@ -661,12 +767,12 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-        <div className="grid gap-4 md:grid-cols-3">
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 md:grid-cols-3 md:px-6">
           {marketSignals.map((signal) => (
             <div
               key={signal.crop}
-              className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm"
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm"
             >
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
                 {signal.crop} signal
@@ -678,143 +784,325 @@ export default async function Home() {
         </div>
       </section>
 
-      <section id="marketplace" className="mx-auto max-w-7xl px-4 pb-10 md:px-6">
-        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <section id="shop-by-category" className="mx-auto max-w-7xl px-4 py-14 md:px-6">
+        <div className="mb-6 flex items-end justify-between gap-4">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-green-700">
-              Marketplace
+              Shop by category
             </p>
-            <h2 className="mt-1 text-2xl font-black text-slate-950">
-              Fresh grains ready for checkout
+            <h2 className="mt-1 text-3xl font-black text-slate-950">
+              Everyday essentials for every kitchen
             </h2>
           </div>
-          <p className="rounded-full bg-white px-3 py-1 text-sm font-medium text-slate-500 shadow-sm">
-            {products.length} product(s) available
-          </p>
         </div>
 
-        {products.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
-            <p className="text-lg font-bold text-slate-950">
-              No products found
-            </p>
-            <p className="mt-2 text-slate-500">
-              Start the backend server to load store products.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5">
-            {products.map((product) => (
-              <ProductTile key={product.id} product={product} />
-            ))}
-          </div>
-        )}
-
-        <div className="mt-8 grid gap-4 lg:grid-cols-[1fr_1.4fr]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-bold uppercase tracking-wide text-green-700">
-              Smart buying
-            </p>
-            <h3 className="mt-2 text-xl font-black text-slate-950">
-              Plan supply before prices move
-            </h3>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Use AI price insights, cooperative savings, and escrow to manage
-              large orders with better timing and stronger trust.
-            </p>
-            <div className="mt-5 grid gap-2 sm:grid-cols-2">
-              <Link
-                href="/price-insights"
-                className="rounded-lg bg-slate-950 px-4 py-3 text-center text-sm font-bold text-white hover:bg-slate-800"
-              >
-                View Price AI
-              </Link>
-              <Link
-                href="/cooperatives"
-                className="rounded-lg border border-slate-300 px-4 py-3 text-center text-sm font-bold text-slate-800 hover:bg-slate-50"
-              >
-                Create Cooperative
-              </Link>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-bold uppercase tracking-wide text-green-700">
-              Vendor marketplace
-            </p>
-            <h3 className="mt-2 text-xl font-black text-slate-950">
-              Sell grains through Elohim
-            </h3>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Verified sellers can list grain products, receive ratings, manage
-              delivery, and sell through a commission-based marketplace.
-            </p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {shopByCategory.map((category) => (
             <Link
-              href="/vendors"
-              className="mt-5 flex justify-center rounded-lg bg-green-700 px-4 py-3 text-sm font-bold text-white hover:bg-green-800"
+              key={category.title}
+              href="#best-sellers"
+              className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
             >
-              Open Vendor Marketplace
+              <div className="relative h-52 overflow-hidden">
+                <img
+                  src={category.image}
+                  alt={category.title}
+                  className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/10 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                  <h3 className="text-xl font-black">{category.title}</h3>
+                </div>
+              </div>
+              <div className="p-4">
+                <p className="text-sm leading-6 text-slate-600">{category.description}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section id="best-sellers" className="bg-white py-14">
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wide text-green-700">
+                Best sellers
+              </p>
+              <h2 className="mt-1 text-3xl font-black text-slate-950">
+                Top picks this week
+              </h2>
+            </div>
+            <Link href="#final-shop-cta" className="text-sm font-semibold text-green-700 hover:text-green-800">
+              View all products
             </Link>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid lg:grid-cols-[260px_1fr]">
-              <div className="relative min-h-44">
-                <Image
-                  src="/grains/maize.jpg"
-                  alt="Maize grains"
-                  fill
-                  sizes="(min-width: 1024px) 260px, 100vw"
-                  className="object-cover"
-                />
-                <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-slate-950/85 to-transparent p-4">
-                  <p className="text-xs font-bold uppercase tracking-wide text-green-200">
-                    Business supply
-                  </p>
-                  <h3 className="mt-1 text-xl font-black text-white">
-                    Bulk grain orders
-                  </h3>
+          {featuredProducts.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
+              No products available yet.
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {featuredProducts.map((product) => (
+                <ProductTile key={product.id} product={product} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section id="buy-in-bulk" className="mx-auto max-w-7xl px-4 py-14 md:px-6">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:grid lg:grid-cols-[2fr_1.1fr]">
+          <div className="relative min-h-[18rem]">
+            <Image
+              src="/grains/maize.jpg"
+              alt="Bulk grain order"
+              fill
+              sizes="(min-width: 1024px) 66vw, 100vw"
+              className="object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-slate-950/40 to-transparent" />
+            <div className="absolute inset-0 flex flex-col justify-end p-6 md:p-8">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-green-200">
+                Buy in bulk
+              </p>
+              <h3 className="mt-2 max-w-xl text-3xl font-black text-white">
+                Better pricing for institutions, shops, and kitchens.
+              </h3>
+            </div>
+          </div>
+
+          <div className="p-6 md:p-8">
+            <p className="text-sm font-bold uppercase tracking-wide text-green-700">
+              Bulk buying support
+            </p>
+            <h4 className="mt-3 text-2xl font-black text-slate-950">
+              Stock up with predictable supply.
+            </h4>
+            <div className="mt-5 space-y-3">
+              {bulkOrderBenefits.map((benefit) => (
+                <div key={benefit} className="flex items-start gap-3 text-sm text-slate-600">
+                  <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-green-600" />
+                  <span>{benefit}</span>
                 </div>
-              </div>
-              <div className="p-5">
-                <p className="text-sm font-semibold leading-6 text-slate-700">
-                  Bulk orders for churches, schools, markets, and distributors.
+              ))}
+            </div>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/bulk"
+                className="rounded-xl bg-green-700 px-5 py-3 text-center font-bold text-white hover:bg-green-800"
+              >
+                Request Bulk Order
+              </Link>
+              <Link
+                href="/cooperatives"
+                className="rounded-xl border border-slate-300 px-5 py-3 text-center font-bold text-slate-800 hover:bg-slate-50"
+              >
+                Join a Cooperative
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="food-savings" className="bg-slate-50 py-14">
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="mb-6">
+            <p className="text-sm font-bold uppercase tracking-wide text-green-700">
+              Food savings
+            </p>
+            <h2 className="mt-1 text-3xl font-black text-slate-950">
+              Plan smarter before price shifts hit
+            </h2>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {savingsHighlights.map((item) => (
+              <div key={item.title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-bold uppercase tracking-wide text-green-700">
+                  {item.title}
                 </p>
-
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-green-50 p-3">
-                    <p className="text-xs text-green-700">Order size</p>
-                    <p className="mt-1 text-lg font-black text-slate-950">
-                      10+ bags
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-amber-50 p-3">
-                    <p className="text-xs text-amber-700">Delivery</p>
-                    <p className="mt-1 text-lg font-black text-slate-950">
-                      Scheduled
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-2">
-                  {bulkOrderBenefits.map((benefit) => (
-                    <div
-                      key={benefit}
-                      className="flex items-start gap-2 text-sm text-slate-600"
-                    >
-                      <span className="mt-1 h-2 w-2 rounded-full bg-green-600" />
-                      <span>{benefit}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <Link
-                  href="/bulk"
-                  className="mt-5 flex w-full justify-center rounded-lg bg-green-700 px-4 py-3 text-sm font-bold text-white hover:bg-green-800"
-                >
-                  Request Bulk Order
+                <p className="mt-3 text-sm leading-6 text-slate-600">{item.text}</p>
+                <Link href={item.href} className="mt-5 inline-flex text-sm font-bold text-green-700 hover:text-green-800">
+                  Learn more
                 </Link>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="subscriptions" className="mx-auto max-w-7xl px-4 py-14 md:px-6">
+        <div className="mb-6 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-green-700">
+              Subscriptions
+            </p>
+            <h2 className="mt-1 text-3xl font-black text-slate-950">
+              Flexible plans for regular buyers
+            </h2>
+          </div>
+          <Link href="/subscriptions" className="text-sm font-semibold text-green-700 hover:text-green-800">
+            Explore plans
+          </Link>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          {subscriptionPlans.map((plan) => (
+            <div key={plan.title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <span className="inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-green-700">
+                {plan.tag}
+              </span>
+              <h3 className="mt-4 text-xl font-black text-slate-950">{plan.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{plan.text}</p>
+              <Link href="/subscriptions" className="mt-5 inline-flex rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800">
+                Choose plan
+              </Link>
             </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="market-watch" className="bg-slate-950 py-14 text-white">
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wide text-green-300">
+                Market watch / Price AI
+              </p>
+              <h2 className="mt-1 text-3xl font-black text-white">
+                See what is changing before you buy
+              </h2>
+            </div>
+            <Link href="/price-insights" className="text-sm font-semibold text-green-300 hover:text-green-200">
+              Open Price AI
+            </Link>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="grid gap-4 md:grid-cols-3">
+              {marketSignals.map((signal) => (
+                <div key={signal.crop} className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-300">
+                    {signal.crop}
+                  </p>
+                  <p className="mt-2 text-3xl font-black text-white">{signal.movement}</p>
+                  <p className="mt-3 text-sm text-slate-300">{signal.note}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-green-500/30 bg-green-500/10 p-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-green-200">
+                AI signals
+              </p>
+              <h3 className="mt-3 text-2xl font-black text-white">Smart purchasing support</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-200">
+                Use crop trends and price forecasts to choose the right time to buy in bulk or restock for the next cycle.
+              </p>
+              <Link href="/price-insights" className="mt-5 inline-flex rounded-lg bg-white px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-slate-100">
+                View insights
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="why-elohim" className="mx-auto max-w-7xl px-4 py-14 md:px-6">
+        <div className="mb-6 text-center">
+          <p className="text-sm font-bold uppercase tracking-wide text-green-700">
+            Why Elohim
+          </p>
+          <h2 className="mt-1 text-3xl font-black text-slate-950">
+            Built to make food access easier and more dependable
+          </h2>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {whyChooseUs.map((item) => (
+            <div key={item.title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-4 h-11 w-11 rounded-xl bg-green-100" />
+              <h3 className="text-lg font-black text-slate-950">{item.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="customer-reviews" className="bg-slate-50 py-14">
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="mb-6 text-center">
+            <p className="text-sm font-bold uppercase tracking-wide text-green-700">
+              Customer reviews
+            </p>
+            <h2 className="mt-1 text-3xl font-black text-slate-950">
+              Trusted by households, kitchens, and community buyers
+            </h2>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            {customerReviews.map((review) => (
+              <div key={review.name} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center gap-1 text-amber-400">★★★★★</div>
+                <p className="mt-4 text-sm leading-7 text-slate-600">“{review.quote}”</p>
+                <div className="mt-5 border-t border-slate-200 pt-4">
+                  <p className="font-black text-slate-950">{review.name}</p>
+                  <p className="text-sm text-slate-500">{review.role}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="whatsapp-support" className="mx-auto max-w-7xl px-4 py-14 md:px-6">
+        <div className="rounded-3xl bg-gradient-to-r from-green-700 to-emerald-600 p-8 text-white shadow-xl">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wide text-green-100">
+                WhatsApp support
+              </p>
+              <h3 className="mt-2 text-3xl font-black">Need help choosing the right grain or bulk order?</h3>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <a
+                href="https://wa.me/2348000000000"
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl bg-white px-5 py-3 text-center font-bold text-green-700 hover:bg-slate-100"
+              >
+                Chat on WhatsApp
+              </a>
+              <Link href="/bulk" className="rounded-xl border border-white/30 px-5 py-3 text-center font-bold text-white hover:bg-white/10">
+                Start bulk request
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="final-shop-cta" className="bg-white pb-20">
+        <div className="mx-auto max-w-5xl px-4 md:px-6">
+          <div className="rounded-3xl border border-slate-200 bg-slate-950 px-6 py-8 text-center text-white shadow-sm sm:px-10">
+            <p className="text-sm font-bold uppercase tracking-wide text-green-200">
+              ELOHIM GRAINS
+            </p>
+            <h2 className="mt-3 text-3xl font-black md:text-4xl">
+              Ready to stock up without the stress?
+            </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-slate-300">
+              Shop fresh grain essentials, save for tomorrow, and buy with confidence on a platform built for real households and businesses.
+            </p>
+            <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+              <Link href="#shop-by-category" className="rounded-xl bg-green-700 px-6 py-3 font-bold text-white hover:bg-green-800">
+                Shop Now
+              </Link>
+              <Link href="/bulk" className="rounded-xl border border-white/30 px-6 py-3 font-bold text-white hover:bg-white/10">
+                Buy in Bulk
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
     </main>

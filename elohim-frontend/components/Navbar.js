@@ -11,6 +11,7 @@ const pageGroups = [
     title: "Store",
     links: [
       { label: "Home", href: "/" },
+      { label: "Shop", href: "/products" },
       { label: "Vendor Marketplace", href: "/vendors" },
       { label: "Bulk Orders", href: "/bulk" },
       { label: "Subscriptions", href: "/subscriptions" },

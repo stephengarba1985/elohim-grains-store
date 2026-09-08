@@ -723,7 +723,7 @@ export default async function Home() {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
-                href="#shop-by-category"
+                href="/products"
                 className="rounded-xl bg-green-700 px-6 py-3 text-center font-bold text-white shadow-sm transition hover:bg-green-800"
               >
                 Shop Now
@@ -833,7 +833,7 @@ export default async function Home() {
                 Top picks this week
               </h2>
             </div>
-            <Link href="#final-shop-cta" className="text-sm font-semibold text-green-700 hover:text-green-800">
+            <Link href="/products" className="text-sm font-semibold text-green-700 hover:text-green-800">
               View all products
             </Link>
           </div>
@@ -1095,7 +1095,7 @@ export default async function Home() {
               Shop fresh grain essentials, save for tomorrow, and buy with confidence on a platform built for real households and businesses.
             </p>
             <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="#shop-by-category" className="rounded-xl bg-green-700 px-6 py-3 font-bold text-white hover:bg-green-800">
+              <Link href="/products" className="rounded-xl bg-green-700 px-6 py-3 font-bold text-white hover:bg-green-800">
                 Shop Now
               </Link>
               <Link href="/bulk" className="rounded-xl border border-white/30 px-6 py-3 font-bold text-white hover:bg-white/10">

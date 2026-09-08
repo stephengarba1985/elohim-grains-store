@@ -111,6 +111,39 @@ export default function GrainPlansPage() {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (!products.length) return;
+
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const productId = params.get("product_id");
+    const quantityParam = params.get("quantity");
+    const paymentFrequency = params.get("payment_frequency");
+    const durationParam = params.get("duration");
+
+    if (!productId) return;
+
+    const matchedProduct = products.find(
+      (product) => String(product.id) === String(productId)
+    );
+
+    if (!matchedProduct) return;
+
+    const firstVariantId = matchedProduct.variants?.[0]?.id
+      ? String(matchedProduct.variants[0].id)
+      : "";
+
+    setForm((current) => ({
+      ...current,
+      product_id: String(productId),
+      variant_id: firstVariantId,
+      quantity: quantityParam && Number(quantityParam) > 0 ? String(quantityParam) : current.quantity || "1",
+      payment_frequency: paymentFrequency || current.payment_frequency || "weekly",
+      duration: durationParam || current.duration || "3",
+    }));
+  }, [products]);
+
   const selectedProduct = useMemo(() => {
     return products.find((product) => String(product.id) === String(form.product_id));
   }, [products, form.product_id]);

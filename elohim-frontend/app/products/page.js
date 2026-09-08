@@ -7,6 +7,27 @@ import { useCartStore } from "@/lib/cartStore";
 
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
+const buildWhatsAppOrderMessage = (product, quantity = 1, priceOverride = null) => {
+  const productName = String(product?.name || "this product");
+  const quantityValue = Number(quantity || 1);
+  const unitPrice = Number(priceOverride ?? getProductPrice(product) ?? 0);
+  const totalPrice = Number((unitPrice * quantityValue).toFixed(2));
+
+  return `Hello Elohim Grains, I want to order ${productName} — ${formatPrice(totalPrice)}.`;
+};
+
+const getTieredPriceDisplay = (basePrice, wholesaleOverride) => {
+  const retailPrice = Number(basePrice || 0);
+  const wholesalePrice = Number(wholesaleOverride || 0);
+
+  return {
+    single: retailPrice,
+    fiveBag: retailPrice > 0 ? Math.max(1, Math.round(retailPrice * 0.97)) : 0,
+    wholesale: wholesalePrice > 0 ? wholesalePrice : retailPrice > 0 ? Math.round(retailPrice * 0.9) : 0,
+    hasWholesale: wholesalePrice > 0 || retailPrice > 0,
+  };
+};
+
 const normalizeImagePath = (imageUrl) => {
   if (!imageUrl) return "/grains/rice.jpg";
 
@@ -258,6 +279,161 @@ const categoryTabs = [
   { id: "meat-poultry", label: "Meat & Poultry", icon: "🥩" },
 ];
 
+const categoryFilterOptions = [
+  { id: "grains", label: "Grains" },
+  { id: "flours", label: "Flour" },
+  { id: "seeds-nuts", label: "Seeds" },
+  { id: "cooking-essentials", label: "Food Essentials" },
+];
+
+const weightFilterOptions = [
+  { id: "1-5kg", label: "1–5kg" },
+  { id: "10-25kg", label: "10–25kg" },
+  { id: "50kg-plus", label: "50kg+" },
+];
+
+const sortOptions = [
+  { id: "popular", label: "Popular" },
+  { id: "newest", label: "Newest" },
+  { id: "price-low-high", label: "Price low → high" },
+  { id: "price-high-low", label: "Price high → low" },
+];
+
+const estimateDeliveryFee = (location, quantity = 1) => {
+  const cleanedLocation = String(location || "").trim();
+
+  if (!cleanedLocation) {
+    return {
+      available: true,
+      estimate: null,
+      summary: "Enter location to estimate delivery cost.",
+    };
+  }
+
+  const normalizedLocation = cleanedLocation.toLowerCase();
+  const cityMultiplier = /lagos|ikeja|lekki|surulere|victoria island|ajah|abuja|ibadan|kano|enugu|port harcourt|owerri|asaba|benin|warri|akure|ilorin|jos|kaduna|abeokuta/.test(normalizedLocation)
+    ? 1
+    : 1.35;
+
+  const baseFee = Math.round(1800 * cityMultiplier);
+  const perBagFee = Math.round(350 * cityMultiplier);
+  const total = baseFee + Math.max(0, quantity - 1) * perBagFee;
+
+  return {
+    available: true,
+    estimate: total,
+    summary: `Estimated delivery: ${formatPrice(total)}`,
+  };
+};
+
+const searchAliases = {
+  rice: ["rice", "ofada rice", "abakaliki rice", "local rice", "rice grains"],
+  beans: ["beans", "bean", "cowpea", "bambara groundnut", "bambara groundnuts", "kidney beans", "pigeon pea"],
+  maize: ["maize", "corn"],
+  flour: ["flour", "plantain flour", "yam flour", "cassava flour", "wheat flour"],
+  oil: ["oil", "palm oil", "vegetable oil", "cooking oil"],
+  spices: ["spices", "pepper", "ginger", "turmeric", "curry", "seasoning"],
+  groundnut: ["groundnut", "groundnuts", "peanut", "peanuts"],
+};
+
+const normalizeSearchText = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getSearchAliasSet = (keyword) => {
+  const normalizedKeyword = normalizeSearchText(keyword);
+
+  if (!normalizedKeyword) return [];
+
+  const matches = Object.entries(searchAliases).flatMap(([key, aliases]) => {
+    if (key === normalizedKeyword) return aliases;
+
+    return aliases.some(
+      (alias) =>
+        normalizeSearchText(alias) === normalizedKeyword ||
+        normalizedKeyword.includes(normalizeSearchText(alias)) ||
+        normalizeSearchText(alias).includes(normalizedKeyword)
+    )
+      ? aliases
+      : [];
+  });
+
+  const uniqueMatches = [...new Set(matches.map((item) => normalizeSearchText(item)))];
+  return uniqueMatches.length ? uniqueMatches : [normalizedKeyword];
+};
+
+const getProductSearchScore = (product, keyword) => {
+  const query = normalizeSearchText(keyword);
+  if (!query) return 0;
+
+  const haystack = normalizeSearchText(
+    [
+      product?.name,
+      product?.category,
+      product?.type,
+      product?.product_type,
+      getProductWeight(product),
+      product?.description,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+
+  if (!haystack) return 0;
+
+  let score = 0;
+  const aliases = getSearchAliasSet(query);
+
+  if (haystack.includes(query)) score += 90;
+
+  for (const alias of aliases) {
+    if (haystack.includes(alias)) score += 120;
+  }
+
+  const queryTokens = query.split(" ").filter(Boolean);
+  for (const token of queryTokens) {
+    if (haystack.includes(token)) score += 15;
+  }
+
+  return score;
+};
+
+const badgeStyles = {
+  "best-seller": "bg-orange-100 text-orange-700 border-orange-200",
+  popular: "bg-blue-100 text-blue-700 border-blue-200",
+  new: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  "best-value": "bg-violet-100 text-violet-700 border-violet-200",
+  "bulk-available": "bg-amber-100 text-amber-700 border-amber-200",
+};
+
+const featureBadges = [
+  { id: "best-seller", label: "BEST SELLER", icon: "🔥", match: /rice|beans|maize|garri|oil|soybeans|groundnut/i },
+  { id: "popular", label: "POPULAR", icon: "⭐", match: /rice|beans|maize|flour|oil|spices|soybeans/i },
+  { id: "new", label: "NEW", icon: "🆕", match: /new|fresh|seasonal|premium|special/i },
+  { id: "best-value", label: "BEST VALUE", icon: "💰", match: /flour|beans|rice|local|bulk|value/i },
+  { id: "bulk-available", label: "BULK AVAILABLE", icon: "📦", match: /rice|beans|maize|garri|oil|flour|bulk/i },
+];
+
+const getProductBadges = (product) => {
+  const productName = String(product?.name || "");
+  const productCategory = String(product?.category || "");
+  const haystack = `${productName} ${productCategory}`.trim();
+
+  return featureBadges
+    .filter((badge) => badge.match.test(haystack))
+    .slice(0, 2)
+    .map((badge) => ({
+      id: badge.id,
+      label: badge.label,
+      icon: badge.icon,
+      className: badgeStyles[badge.id] || badgeStyles.popular,
+    }));
+};
+
 const normalizeCategorySlug = (product) => {
   const haystack = [
     product?.category,
@@ -310,6 +486,13 @@ export default function ShopPage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(true);
   const [quantities, setQuantities] = useState({});
+  const [selectedPriceCap, setSelectedPriceCap] = useState(100000);
+  const [selectedWeights, setSelectedWeights] = useState([]);
+  const [inStockOnly, setInStockOnly] = useState(true);
+  const [sortBy, setSortBy] = useState("popular");
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [mobileSortOpen, setMobileSortOpen] = useState(false);
+  const [deliveryLocations, setDeliveryLocations] = useState({});
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -343,22 +526,81 @@ export default function ShopPage() {
     );
   }, [products, activeCategory]);
 
+  const getProductWeightKg = (product) => {
+    const rawWeight = String(getProductWeight(product) || "");
+    const match = rawWeight.match(/(\d+(?:\.\d+)?)/);
+    return match ? Number(match[1]) : 0;
+  };
+
+  const matchesSelectedWeight = (product, selectedWeightId) => {
+    const value = getProductWeightKg(product);
+
+    switch (selectedWeightId) {
+      case "1-5kg":
+        return value >= 1 && value <= 5;
+      case "10-25kg":
+        return value >= 10 && value <= 25;
+      case "50kg-plus":
+        return value >= 50;
+      default:
+        return true;
+    }
+  };
+
   const filteredProducts = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    if (!keyword) return categoryFilteredProducts;
+    let result = [...categoryFilteredProducts];
 
-    return categoryFilteredProducts.filter((product) => {
-      const name = String(product?.name || "").toLowerCase();
-      const category = String(product?.category || "").toLowerCase();
-      const weight = String(getProductWeight(product) || "").toLowerCase();
+    result = result.filter(
+      (product) => getProductPrice(product) <= selectedPriceCap
+    );
 
-      return (
-        name.includes(keyword) ||
-        category.includes(keyword) ||
-        weight.includes(keyword)
+    if (selectedWeights.length > 0) {
+      result = result.filter((product) =>
+        selectedWeights.some((weightId) => matchesSelectedWeight(product, weightId))
       );
-    });
-  }, [categoryFilteredProducts, query]);
+    }
+
+    if (inStockOnly) {
+      result = result.filter((product) => getProductStock(product) > 0);
+    }
+
+    const keyword = query.trim();
+    if (keyword) {
+      result = result
+        .map((product) => ({
+          product,
+          score: getProductSearchScore(product, keyword),
+        }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          return getProductPrice(a.product) - getProductPrice(b.product);
+        })
+        .map(({ product }) => product);
+    }
+
+    switch (sortBy) {
+      case "newest":
+        result.sort((a, b) => Number(b?.id || 0) - Number(a?.id || 0));
+        break;
+      case "price-low-high":
+        result.sort((a, b) => getProductPrice(a) - getProductPrice(b));
+        break;
+      case "price-high-low":
+        result.sort((a, b) => getProductPrice(b) - getProductPrice(a));
+        break;
+      case "popular":
+      default:
+        result.sort(
+          (a, b) =>
+            getProductRating(b) - getProductRating(a) ||
+            getProductPrice(a) - getProductPrice(b)
+        );
+        break;
+    }
+
+    return result;
+  }, [categoryFilteredProducts, query, selectedPriceCap, selectedWeights, inStockOnly, sortBy]);
 
   const activeCategoryLabel =
     categoryTabs.find((category) => category.id === activeCategory)?.label ||
@@ -481,113 +723,440 @@ export default function ShopPage() {
           </p>
         </div>
 
-        {loading ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
-            Loading products...
-          </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
-            <h3 className="text-xl font-black text-slate-950">No products found</h3>
-            <p className="mt-2 text-slate-600">
-              Try a different keyword like rice, beans, maize, flour, or oil.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {filteredProducts.map((product) => {
-              const productStock = getProductStock(product);
-              const inStock = productStock > 0;
-              const currentQuantity = Number(quantities[String(product.id)] ?? 1);
-              const rating = getProductRating(product);
+        <div className="mb-5 flex gap-2 md:hidden">
+          <button
+            type="button"
+            onClick={() => {
+              setMobileFilterOpen((value) => !value);
+              setMobileSortOpen(false);
+            }}
+            className="flex-1 rounded-xl bg-slate-900 px-4 py-3 text-sm font-black uppercase tracking-wide text-white"
+          >
+            Filter
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMobileSortOpen((value) => !value);
+              setMobileFilterOpen(false);
+            }}
+            className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black uppercase tracking-wide text-slate-800"
+          >
+            Sort
+          </button>
+        </div>
 
-              return (
-                <div
-                  key={product.id}
-                  className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
-                >
-                  <div className="relative h-52 overflow-hidden bg-slate-100">
-                    <img
-                      src={getProductImage(product)}
-                      alt={product.name}
-                      className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
-                    />
-                    <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-green-800 shadow-sm">
-                      {inStock ? `${productStock} available` : "Out of stock"}
-                    </div>
-                  </div>
-
-                  <div className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-black text-slate-950">{product.name}</h3>
-                        <p className="mt-1 text-sm text-slate-500">{getProductWeight(product)}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center gap-1 text-sm font-medium text-amber-500">
-                      <span>⭐</span>
-                      <span>{rating.toFixed(1)}</span>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between gap-3">
-                      <p className="text-2xl font-black text-green-700">
-                        {formatPrice(getProductPrice(product))}
-                      </p>
-                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${inStock ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
-                        {inStock ? "In Stock" : "Out of stock"}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                      <span className="text-sm font-semibold text-slate-500">Qty</span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(product.id, -1)}
-                          disabled={!inStock}
-                          className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-lg font-bold text-slate-700 transition hover:border-green-400 hover:text-green-700 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label={`Decrease quantity for ${product.name}`}
-                        >
-                          −
-                        </button>
-                        <span className="min-w-8 text-center text-base font-black text-slate-900">
-                          {currentQuantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(product.id, 1)}
-                          disabled={!inStock}
-                          className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-lg font-bold text-slate-700 transition hover:border-green-400 hover:text-green-700 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label={`Increase quantity for ${product.name}`}
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleAddToCart(product)}
-                        disabled={!inStock}
-                        className="flex-1 rounded-xl bg-green-600 px-3 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                      >
-                        Add to Cart
-                      </button>
-                    </div>
-
-                    <Link
-                      href={`/products/${product.id}`}
-                      className="mt-3 block text-center text-sm font-semibold text-slate-600 transition hover:text-green-700"
-                    >
-                      View Details
-                    </Link>
+        {(mobileFilterOpen || mobileSortOpen) && (
+          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:hidden">
+            {mobileFilterOpen && (
+              <div className="space-y-5">
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                    Category
+                  </p>
+                  <div className="space-y-2">
+                    {categoryFilterOptions.map((category) => (
+                      <label key={category.id} className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={activeCategory === category.id}
+                          onChange={() => {
+                            setActiveCategory((current) =>
+                              current === category.id ? "all" : category.id
+                            );
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                        />
+                        {category.label}
+                      </label>
+                    ))}
                   </div>
                 </div>
-              );
-            })}
+
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                    Price
+                  </p>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100000"
+                    step="500"
+                    value={selectedPriceCap}
+                    onChange={(event) => setSelectedPriceCap(Number(event.target.value))}
+                    className="w-full accent-green-600"
+                  />
+                  <p className="mt-1 text-sm font-semibold text-slate-700">
+                    ₦0 — ₦{selectedPriceCap.toLocaleString()}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                    Weight
+                  </p>
+                  <div className="space-y-2">
+                    {weightFilterOptions.map((option) => (
+                      <label key={option.id} className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={selectedWeights.includes(option.id)}
+                          onChange={() => {
+                            setSelectedWeights((current) =>
+                              current.includes(option.id)
+                                ? current.filter((item) => item !== option.id)
+                                : [...current, option.id]
+                            );
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={inStockOnly}
+                    onChange={() => setInStockOnly((value) => !value)}
+                    className="h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                  />
+                  In stock
+                </label>
+              </div>
+            )}
+
+            {mobileSortOpen && (
+              <div className="space-y-2 pt-1">
+                {sortOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => {
+                      setSortBy(option.id);
+                      setMobileSortOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-medium ${
+                      sortBy === option.id
+                        ? "border-green-200 bg-green-50 text-green-700"
+                        : "border-slate-200 bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    {option.label}
+                    {sortBy === option.id && <span>✓</span>}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
+
+        <div className="flex flex-col gap-6 md:flex-row">
+          <aside className="hidden w-full max-w-[280px] shrink-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:block">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+              Filter by
+            </h3>
+
+            <div className="mt-5 space-y-6">
+              <div>
+                <p className="mb-3 text-sm font-bold text-slate-700">Category</p>
+                <div className="space-y-2">
+                  {categoryFilterOptions.map((category) => (
+                    <label key={category.id} className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={activeCategory === category.id}
+                        onChange={() => {
+                          setActiveCategory((current) =>
+                            current === category.id ? "all" : category.id
+                          );
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                      />
+                      {category.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-3 text-sm font-bold text-slate-700">Price</p>
+                <input
+                  type="range"
+                  min="0"
+                  max="100000"
+                  step="500"
+                  value={selectedPriceCap}
+                  onChange={(event) => setSelectedPriceCap(Number(event.target.value))}
+                  className="w-full accent-green-600"
+                />
+                <p className="mt-2 text-sm font-semibold text-slate-700">
+                  ₦0 — ₦{selectedPriceCap.toLocaleString()}
+                </p>
+              </div>
+
+              <div>
+                <p className="mb-3 text-sm font-bold text-slate-700">Weight</p>
+                <div className="space-y-2">
+                  {weightFilterOptions.map((option) => (
+                    <label key={option.id} className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={selectedWeights.includes(option.id)}
+                        onChange={() => {
+                          setSelectedWeights((current) =>
+                            current.includes(option.id)
+                              ? current.filter((item) => item !== option.id)
+                              : [...current, option.id]
+                          );
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-3 text-sm font-bold text-slate-700">Availability</p>
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={inStockOnly}
+                    onChange={() => setInStockOnly((value) => !value)}
+                    className="h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                  />
+                  In stock
+                </label>
+              </div>
+
+              <div>
+                <p className="mb-3 text-sm font-bold text-slate-700">Sort</p>
+                <div className="space-y-2">
+                  {sortOptions.map((option) => (
+                    <label key={option.id} className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                      <input
+                        type="radio"
+                        name="product-sort"
+                        checked={sortBy === option.id}
+                        onChange={() => setSortBy(option.id)}
+                        className="h-4 w-4 border-slate-300 text-green-600 focus:ring-green-500"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <div className="flex-1">
+            {loading ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
+                Loading products...
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
+                <h3 className="text-xl font-black text-slate-950">No products found</h3>
+                <p className="mt-2 text-slate-600">
+                  Try a different keyword or clear one of the active filters.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+                {filteredProducts.map((product) => {
+                  const productStock = getProductStock(product);
+                  const inStock = productStock > 0;
+                  const currentQuantity = Number(quantities[String(product.id)] ?? 1);
+                  const rating = getProductRating(product);
+                  const badges = getProductBadges(product);
+                  const tieredPrice = getTieredPriceDisplay(
+                    getProductPrice(product),
+                    product?.bulk_price ||
+                      product?.variants?.[0]?.bulk_price ||
+                      product?.types?.[0]?.variants?.[0]?.bulk_price ||
+                      0
+                  );
+                  const deliveryLocation = deliveryLocations[String(product.id)] || "";
+                  const deliveryInfo = estimateDeliveryFee(deliveryLocation, currentQuantity);
+
+                  return (
+                    <div
+                      key={product.id}
+                      className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
+                    >
+                      <div className="relative h-52 overflow-hidden bg-slate-100">
+                        <img
+                          src={getProductImage(product)}
+                          alt={product.name}
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
+                        />
+                        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+                          {badges.length > 0
+                            ? badges.map((badge) => (
+                                <span
+                                  key={badge.id}
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wide shadow-sm ${badge.className}`}
+                                >
+                                  <span>{badge.icon}</span>
+                                  {badge.label}
+                                </span>
+                              ))
+                            : null}
+                        </div>
+                        <div className="absolute bottom-3 left-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-green-800 shadow-sm">
+                          {inStock ? `${productStock} available` : "Out of stock"}
+                        </div>
+                      </div>
+
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-black text-slate-950">{product.name}</h3>
+                            <p className="mt-1 text-sm text-slate-500">{getProductWeight(product)}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-1 text-sm font-medium text-amber-500">
+                          <span>⭐</span>
+                          <span>{rating.toFixed(1)}</span>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between gap-3">
+                          <p className="text-2xl font-black text-green-700">
+                            {formatPrice(getProductPrice(product))}
+                          </p>
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${inStock ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                            {inStock ? "In Stock" : "Out of stock"}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
+                            Buy More, Save More
+                          </p>
+                          <div className="mt-2 space-y-1.5 text-xs text-slate-700">
+                            <div className="flex items-center justify-between gap-2">
+                              <span>1 bag</span>
+                              <span className="font-bold text-slate-900">{formatPrice(tieredPrice.single)}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span>5 bags</span>
+                              <span className="font-bold text-slate-900">{formatPrice(tieredPrice.fiveBag)}/bag</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span>10+ bags</span>
+                              <span className="font-bold text-amber-700">
+                                {tieredPrice.wholesale > 0 ? "Wholesale price" : "Contact us"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                          <div className="flex items-center gap-2 text-sm font-black text-slate-800">
+                            <span>🚚</span>
+                            <span>Delivery available</span>
+                          </div>
+
+                          <label className="mt-2 block">
+                            <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                              Enter location
+                            </span>
+                            <input
+                              type="text"
+                              value={deliveryLocation}
+                              onChange={(event) =>
+                                setDeliveryLocations((prev) => ({
+                                  ...prev,
+                                  [String(product.id)]: event.target.value,
+                                }))
+                              }
+                              placeholder="e.g. Lekki, Lagos"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-green-400 focus:outline-none"
+                            />
+                          </label>
+
+                          <p className="mt-2 text-xs text-slate-600">
+                            {deliveryInfo.estimate
+                              ? deliveryInfo.summary
+                              : "Enter location to estimate delivery cost."}
+                          </p>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                          <span className="text-sm font-semibold text-slate-500">Qty</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => updateQuantity(product.id, -1)}
+                              disabled={!inStock}
+                              className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-lg font-bold text-slate-700 transition hover:border-green-400 hover:text-green-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label={`Decrease quantity for ${product.name}`}
+                            >
+                              −
+                            </button>
+                            <span className="min-w-8 text-center text-base font-black text-slate-900">
+                              {currentQuantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateQuantity(product.id, 1)}
+                              disabled={!inStock}
+                              className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-lg font-bold text-slate-700 transition hover:border-green-400 hover:text-green-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label={`Increase quantity for ${product.name}`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAddToCart(product)}
+                            disabled={!inStock}
+                            className="w-full rounded-xl bg-green-600 px-3 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          >
+                            Add to Cart
+                          </button>
+
+                          <a
+                            href={`https://wa.me/2348039688939?text=${encodeURIComponent(
+                              buildWhatsAppOrderMessage(product, currentQuantity, getProductPrice(product))
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full rounded-xl bg-emerald-700 px-3 py-3 text-center text-sm font-black uppercase tracking-wide text-white transition hover:bg-emerald-800"
+                          >
+                            Buy on WhatsApp
+                          </a>
+                        </div>
+
+                        <Link
+                          href={`/products/${product.id}`}
+                          className="mt-3 block rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-center text-sm font-black uppercase tracking-wide text-amber-700 transition hover:bg-amber-100"
+                        >
+                          Request Bulk Price
+                        </Link>
+
+                        <Link
+                          href={`/products/${product.id}`}
+                          className="mt-2 block text-center text-sm font-semibold text-slate-600 transition hover:text-green-700"
+                        >
+                          View Details
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
     </main>
   );

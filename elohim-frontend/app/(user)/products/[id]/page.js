@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import API from "@/lib/api";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { useCartStore } from "@/lib/cartStore";
@@ -226,6 +227,7 @@ export default function ProductDetails() {
   const [loading, setLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [deliveryLocation, setDeliveryLocation] = useState("");
 
   const getBackendRootUrl = () => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -485,6 +487,53 @@ export default function ProductDetails() {
 
   const formatPrice = (value) =>
     `₦${Number(value || 0).toLocaleString()}`;
+
+  const buildWhatsAppOrderMessage = (productItem, quantityValue = 1, priceOverride = null) => {
+    const productName = String(productItem?.name || "this product");
+    const totalPrice = Number((Number(priceOverride ?? productItem?.price ?? 0) * Number(quantityValue || 1)).toFixed(2));
+    return `Hello Elohim Grains, I want to order ${productName} — ${formatPrice(totalPrice)}.`;
+  };
+
+  const getTieredPricing = (basePrice, wholesaleOverride) => {
+    const retailPrice = Number(basePrice || 0);
+    const wholesalePrice = Number(wholesaleOverride || 0);
+
+    return {
+      single: retailPrice,
+      fiveBag: retailPrice > 0 ? Math.max(1, Math.round(retailPrice * 0.97)) : 0,
+      wholesale: wholesalePrice > 0 ? wholesalePrice : retailPrice > 0 ? Math.round(retailPrice * 0.9) : 0,
+    };
+  };
+
+  const estimateDeliveryFee = (location, quantityValue = 1) => {
+    const cleanedLocation = String(location || "").trim();
+
+    if (!cleanedLocation) {
+      return {
+        available: true,
+        estimate: null,
+        summary: "Enter location to estimate delivery cost.",
+      };
+    }
+
+    const normalizedLocation = cleanedLocation.toLowerCase();
+    const cityMultiplier = /lagos|ikeja|lekki|surulere|victoria island|ajah|abuja|ibadan|kano|enugu|port harcourt|owerri|asaba|benin|warri|akure|ilorin|jos|kaduna|abeokuta/.test(normalizedLocation)
+      ? 1
+      : 1.35;
+
+    const baseFee = Math.round(1800 * cityMultiplier);
+    const perBagFee = Math.round(350 * cityMultiplier);
+    const total = baseFee + Math.max(0, quantityValue - 1) * perBagFee;
+
+    return {
+      available: true,
+      estimate: total,
+      summary: `Estimated delivery: ${formatPrice(total)}`,
+    };
+  };
+
+  const quantityPricing = getTieredPricing(regularPrice, bulkPrice);
+  const savingsTarget = Number((price || regularPrice || 0) * (quantity || 1));
 
   const isStaleUploadFilenameReference = (value) => {
     const normalized = String(value || "")
@@ -756,6 +805,52 @@ const uploadPath = normalized.replace(/^https?:\/\/[^/]+/i, "");
             </p>
           )}
 
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="flex items-center gap-2 text-sm font-black text-slate-800">
+              <span>🚚</span>
+              <span>Delivery available</span>
+            </div>
+
+            <label className="mt-3 block">
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                Enter location
+              </span>
+              <input
+                type="text"
+                value={deliveryLocation}
+                onChange={(event) => setDeliveryLocation(event.target.value)}
+                placeholder="e.g. Lekki, Lagos"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-green-400 focus:outline-none"
+              />
+            </label>
+
+            <p className="mt-2 text-xs text-slate-600">
+              {estimateDeliveryFee(deliveryLocation, quantity).summary}
+            </p>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+              Buy More, Save More
+            </p>
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
+              <div className="flex items-center justify-between gap-3">
+                <span>1 bag</span>
+                <span className="font-bold text-slate-900">{formatPrice(quantityPricing.single)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>5 bags</span>
+                <span className="font-bold text-slate-900">{formatPrice(quantityPricing.fiveBag)}/bag</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>10+ bags</span>
+                <span className="font-bold text-amber-700">
+                  {quantityPricing.wholesale > 0 ? "Wholesale price" : "Contact us"}
+                </span>
+              </div>
+            </div>
+          </div>
+
           {user?.role === "bulk" && (
             <span className="bg-blue-100 text-blue-600 px-2 py-1 text-xs rounded">
               Bulk Price Applied
@@ -816,6 +911,17 @@ const uploadPath = normalized.replace(/^https?:\/\/[^/]+/i, "");
               {loading ? "Adding..." : "Add to Cart"}
             </button>
 
+            <a
+              href={`https://wa.me/2348039688939?text=${encodeURIComponent(
+                buildWhatsAppOrderMessage(product, quantity, price)
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full text-center px-4 py-3 rounded-xl bg-emerald-700 text-white"
+            >
+              Buy on WhatsApp
+            </a>
+
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => subscribe("weekly")} className="bg-blue-600 text-white px-4 py-2 rounded-xl">
                 Subscribe Weekly
@@ -831,19 +937,38 @@ const uploadPath = normalized.replace(/^https?:\/\/[^/]+/i, "");
               disabled={bulkLoading}
               className="bg-orange-600 text-white px-4 py-2 rounded"
             >
-              {bulkLoading ? "Sending..." : "Request Bulk Price 💰"}
+              {bulkLoading ? "Sending..." : "Request Bulk Price"}
             </button>
 
-            <a
-              href={`https://wa.me/2348039688939?text=Hello,%20I%20want%20to%20order%20${product.name}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full text-center px-4 py-3 rounded-xl bg-green-500 text-white"
-            >
-              WhatsApp
-            </a>
-
           </div>
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-lime-50 p-6 shadow-sm">
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-700">
+          Can&apos;t afford the full amount today?
+        </p>
+
+        <h3 className="mt-3 text-2xl font-black text-slate-900">
+          🌱 Save toward this product
+        </h3>
+
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+              Target
+            </p>
+            <p className="mt-2 text-3xl font-black text-emerald-700">
+              {formatPrice(savingsTarget)}
+            </p>
+          </div>
+
+          <Link
+            href={`/user/plans?product_id=${product.id}&quantity=${quantity}&payment_frequency=weekly&duration=3`}
+            className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-emerald-700"
+          >
+            Start Food Savings
+          </Link>
         </div>
       </div>
     </div>

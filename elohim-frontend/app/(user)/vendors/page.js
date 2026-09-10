@@ -16,6 +16,19 @@ const getBackendRootUrl = () => {
   return apiUrl.replace(/\/api\/?$/, "");
 };
 
+const getBackendAssetBase = () => {
+  const configured = (
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    "https://elohim-grains-store-production.up.railway.app/api"
+  )
+    .replace(/\/api\/?$/, "")
+    .replace(/\/$/, "");
+
+  return configured || "https://elohim-grains-store-production.up.railway.app";
+};
+
 const normalizeImagePath = (imageUrl) => {
   if (!imageUrl) {
     return "/grains/rice.jpg";
@@ -40,9 +53,10 @@ const normalizeImagePath = (imageUrl) => {
     uploadPath.startsWith("grains/uploads/")
   ) {
     const safeUploadPath = uploadPath.replace(/^\/?grains\//i, "/");
-    return safeUploadPath.startsWith("/")
+    const assetPath = safeUploadPath.startsWith("/")
       ? safeUploadPath
       : `/${safeUploadPath}`;
+    return `${getBackendAssetBase()}${assetPath}`;
   }
 
   // Full external URL

@@ -822,7 +822,7 @@ export default async function Home() {
             >
               <div className="relative h-52 overflow-hidden">
                 <img
-                  src={category.image}
+                  src={normalizeImagePath(category.image)}
                   alt={category.title}
                   className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
                 />

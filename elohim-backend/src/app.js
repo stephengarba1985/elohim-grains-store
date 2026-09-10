@@ -394,6 +394,73 @@ const findUploadedFile = (
   return null;
 };
 
+const s3ProxyBaseUrl = (
+  process.env.S3_PROXY_BASE_URL ||
+  process.env.ASSET_PROXY_BASE_URL ||
+  process.env.CLOUDFRONT_URL ||
+  process.env.PUBLIC_ASSET_URL ||
+  ""
+).replace(/\/+$/, "");
+
+const proxyStaticAsset = async (
+  req,
+  res,
+  folder,
+  filename
+) => {
+  if (!s3ProxyBaseUrl) {
+    return false;
+  }
+
+  if (!isSafeFilename(filename)) {
+    return false;
+  }
+
+  const assetUrl = new URL(
+    `/uploads/${folder}/${filename}`,
+    s3ProxyBaseUrl
+  ).toString();
+
+  try {
+    const response = await fetch(assetUrl, {
+      redirect: "follow",
+      headers: {
+        Accept: req.headers.accept || "*/*",
+      },
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const contentType = response.headers.get(
+      "content-type"
+    );
+
+    const buffer = Buffer.from(
+      await response.arrayBuffer()
+    );
+
+    if (contentType) {
+      res.setHeader("Content-Type", contentType);
+    }
+
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=31536000, immutable"
+    );
+
+    res.status(response.status || 200).send(buffer);
+    return true;
+  } catch (err) {
+    console.warn(
+      `[UPLOAD] S3 proxy failed for ${req.originalUrl}:`,
+      err.message
+    );
+    return false;
+  }
+};
+
 /**
  * Serve product and catalog images.
  *
@@ -406,7 +473,7 @@ app.get(
     "/uploads/products/:filename",
     "/uploads/catalog/:filename",
   ],
-  (req, res) => {
+  async (req, res) => {
     const filename = req.params.filename;
 
     const folder = req.path.includes(
@@ -414,6 +481,17 @@ app.get(
     )
       ? "catalog"
       : "products";
+
+    const proxied = await proxyStaticAsset(
+      req,
+      res,
+      folder,
+      filename
+    );
+
+    if (proxied) {
+      return;
+    }
 
     const filePath = findUploadedFile(
       folder,

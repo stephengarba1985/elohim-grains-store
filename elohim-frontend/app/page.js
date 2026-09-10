@@ -17,7 +17,7 @@ const backendRootUrl = (
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "https://elohim-grains-store-production.up.railway.app/api"
+  "https://api.elohimgrains.com/api"
 ).replace(/\/api\/?$/, "");
 
 const getBackendRootUrl = () => backendRootUrl;
@@ -443,12 +443,12 @@ const getBackendAssetBase = () => {
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.PUBLIC_BACKEND_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||
-    "https://elohim-grains-store-production.up.railway.app/api"
+    "https://api.elohimgrains.com/api"
   )
     .replace(/\/api\/?$/, "")
     .replace(/\/$/, "");
 
-  return configured || "https://elohim-grains-store-production.up.railway.app";
+  return configured || "https://assets.elohimgrains.com";
 };
 
 const normalizeImagePath = (imageUrl) => {
@@ -488,12 +488,10 @@ const normalizeImagePath = (imageUrl) => {
     return `${getBackendAssetBase()}${assetPath}`;
   }
 
-  // Full external URL
   if (/^https?:\/\//i.test(normalized)) {
     return normalized;
   }
 
-  // Existing frontend grain images
   if (normalized.startsWith("/grains/")) {
     return normalized;
   }
@@ -502,30 +500,23 @@ const normalizeImagePath = (imageUrl) => {
     return `/${normalized}`;
   }
 
-  // Legacy /images/... paths
   if (normalized.startsWith("/images/")) {
     return `/grains/${
-      normalized.split("/images/").pop() ||
-      "rice.jpg"
+      normalized.split("/images/").pop() || "rice.jpg"
     }`;
   }
 
   if (normalized.startsWith("images/")) {
     return `/grains/${
-      normalized.replace(/^images\//i, "") ||
-      "rice.jpg"
+      normalized.replace(/^images\//i, "") || "rice.jpg"
     }`;
   }
 
-  // Other absolute frontend paths
   if (normalized.startsWith("/")) {
     return normalized;
   }
 
-  return `/grains/${normalized.replace(
-    /^grains\//i,
-    ""
-  )}`;
+  return `/grains/${normalized.replace(/^grains\//i, "")}`;
 };
 
 const getStableImageOverride = (productName) => {
@@ -644,7 +635,7 @@ async function getProducts() {
       process.env.NEXT_PUBLIC_API_URL ||
       process.env.PUBLIC_BACKEND_URL ||
       process.env.NEXT_PUBLIC_BACKEND_URL ||
-      "https://elohim-grains-store-production.up.railway.app/api";
+      "https://api.elohimgrains.com/api";
 
     const res = await fetch(`${baseUrl}/products`, {
       cache: "no-store",

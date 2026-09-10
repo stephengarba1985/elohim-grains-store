@@ -20,7 +20,7 @@ export default function OrdersPage() {
       process.env.NEXT_PUBLIC_API_URL ||
       process.env.PUBLIC_BACKEND_URL ||
       process.env.NEXT_PUBLIC_BACKEND_URL ||
-      "https://elohim-grains-store-production.up.railway.app/api";
+      "https://api.elohimgrains.com/api";
     return apiUrl.replace(/\/api\/?$/, "");
   };
 

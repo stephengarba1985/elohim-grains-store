@@ -234,7 +234,7 @@ export default function ProductDetails() {
       process.env.NEXT_PUBLIC_API_URL ||
       process.env.PUBLIC_BACKEND_URL ||
       process.env.NEXT_PUBLIC_BACKEND_URL ||
-      "https://elohim-grains-store-production.up.railway.app/api";
+      "https://api.elohimgrains.com/api";
     return apiUrl.replace(/\/api\/?$/, "");
   };
 
@@ -563,12 +563,12 @@ export default function ProductDetails() {
       process.env.NEXT_PUBLIC_API_URL ||
       process.env.PUBLIC_BACKEND_URL ||
       process.env.NEXT_PUBLIC_BACKEND_URL ||
-      "https://elohim-grains-store-production.up.railway.app/api"
+      "https://api.elohimgrains.com/api"
     )
       .replace(/\/api\/?$/, "")
       .replace(/\/$/, "");
 
-    return configured || "https://elohim-grains-store-production.up.railway.app";
+    return configured || "https://assets.elohimgrains.com";
   };
 
   const normalizeImagePath = (imageUrl) => {
@@ -605,12 +605,10 @@ export default function ProductDetails() {
       return `${getBackendAssetBase()}${assetPath}`;
     }
 
-    // Full external URL
     if (/^https?:\/\//i.test(normalized)) {
       return normalized;
     }
 
-    // Existing frontend grain images
     if (normalized.startsWith("/grains/")) {
       return normalized;
     }
@@ -619,30 +617,23 @@ export default function ProductDetails() {
       return `/${normalized}`;
     }
 
-    // Legacy /images/... paths
     if (normalized.startsWith("/images/")) {
       return `/grains/${
-        normalized.split("/images/").pop() ||
-        "rice.jpg"
+        normalized.split("/images/").pop() || "rice.jpg"
       }`;
     }
 
     if (normalized.startsWith("images/")) {
       return `/grains/${
-        normalized.replace(/^images\//i, "") ||
-        "rice.jpg"
+        normalized.replace(/^images\//i, "") || "rice.jpg"
       }`;
     }
 
-    // Other absolute frontend paths
     if (normalized.startsWith("/")) {
       return normalized;
     }
 
-    return `/grains/${normalized.replace(
-      /^grains\//i,
-      ""
-    )}`;
+    return `/grains/${normalized.replace(/^grains\//i, "")}`;
   };
 
   const getStableImageOverride = (productName) => {

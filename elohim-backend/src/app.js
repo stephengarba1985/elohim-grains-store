@@ -218,9 +218,8 @@ const allowedOrigins = new Set(
   [
     "https://elohimgrains.com",
     "https://www.elohimgrains.com",
-
-    "https://elohim-grains-store-production.up.railway.app",
-    "https://elohim-grains-store.up.railway.app",
+    "https://api.elohimgrains.com",
+    "https://assets.elohimgrains.com",
 
     "http://localhost:3000",
     "http://localhost:3001",

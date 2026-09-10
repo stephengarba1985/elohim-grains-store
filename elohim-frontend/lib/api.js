@@ -1,7 +1,6 @@
 import axios from "axios";
 
-const FALLBACK_BACKEND_API_URL =
-  "https://elohim-grains-store-production.up.railway.app/api";
+const FALLBACK_BACKEND_API_URL = "https://api.elohimgrains.com/api";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||

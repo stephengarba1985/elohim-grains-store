@@ -287,7 +287,7 @@ export default function ProductsPage() {
       process.env.NEXT_PUBLIC_API_URL ||
       process.env.PUBLIC_BACKEND_URL ||
       process.env.NEXT_PUBLIC_BACKEND_URL ||
-      "https://elohim-grains-store-production.up.railway.app/api";
+      "https://api.elohimgrains.com/api";
 
     return apiUrl.replace(/\/api\/?$/, "");
   };
@@ -302,12 +302,73 @@ export default function ProductsPage() {
       process.env.NEXT_PUBLIC_API_URL ||
       process.env.PUBLIC_BACKEND_URL ||
       process.env.NEXT_PUBLIC_BACKEND_URL ||
-      "https://elohim-grains-store-production.up.railway.app/api"
+      "https://api.elohimgrains.com/api"
     )
       .replace(/\/api\/?$/, "")
       .replace(/\/$/, "");
 
-    return configured || "https://elohim-grains-store-production.up.railway.app";
+    return configured || "https://assets.elohimgrains.com";
+  };
+
+  const normalizeImagePath = (imageUrl) => {
+    if (!imageUrl) {
+      return "/grains/rice.jpg";
+    }
+
+    const normalized = String(imageUrl)
+      .replace(/\\/g, "/")
+      .split("?")[0]
+      .split("#")[0]
+      .trim();
+
+    if (!normalized || normalized === "/") {
+      return "/grains/rice.jpg";
+    }
+
+    const uploadPath = normalized.replace(/^https?:\/\/[^/]+/i, "");
+
+    if (
+      uploadPath.startsWith("/uploads/") ||
+      uploadPath.startsWith("uploads/") ||
+      uploadPath.startsWith("/grains/uploads/") ||
+      uploadPath.startsWith("grains/uploads/")
+    ) {
+      const safeUploadPath = uploadPath.replace(/^\/?grains\//i, "/");
+      const assetPath = safeUploadPath.startsWith("/")
+        ? safeUploadPath
+        : `/${safeUploadPath}`;
+      return `${getBackendAssetBase()}${assetPath}`;
+    }
+
+    if (/^https?:\/\//i.test(normalized)) {
+      return normalized;
+    }
+
+    if (normalized.startsWith("/grains/")) {
+      return normalized;
+    }
+
+    if (normalized.startsWith("grains/")) {
+      return `/${normalized}`;
+    }
+
+    if (normalized.startsWith("/images/")) {
+      return `/grains/${
+        normalized.split("/images/").pop() || "rice.jpg"
+      }`;
+    }
+
+    if (normalized.startsWith("images/")) {
+      return `/grains/${
+        normalized.replace(/^images\//i, "") || "rice.jpg"
+      }`;
+    }
+
+    if (normalized.startsWith("/")) {
+      return normalized;
+    }
+
+    return `/grains/${normalized.replace(/^grains\//i, "")}`;
   };
 
   const getImageCandidateList = (productName) => {
@@ -368,76 +429,6 @@ export default function ProductsPage() {
     });
 
     return res.data.image_url;
-  };
-
-  const normalizeImagePath = (imageUrl) => {
-    if (!imageUrl) {
-      return "/grains/rice.jpg";
-    }
-
-    const normalized = String(imageUrl)
-      .replace(/\\/g, "/")
-      .split("?")[0]
-      .split("#")[0]
-      .trim();
-
-    if (!normalized || normalized === "/") {
-      return "/grains/rice.jpg";
-    }
-
-    const uploadPath = normalized.replace(/^https?:\/\/[^/]+/i, "");
-
-    if (
-      uploadPath.startsWith("/uploads/") ||
-      uploadPath.startsWith("uploads/") ||
-      uploadPath.startsWith("/grains/uploads/") ||
-      uploadPath.startsWith("grains/uploads/")
-    ) {
-      const safeUploadPath = uploadPath.replace(/^\/?grains\//i, "/");
-      const assetPath = safeUploadPath.startsWith("/")
-        ? safeUploadPath
-        : `/${safeUploadPath}`;
-      return `${getBackendAssetBase()}${assetPath}`;
-    }
-
-    // Full external URL
-    if (/^https?:\/\//i.test(normalized)) {
-      return normalized;
-    }
-
-    // Existing frontend grain images
-    if (normalized.startsWith("/grains/")) {
-      return normalized;
-    }
-
-    if (normalized.startsWith("grains/")) {
-      return `/${normalized}`;
-    }
-
-    // Legacy /images/... paths
-    if (normalized.startsWith("/images/")) {
-      return `/grains/${
-        normalized.split("/images/").pop() ||
-        "rice.jpg"
-      }`;
-    }
-
-    if (normalized.startsWith("images/")) {
-      return `/grains/${
-        normalized.replace(/^images\//i, "") ||
-        "rice.jpg"
-      }`;
-    }
-
-    // Other absolute frontend paths
-    if (normalized.startsWith("/")) {
-      return normalized;
-    }
-
-    return `/grains/${normalized.replace(
-      /^grains\//i,
-      ""
-    )}`;
   };
 
   /* =========================

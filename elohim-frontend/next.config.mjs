@@ -2,8 +2,7 @@ import { dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const fallbackBackendApiUrl =
-  "https://elohim-grains-store-production.up.railway.app/api";
+const fallbackBackendApiUrl = "https://api.elohimgrains.com/api";
 const apiUrl =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.PUBLIC_BACKEND_URL ||
@@ -24,6 +23,7 @@ const nextConfig = {
       { protocol: "https", hostname: "127.0.0.1" },
       { protocol: "https", hostname: "elohimgrains.com" },
       { protocol: "https", hostname: "www.elohimgrains.com" },
+      { protocol: "https", hostname: "api.elohimgrains.com" },
       { protocol: "https", hostname: "assets.elohimgrains.com" },
       { protocol: "https", hostname: "**.railway.app" },
       { protocol: "https", hostname: "**.vercel.app" },

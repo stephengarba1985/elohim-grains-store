@@ -432,6 +432,45 @@ router.get("/", async (req, res) => {
   try {
     await ensureCatalogColumns();
 
+    const variantsResult = await pool.query(`
+      SELECT
+        pv.id,
+        pv.product_id,
+        pv.product_type_id,
+        pv.weight,
+        pv.price,
+        pv.bulk_price,
+        pv.stock,
+        pv.image,
+        pv.image_url
+      FROM product_variants pv
+      ORDER BY pv.product_id ASC, pv.id ASC
+    `);
+
+    const variantsByProductId = new Map();
+
+    for (const variant of variantsResult.rows) {
+      const productId = Number(variant.product_id);
+      const normalizedVariant = {
+        id: variant.id,
+        product_id: variant.product_id,
+        product_type_id: variant.product_type_id,
+        weight: variant.weight || "",
+        price: Number(variant.price || 0),
+        bulk_price:
+          variant.bulk_price != null ? Number(variant.bulk_price) : null,
+        stock: Number(variant.stock || 0),
+        image: normalizeStoredImageReference(variant.image),
+        image_url: normalizeStoredImageReference(variant.image_url),
+      };
+
+      if (!variantsByProductId.has(productId)) {
+        variantsByProductId.set(productId, []);
+      }
+
+      variantsByProductId.get(productId).push(normalizedVariant);
+    }
+
     const result = await pool.query(`
       SELECT
         p.id,
@@ -514,6 +553,23 @@ router.get("/", async (req, res) => {
           }))
         : [];
 
+      const directVariants = variantsByProductId.get(Number(row.id)) || [];
+      const mergedVariants = [...directVariants, ...flattenProductVariants(types)];
+      const uniqueVariants = new Map();
+
+      for (const variant of mergedVariants) {
+        if (!variant) continue;
+
+        const key = String(
+          variant.id ??
+            `${variant.weight || "standard"}-${variant.price || 0}-${variant.stock || 0}`
+        );
+
+        if (!uniqueVariants.has(key)) {
+          uniqueVariants.set(key, variant);
+        }
+      }
+
       return {
         id: row.id,
         name: row.name,
@@ -527,7 +583,7 @@ router.get("/", async (req, res) => {
         category: row.category_name || null,
         category_slug: row.category_slug || null,
         types,
-        variants: flattenProductVariants(types),
+        variants: [...uniqueVariants.values()],
       };
     });
 

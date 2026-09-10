@@ -7,7 +7,12 @@ import toast from "react-hot-toast";
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
 const getBackendRootUrl = () => {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  const apiUrl =
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    "https://elohim-grains-store-production.up.railway.app/api";
+
   return apiUrl.replace(/\/api\/?$/, "");
 };
 

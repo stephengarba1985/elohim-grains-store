@@ -240,7 +240,10 @@ export default function Dashboard() {
 
   const openInvoice = (orderId) => {
   const baseUrl =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    "https://elohim-grains-store-production.up.railway.app/api";
 
   window.open(`${baseUrl}/orders/${orderId}/invoice`, "_blank");
 };

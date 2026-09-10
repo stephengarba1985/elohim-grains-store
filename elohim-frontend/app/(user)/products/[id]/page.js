@@ -230,7 +230,11 @@ export default function ProductDetails() {
   const [deliveryLocation, setDeliveryLocation] = useState("");
 
   const getBackendRootUrl = () => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.PUBLIC_BACKEND_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      "https://elohim-grains-store-production.up.railway.app/api";
     return apiUrl.replace(/\/api\/?$/, "");
   };
 
@@ -549,6 +553,19 @@ export default function ProductDetails() {
     return /(?:^|\/)[a-z0-9._-]+-\d{13,}\.(?:jpe?g|png|webp|jfif)$/i.test(candidate);
   };
 
+  const getBackendAssetBase = () => {
+    const configured = (
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.PUBLIC_BACKEND_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      "https://elohim-grains-store-production.up.railway.app/api"
+    )
+      .replace(/\/api\/?$/, "")
+      .replace(/\/$/, "");
+
+    return configured || "https://elohim-grains-store-production.up.railway.app";
+  };
+
   const normalizeImagePath = (imageUrl) => {
     if (!imageUrl) {
       return "/grains/rice.jpg";
@@ -568,7 +585,7 @@ export default function ProductDetails() {
       return "/grains/rice.jpg";
     }
 
-const uploadPath = normalized.replace(/^https?:\/\/[^/]+/i, "");
+    const uploadPath = normalized.replace(/^https?:\/\/[^/]+/i, "");
 
     if (
       uploadPath.startsWith("/uploads/") ||
@@ -577,17 +594,18 @@ const uploadPath = normalized.replace(/^https?:\/\/[^/]+/i, "");
       uploadPath.startsWith("grains/uploads/")
     ) {
       const safeUploadPath = uploadPath.replace(/^\/?grains\//i, "/");
-      return safeUploadPath.startsWith("/")
+      const assetPath = safeUploadPath.startsWith("/")
         ? safeUploadPath
         : `/${safeUploadPath}`;
+      return `${getBackendAssetBase()}${assetPath}`;
     }
 
     // Full external URL
     if (/^https?:\/\//i.test(normalized)) {
       return normalized;
-  }
+    }
 
-  // Existing frontend grain images
+    // Existing frontend grain images
     if (normalized.startsWith("/grains/")) {
       return normalized;
     }

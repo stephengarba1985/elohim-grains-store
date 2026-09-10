@@ -285,7 +285,9 @@ export default function ProductsPage() {
   const getBackendRootUrl = () => {
     const apiUrl =
       process.env.NEXT_PUBLIC_API_URL ||
-      "http://localhost:5000/api";
+      process.env.PUBLIC_BACKEND_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      "https://elohim-grains-store-production.up.railway.app/api";
 
     return apiUrl.replace(/\/api\/?$/, "");
   };

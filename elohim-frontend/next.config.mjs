@@ -2,8 +2,14 @@ import { dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-const backendRoot = apiUrl.replace(/\/api\/?$/, "");
+const fallbackBackendApiUrl =
+  "https://elohim-grains-store-production.up.railway.app/api";
+const apiUrl =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.PUBLIC_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  fallbackBackendApiUrl;
+const backendRoot = apiUrl.replace(/\/api\/?$/, "").replace(/\/$/, "");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

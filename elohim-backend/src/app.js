@@ -4,6 +4,8 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
 const fs = require("fs");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 require("dotenv").config();
 
@@ -57,6 +59,29 @@ app.disable("x-powered-by");
  * Railway / reverse proxy support.
  */
 app.set("trust proxy", 1);
+
+/* =========================================================
+   S3 CLIENT SETUP
+========================================================= */
+
+let s3Client = null;
+const S3_BUCKET = process.env.AWS_BUCKET_NAME;
+
+if (S3_BUCKET && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+  try {
+    s3Client = new S3Client({
+      region: process.env.AWS_REGION || "auto",
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      },
+      endpoint: process.env.AWS_ENDPOINT,
+    });
+    console.log("[S3] Client initialized for bucket:", S3_BUCKET);
+  } catch (err) {
+    console.warn("[S3] Failed to initialize S3 client:", err.message);
+  }
+}
 
 /* =========================================================
    ENVIRONMENT
@@ -320,7 +345,7 @@ app.use(
 app.use(express.json());
 
 /* =========================================================
-   UPLOAD IMAGE SERVING
+   UPLOAD IMAGE SERVING (S3 + Local Fallback)
 ========================================================= */
 
 /**
@@ -394,21 +419,11 @@ const findUploadedFile = (
   return null;
 };
 
-const s3ProxyBaseUrl = (
-  process.env.S3_PROXY_BASE_URL ||
-  process.env.ASSET_PROXY_BASE_URL ||
-  process.env.CLOUDFRONT_URL ||
-  process.env.PUBLIC_ASSET_URL ||
-  ""
-).replace(/\/+$/, "");
-
-const proxyStaticAsset = async (
-  req,
-  res,
-  folder,
-  filename
-) => {
-  if (!s3ProxyBaseUrl) {
+/**
+ * Try to fetch from S3 using a presigned URL
+ */
+const serveFromS3 = async (req, res, folder, filename) => {
+  if (!s3Client || !S3_BUCKET) {
     return false;
   }
 
@@ -416,53 +431,29 @@ const proxyStaticAsset = async (
     return false;
   }
 
-  const assetUrl = new URL(
-    `/uploads/${folder}/${filename}`,
-    s3ProxyBaseUrl
-  ).toString();
-
   try {
-    const response = await fetch(assetUrl, {
-      redirect: "follow",
-      headers: {
-        Accept: req.headers.accept || "*/*",
-      },
+    const key = `${folder}/${filename}`;
+
+    const command = new GetObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
     });
 
-    if (!response.ok) {
-      return false;
-    }
+    const presignedUrl = await getSignedUrl(s3Client, command, {
+      expiresIn: 3600, // 1 hour
+    });
 
-    const contentType = response.headers.get(
-      "content-type"
-    );
+    console.log(`[S3] Redirecting to presigned URL for: ${key}`);
 
-    const buffer = Buffer.from(
-      await response.arrayBuffer()
-    );
-
-    if (contentType) {
-      res.setHeader("Content-Type", contentType);
-    }
-
-    res.setHeader(
-      "Cache-Control",
-      "public, max-age=31536000, immutable"
-    );
-
-    res.status(response.status || 200).send(buffer);
-    return true;
+    return res.redirect(301, presignedUrl);
   } catch (err) {
-    console.warn(
-      `[UPLOAD] S3 proxy failed for ${req.originalUrl}:`,
-      err.message
-    );
+    console.warn(`[S3] Failed to serve ${filename}:`, err.message);
     return false;
   }
 };
 
 /**
- * Serve product and catalog images.
+ * Serve product and catalog images from S3 (with local fallback)
  *
  * Examples:
  *   /uploads/products/image.jpg
@@ -482,35 +473,32 @@ app.get(
       ? "catalog"
       : "products";
 
-    const proxied = await proxyStaticAsset(
-      req,
-      res,
-      folder,
-      filename
-    );
-
-    if (proxied) {
+    // Try S3 first
+    const servedFromS3 = await serveFromS3(req, res, folder, filename);
+    if (servedFromS3) {
       return;
     }
 
+    // Fall back to local files
     const filePath = findUploadedFile(
       folder,
       filename
     );
 
-    if (!filePath) {
-      console.warn(
-        `[UPLOAD] Image not found: /uploads/${folder}/${filename}`
-      );
-
-      return res.status(404).json({
-        success: false,
-        error: "Image not found",
-        path: `/uploads/${folder}/${filename}`,
-      });
+    if (filePath) {
+      console.log(`[UPLOAD] Serving from local disk: ${filePath}`);
+      return res.sendFile(filePath);
     }
 
-    return res.sendFile(filePath);
+    console.warn(
+      `[UPLOAD] Image not found in S3 or local: /uploads/${folder}/${filename}`
+    );
+
+    return res.status(404).json({
+      success: false,
+      error: "Image not found",
+      path: `/uploads/${folder}/${filename}`,
+    });
   }
 );
 
@@ -807,10 +795,7 @@ app.get(
     res.type("text/plain");
 
     res.send(
-      `User-agent: *
-Allow: /
-Sitemap: ${siteUrl}/sitemap.xml
-`
+      `User-agent: *\nAllow: /\nSitemap: ${siteUrl}/sitemap.xml\n`
     );
   }
 );
@@ -863,3 +848,4 @@ app.use(
 ========================================================= */
 
 module.exports = app;
+

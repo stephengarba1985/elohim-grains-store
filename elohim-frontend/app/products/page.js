@@ -110,6 +110,31 @@ const getProductStock = (product) => {
   return Math.max(Number(product?.stock_quantity || 0), variantStock);
 };
 
+const getProductVariantOptions = (product) => {
+  const variants = getProductVariants(product);
+
+  if (!variants.length) {
+    return [
+      {
+        id: "standard",
+        label: "Standard bag",
+        price: Number(product?.price || 0),
+        bulkPrice: Number(product?.bulk_price || 0),
+      },
+    ];
+  }
+
+  return variants
+    .filter((variant) => variant && (variant.id || variant.weight || variant.name || variant.variant_name))
+    .map((variant) => ({
+      id: variant.id,
+      label: variant.weight || variant.name || variant.variant_name || "Standard bag",
+      price: Number(variant.price || product?.price || 0),
+      bulkPrice: Number(variant.bulk_price || product?.bulk_price || 0),
+      stock: Number(variant.stock || 0),
+    }));
+};
+
 const getProductImage = (product) => {
   const directMatch = getStaticGrainAssetMatch(product?.name || "") ||
     getStaticGrainAssetMatch(product?.category || "") ||
@@ -493,6 +518,7 @@ export default function ShopPage() {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileSortOpen, setMobileSortOpen] = useState(false);
   const [deliveryLocations, setDeliveryLocations] = useState({});
+  const [selectedVariants, setSelectedVariants] = useState({});
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -624,7 +650,8 @@ export default function ShopPage() {
 
     try {
       const productQuantity = Number(quantities[String(product.id)] ?? 1);
-      await addToCart(product.id, productQuantity, null);
+      const selectedVariantId = selectedVariants[String(product.id)] ?? null;
+      await addToCart(product.id, productQuantity, selectedVariantId);
       toast.success(`${productQuantity} item(s) added to cart`);
     } catch (error) {
       console.error("Add to cart error:", error);
@@ -973,13 +1000,12 @@ export default function ShopPage() {
                   const currentQuantity = Number(quantities[String(product.id)] ?? 1);
                   const rating = getProductRating(product);
                   const badges = getProductBadges(product);
-                  const tieredPrice = getTieredPriceDisplay(
-                    getProductPrice(product),
-                    product?.bulk_price ||
-                      product?.variants?.[0]?.bulk_price ||
-                      product?.types?.[0]?.variants?.[0]?.bulk_price ||
-                      0
-                  );
+                  const variantOptions = getProductVariantOptions(product);
+                  const selectedVariantId = selectedVariants[String(product.id)] ?? variantOptions[0]?.id ?? "standard";
+                  const selectedVariant = variantOptions.find(
+                    (option) => String(option.id) === String(selectedVariantId)
+                  ) || variantOptions[0] || null;
+                  const cardPrice = Number(selectedVariant?.price || getProductPrice(product) || 0);
                   const deliveryLocation = deliveryLocations[String(product.id)] || "";
                   const deliveryInfo = estimateDeliveryFee(deliveryLocation, currentQuantity);
 
@@ -1020,71 +1046,42 @@ export default function ShopPage() {
                           </div>
                         </div>
 
-                        <div className="mt-3 flex items-center gap-1 text-sm font-medium text-amber-500">
-                          <span>⭐</span>
-                          <span>{rating.toFixed(1)}</span>
-                        </div>
-
-                        <div className="mt-4 flex items-center justify-between gap-3">
-                          <p className="text-2xl font-black text-green-700">
-                            {formatPrice(getProductPrice(product))}
-                          </p>
+                        <div className="mt-3 flex items-center justify-between text-sm font-medium text-slate-500">
+                          <div className="flex items-center gap-1 text-amber-500">
+                            <span>⭐</span>
+                            <span>{rating.toFixed(1)}</span>
+                          </div>
                           <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${inStock ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
                             {inStock ? "In Stock" : "Out of stock"}
                           </span>
                         </div>
 
-                        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
-                            Buy More, Save More
-                          </p>
-                          <div className="mt-2 space-y-1.5 text-xs text-slate-700">
-                            <div className="flex items-center justify-between gap-2">
-                              <span>1 bag</span>
-                              <span className="font-bold text-slate-900">{formatPrice(tieredPrice.single)}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span>5 bags</span>
-                              <span className="font-bold text-slate-900">{formatPrice(tieredPrice.fiveBag)}/bag</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span>10+ bags</span>
-                              <span className="font-bold text-amber-700">
-                                {tieredPrice.wholesale > 0 ? "Wholesale price" : "Contact us"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
                         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                          <div className="flex items-center gap-2 text-sm font-black text-slate-800">
-                            <span>🚚</span>
-                            <span>Delivery available</span>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                              Choose
+                            </span>
+                            <span className="text-lg font-black text-green-700">
+                              {formatPrice(cardPrice)}
+                            </span>
                           </div>
 
-                          <label className="mt-2 block">
-                            <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                              Enter location
-                            </span>
-                            <input
-                              type="text"
-                              value={deliveryLocation}
-                              onChange={(event) =>
-                                setDeliveryLocations((prev) => ({
-                                  ...prev,
-                                  [String(product.id)]: event.target.value,
-                                }))
-                              }
-                              placeholder="e.g. Lekki, Lagos"
-                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-green-400 focus:outline-none"
-                            />
-                          </label>
-
-                          <p className="mt-2 text-xs text-slate-600">
-                            {deliveryInfo.estimate
-                              ? deliveryInfo.summary
-                              : "Enter location to estimate delivery cost."}
-                          </p>
+                          <select
+                            value={selectedVariantId}
+                            onChange={(event) =>
+                              setSelectedVariants((prev) => ({
+                                ...prev,
+                                [String(product.id)]: event.target.value,
+                              }))
+                            }
+                            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-800 focus:border-green-400 focus:outline-none"
+                          >
+                            {variantOptions.map((option) => (
+                              <option key={String(option.id)} value={String(option.id)}>
+                                {option.label} {option.stock ? `• ${option.stock} in stock` : ""}
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
                         <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -1114,6 +1111,57 @@ export default function ShopPage() {
                           </div>
                         </div>
 
+                        <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                          <summary className="cursor-pointer list-none text-sm font-bold text-slate-700">
+                            More options
+                          </summary>
+
+                          <div className="mt-3 space-y-3 text-xs text-slate-600">
+                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                                Volume savings
+                              </p>
+                              <div className="mt-2 flex items-center justify-between gap-2 text-slate-700">
+                                <span>1 bag</span>
+                                <span className="font-bold text-slate-900">{formatPrice(cardPrice)}</span>
+                              </div>
+                              <div className="mt-1 flex items-center justify-between gap-2 text-slate-700">
+                                <span>5 bags</span>
+                                <span className="font-bold text-slate-900">{formatPrice(Math.max(1, Math.round(cardPrice * 0.97)))}/bag</span>
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 bg-white p-2">
+                              <div className="flex items-center gap-2 text-sm font-black text-slate-800">
+                                <span>🚚</span>
+                                <span>Delivery available</span>
+                              </div>
+
+                              <label className="mt-2 block">
+                                <span className="mb-1 block text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                                  Enter location
+                                </span>
+                                <input
+                                  type="text"
+                                  value={deliveryLocation}
+                                  onChange={(event) =>
+                                    setDeliveryLocations((prev) => ({
+                                      ...prev,
+                                      [String(product.id)]: event.target.value,
+                                    }))
+                                  }
+                                  placeholder="Lekki, Lagos"
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:border-green-400 focus:outline-none"
+                                />
+                              </label>
+
+                              <p className="mt-2 text-[11px] text-slate-600">
+                                {deliveryInfo.estimate ? deliveryInfo.summary : "Enter location to estimate delivery cost."}
+                              </p>
+                            </div>
+                          </div>
+                        </details>
+
                         <div className="mt-4 grid gap-2">
                           <button
                             type="button"
@@ -1126,7 +1174,7 @@ export default function ShopPage() {
 
                           <a
                             href={`https://wa.me/2348039688939?text=${encodeURIComponent(
-                              buildWhatsAppOrderMessage(product, currentQuantity, getProductPrice(product))
+                              buildWhatsAppOrderMessage(product, currentQuantity, cardPrice)
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"

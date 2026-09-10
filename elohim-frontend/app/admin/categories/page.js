@@ -15,21 +15,32 @@ const getBackendRootUrl = () => {
 };
 
 const getBackendAssetBase = () => {
+  const apiBase = (
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    ""
+  )
+    .replace(/\/api\/?$/, "")
+    .replace(/\/$/, "");
+
+  if (apiBase) {
+    return apiBase;
+  }
+
   const configured = (
     process.env.NEXT_PUBLIC_ASSET_URL ||
     process.env.PUBLIC_ASSET_URL ||
     process.env.S3_PROXY_BASE_URL ||
     process.env.ASSET_PROXY_BASE_URL ||
     process.env.CLOUDFRONT_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    process.env.PUBLIC_BACKEND_URL ||
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    "https://api.elohimgrains.com/api"
+    ""
   )
     .replace(/\/api\/?$/, "")
-    .replace(/\/$/, "");
+    .replace(/\/$/, "")
+    .trim();
 
-  return configured || "https://assets.elohimgrains.com";
+  return configured;
 };
 
 const isStaleUploadFilenameReference = (value) => {

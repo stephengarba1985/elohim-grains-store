@@ -435,6 +435,11 @@ const getProductPrice = (product) => {
 
 const getBackendAssetBase = () => {
   const configured = (
+    process.env.NEXT_PUBLIC_ASSET_URL ||
+    process.env.PUBLIC_ASSET_URL ||
+    process.env.S3_PROXY_BASE_URL ||
+    process.env.ASSET_PROXY_BASE_URL ||
+    process.env.CLOUDFRONT_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.PUBLIC_BACKEND_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||

@@ -24,6 +24,7 @@ const nextConfig = {
       { protocol: "https", hostname: "127.0.0.1" },
       { protocol: "https", hostname: "elohimgrains.com" },
       { protocol: "https", hostname: "www.elohimgrains.com" },
+      { protocol: "https", hostname: "assets.elohimgrains.com" },
       { protocol: "https", hostname: "**.railway.app" },
       { protocol: "https", hostname: "**.vercel.app" },
     ],

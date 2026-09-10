@@ -322,6 +322,33 @@ const createSafeCatalogFilename = (originalName) => {
   )}${extension}`;
 };
 
+const getPublicAssetBaseUrl = () => {
+  const configured = (
+    process.env.PUBLIC_ASSET_URL ||
+    process.env.S3_PROXY_BASE_URL ||
+    process.env.ASSET_PROXY_BASE_URL ||
+    process.env.CLOUDFRONT_URL ||
+    process.env.NEXT_PUBLIC_ASSET_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    ""
+  )
+    .replace(/\/+$/, "")
+    .trim();
+
+  return configured;
+};
+
+const getUploadAssetUrl = (folder, filename) => {
+  const base = getPublicAssetBaseUrl();
+  if (!base) {
+    return `/uploads/${folder}/${filename}`;
+  }
+
+  return new URL(`/uploads/${folder}/${filename}`, base).toString();
+};
+
 /* =========================================================
    PRODUCT IMAGE STORAGE
 ========================================================= */
@@ -431,9 +458,14 @@ router.post(
         });
       }
 
+      const imageUrl = getUploadAssetUrl(
+        "products",
+        req.file.filename
+      );
+
       return res.status(201).json({
         success: true,
-        image_url: `/uploads/products/${req.file.filename}`,
+        image_url: imageUrl,
         filename: req.file.filename,
       });
     } catch (err) {
@@ -481,8 +513,10 @@ router.post(
         });
       }
 
-      const imageUrl =
-        `/uploads/catalog/${req.file.filename}`;
+      const imageUrl = getUploadAssetUrl(
+        "catalog",
+        req.file.filename
+      );
 
       console.log(
         `[UPLOAD] Catalog image saved: ${req.file.path}`

@@ -61,13 +61,61 @@ const normalizeImagePath = (imageUrl) => {
   return `/grains/${normalized.replace(/^grains\//i, "")}`;
 };
 
+const normalizeWeightLabel = (value, fallback = "Standard bag") => {
+  if (value === null || value === undefined) return fallback;
+
+  const raw = String(value).trim();
+  if (!raw) return fallback;
+
+  const cleaned = raw
+    .replace(/\b(?:bags?|packs?|units?)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return fallback;
+
+  const numericMatch = cleaned.match(/(\d+(?:\.\d+)?)/);
+  if (!numericMatch) {
+    const nonNumeric = cleaned.replace(/^(?:kg|kilogram|kilograms)\b/gi, "").trim();
+    return nonNumeric || fallback;
+  }
+
+  const numericValue = numericMatch[1];
+  const hasKgUnit = /kg|kilogram|kilograms|kilo/i.test(cleaned);
+
+  if (hasKgUnit) {
+    return cleaned.replace(/\s+/g, "").replace(/kgs?$/i, "kg");
+  }
+
+  return `${numericValue}kg`;
+};
+
 const getProductVariants = (product) => {
   const directVariants = Array.isArray(product?.variants) ? product.variants : [];
   const nestedVariants = (Array.isArray(product?.types) ? product.types : []).flatMap(
     (type) => (Array.isArray(type?.variants) ? type.variants : [])
   );
 
-  return [...nestedVariants, ...directVariants];
+  const uniqueVariants = new Map();
+
+  [...nestedVariants, ...directVariants].forEach((variant) => {
+    if (!variant) return;
+
+    const label = normalizeWeightLabel(
+      variant.weight ?? variant.name ?? variant.variant_name ?? variant.label ?? "",
+      "standard"
+    );
+    const key = String(
+      variant.id ??
+        `${label}-${Number(variant.price || product?.price || 0)}-${Number(variant.stock || 0)}`
+    );
+
+    if (!uniqueVariants.has(key)) {
+      uniqueVariants.set(key, variant);
+    }
+  });
+
+  return [...uniqueVariants.values()];
 };
 
 const getDisplayVariant = (product) => {
@@ -82,10 +130,24 @@ const getDisplayVariant = (product) => {
 };
 
 const getProductWeight = (product) => {
-  if (product?.weight) return product.weight;
+  const variantLabels = [...new Set(
+    getProductVariants(product)
+      .map((variant) => normalizeWeightLabel(
+        variant?.weight ?? variant?.name ?? variant?.variant_name ?? variant?.label ?? "",
+        ""
+      ))
+      .filter(Boolean)
+  )];
+
+  if (variantLabels.length > 0) {
+    return variantLabels.length > 1 ? variantLabels.join(", ") : variantLabels[0];
+  }
+
+  const fallbackWeight = normalizeWeightLabel(product?.weight ?? "", "");
+  if (fallbackWeight) return fallbackWeight;
 
   const displayVariant = getDisplayVariant(product);
-  if (displayVariant?.weight) return displayVariant.weight;
+  if (displayVariant?.weight) return normalizeWeightLabel(displayVariant.weight, "Standard bag");
 
   const firstType = Array.isArray(product?.types) ? product.types[0] : null;
   if (firstType?.name) return firstType.name;
@@ -124,15 +186,31 @@ const getProductVariantOptions = (product) => {
     ];
   }
 
+  const seenOptions = new Set();
+
   return variants
     .filter((variant) => variant && (variant.id || variant.weight || variant.name || variant.variant_name))
-    .map((variant) => ({
-      id: variant.id,
-      label: variant.weight || variant.name || variant.variant_name || "Standard bag",
-      price: Number(variant.price || product?.price || 0),
-      bulkPrice: Number(variant.bulk_price || product?.bulk_price || 0),
-      stock: Number(variant.stock || 0),
-    }));
+    .map((variant) => {
+      const key = String(variant.id ?? normalizeWeightLabel(
+        variant.weight ?? variant.name ?? variant.variant_name ?? variant.label ?? "",
+        "standard"
+      ));
+
+      if (seenOptions.has(key)) return null;
+      seenOptions.add(key);
+
+      return {
+        id: variant.id ?? key,
+        label: normalizeWeightLabel(
+          variant.weight ?? variant.name ?? variant.variant_name ?? variant.label ?? "Standard bag",
+          "Standard bag"
+        ),
+        price: Number(variant.price || product?.price || 0),
+        bulkPrice: Number(variant.bulk_price || product?.bulk_price || 0),
+        stock: Number(variant.stock || 0),
+      };
+    })
+    .filter(Boolean);
 };
 
 const getProductImage = (product) => {
@@ -552,22 +630,42 @@ export default function ShopPage() {
     );
   }, [products, activeCategory]);
 
+  const getProductWeightValues = (product) => {
+    const labels = getProductVariants(product)
+      .map((variant) =>
+        normalizeWeightLabel(
+          variant?.weight ?? variant?.name ?? variant?.variant_name ?? variant?.label ?? "",
+          ""
+        )
+      )
+      .filter(Boolean);
+
+    const fallbackWeight = normalizeWeightLabel(product?.weight ?? "", "");
+    if (fallbackWeight) labels.push(fallbackWeight);
+
+    return [...new Set(
+      labels.flatMap((label) => {
+        const match = String(label).match(/(\d+(?:\.\d+)?)/);
+        return match ? [Number(match[1])] : [];
+      })
+    )].filter((value) => Number.isFinite(value) && value > 0);
+  };
+
   const getProductWeightKg = (product) => {
-    const rawWeight = String(getProductWeight(product) || "");
-    const match = rawWeight.match(/(\d+(?:\.\d+)?)/);
-    return match ? Number(match[1]) : 0;
+    const values = getProductWeightValues(product);
+    return values.length ? Math.max(...values) : 0;
   };
 
   const matchesSelectedWeight = (product, selectedWeightId) => {
-    const value = getProductWeightKg(product);
+    const values = getProductWeightValues(product);
 
     switch (selectedWeightId) {
       case "1-5kg":
-        return value >= 1 && value <= 5;
+        return values.some((value) => value >= 1 && value <= 5);
       case "10-25kg":
-        return value >= 10 && value <= 25;
+        return values.some((value) => value >= 10 && value <= 25);
       case "50kg-plus":
-        return value >= 50;
+        return values.some((value) => value >= 50);
       default:
         return true;
     }

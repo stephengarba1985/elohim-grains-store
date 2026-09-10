@@ -16,6 +16,11 @@ const uploadProductsDirEnv = process.env.UPLOAD_PRODUCTS_DIR;
 const uploadCatalogDirEnv = process.env.UPLOAD_CATALOG_DIR;
 
 const isProduction = process.env.NODE_ENV === "production";
+const isWindowsAbsolutePath = (value) =>
+  typeof value === "string" && /^[a-zA-Z]:[\\/]/.test(value);
+const localProjectUploadsRoot = path.resolve(process.cwd(), "uploads");
+const localProjectProductRoot = path.resolve(process.cwd(), "uploads", "products");
+const localProjectCatalogRoot = path.resolve(process.cwd(), "uploads", "catalog");
 
 /* =========================================================
    PATH HELPERS
@@ -111,11 +116,17 @@ const findWritableDirectory = (candidates) => {
 ========================================================= */
 
 const productUploadCandidates = [
-  uploadProductsDirEnv
+  localProjectProductRoot,
+
+  uploadProductsDirEnv && process.platform === "win32"
     ? path.resolve(uploadProductsDirEnv)
     : null,
 
-  uploadsRootEnv
+  uploadProductsDirEnv && process.platform !== "win32" && !isWindowsAbsolutePath(uploadProductsDirEnv)
+    ? path.resolve(uploadProductsDirEnv)
+    : null,
+
+  uploadsRootEnv && !(process.platform !== "win32" && isWindowsAbsolutePath(uploadsRootEnv))
     ? toProductsDir(uploadsRootEnv)
     : null,
 
@@ -124,8 +135,6 @@ const productUploadCandidates = [
     : null,
 
   path.resolve("/data/uploads/products"),
-
-  path.resolve(process.cwd(), "uploads/products"),
 
   path.resolve(__dirname, "../../uploads/products"),
 ];
@@ -171,11 +180,17 @@ console.log(`[UPLOAD] Product image directory: ${uploadRoot}`);
 ========================================================= */
 
 const catalogUploadCandidates = [
-  uploadCatalogDirEnv
+  localProjectCatalogRoot,
+
+  uploadCatalogDirEnv && process.platform === "win32"
     ? path.resolve(uploadCatalogDirEnv)
     : null,
 
-  uploadsRootEnv
+  uploadCatalogDirEnv && process.platform !== "win32" && !isWindowsAbsolutePath(uploadCatalogDirEnv)
+    ? path.resolve(uploadCatalogDirEnv)
+    : null,
+
+  uploadsRootEnv && !(process.platform !== "win32" && isWindowsAbsolutePath(uploadsRootEnv))
     ? toCatalogDir(uploadsRootEnv)
     : null,
 
@@ -184,8 +199,6 @@ const catalogUploadCandidates = [
     : null,
 
   path.resolve("/data/uploads/catalog"),
-
-  path.resolve(process.cwd(), "uploads/catalog"),
 
   path.resolve(__dirname, "../../uploads/catalog"),
 ];

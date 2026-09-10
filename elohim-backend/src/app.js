@@ -109,15 +109,18 @@ const uniquePaths = (paths) => {
 ========================================================= */
 
 const uploadStaticRoots = uniquePaths([
-  uploadProductsDirEnv
+  path.resolve(process.cwd(), "uploads"),
+  path.resolve(__dirname, "..", "uploads"),
+
+  uploadProductsDirEnv && !(process.platform !== "win32" && /^[a-zA-Z]:[\\/]/.test(uploadProductsDirEnv))
     ? path.dirname(path.resolve(uploadProductsDirEnv))
     : null,
 
-  uploadCatalogDirEnv
+  uploadCatalogDirEnv && !(process.platform !== "win32" && /^[a-zA-Z]:[\\/]/.test(uploadCatalogDirEnv))
     ? path.dirname(path.resolve(uploadCatalogDirEnv))
     : null,
 
-  uploadsRootEnv
+  uploadsRootEnv && !(process.platform !== "win32" && /^[a-zA-Z]:[\\/]/.test(uploadsRootEnv))
     ? toUploadsRoot(uploadsRootEnv)
     : null,
 
@@ -126,10 +129,6 @@ const uploadStaticRoots = uniquePaths([
     : null,
 
   path.resolve("/data/uploads"),
-
-  path.resolve(process.cwd(), "uploads"),
-
-  path.resolve(__dirname, "..", "uploads"),
 ]);
 
 console.log(

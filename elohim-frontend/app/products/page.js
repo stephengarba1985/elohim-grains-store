@@ -262,26 +262,36 @@ const getProductVariantOptions = (product) => {
     ];
   }
 
-  const seenOptions = new Set();
+  const optionsByWeight = new Map();
 
-  return variants
-    .map((variant, index) => {
-      const key = getVariantKey(variant, index);
-      if (seenOptions.has(key)) return null;
-      seenOptions.add(key);
-
+  variants.forEach((variant, index) => {
       const weightValue = getVariantWeightValue(variant);
       const label = normalizeWeightLabel(weightValue, `Option ${index + 1}`);
-
-      return {
-        id: variant.id ?? key,
+      const weightKey = label.toLowerCase();
+      const option = {
+        id: variant.id ?? getVariantKey(variant, index),
         label,
         price: Number(variant.price || product?.price || 0),
         bulkPrice: Number(variant.bulk_price || product?.bulk_price || 0),
         stock: Number(variant.stock || 0),
       };
-    })
-    .filter(Boolean);
+
+      const current = optionsByWeight.get(weightKey);
+      const optionIsAvailable = option.stock > 0;
+      const currentIsAvailable = Number(current?.stock || 0) > 0;
+      const optionHasLowerPrice =
+        option.price > 0 && (!current?.price || option.price < current.price);
+
+      if (
+        !current ||
+        (optionIsAvailable && !currentIsAvailable) ||
+        (optionIsAvailable === currentIsAvailable && optionHasLowerPrice)
+      ) {
+        optionsByWeight.set(weightKey, option);
+      }
+    });
+
+  return [...optionsByWeight.values()];
 };
 
 const getProductImage = (product) => {

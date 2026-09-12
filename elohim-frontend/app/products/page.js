@@ -136,6 +136,11 @@ const getVariantWeightValue = (variant) =>
       ""
   ).trim();
 
+const getWeightNumber = (value) => {
+  const match = String(value || "").match(/(\d+(?:\.\d+)?)/);
+  return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+};
+
 const getVariantKey = (variant, index = 0) => {
   if (variant?.id !== null && variant?.id !== undefined && variant?.id !== "") {
     return String(variant.id);
@@ -166,18 +171,28 @@ const getProductVariants = (product) => {
     }
   });
 
-  return [...uniqueVariants.values()];
+  return [...uniqueVariants.values()].sort((a, b) => {
+    const weightDifference =
+      getWeightNumber(getVariantWeightValue(a)) -
+      getWeightNumber(getVariantWeightValue(b));
+
+    if (Number.isFinite(weightDifference) && weightDifference !== 0) {
+      return weightDifference;
+    }
+
+    return String(getVariantWeightValue(a)).localeCompare(
+      String(getVariantWeightValue(b)),
+      undefined,
+      { numeric: true }
+    );
+  });
 };
 
 const getDisplayVariant = (product) => {
   const variants = getProductVariants(product);
   if (!variants.length) return null;
 
-  const prioritized = [...variants].sort(
-    (a, b) => Number(b.stock || 0) - Number(a.stock || 0)
-  );
-
-  return prioritized.find((variant) => Number(variant.stock || 0) > 0) || prioritized[0];
+  return variants.find((variant) => Number(variant.stock || 0) > 0) || variants[0];
 };
 
 const getProductWeight = (product) => {
@@ -208,9 +223,19 @@ const getProductWeight = (product) => {
 
 const getProductPrice = (product) => {
   const variants = getProductVariants(product);
-  const displayVariant = getDisplayVariant(product);
+  const availablePrices = variants
+    .filter((variant) => Number(variant.stock || 0) > 0)
+    .map((variant) => Number(variant.price || 0))
+    .filter((price) => Number.isFinite(price) && price > 0);
 
-  return Number(product?.price || displayVariant?.price || variants[0]?.price || 0);
+  const variantPrices = availablePrices.length
+    ? availablePrices
+    : variants
+        .map((variant) => Number(variant.price || 0))
+        .filter((price) => Number.isFinite(price) && price > 0);
+
+  if (variantPrices.length) return Math.min(...variantPrices);
+  return Number(product?.price || 0);
 };
 
 const getProductStock = (product) => {
@@ -417,35 +442,11 @@ const getProductRating = (product) => {
   return Number.isFinite(value) ? value : 4.8;
 };
 
-const categoryTabs = [
-  { id: "all", label: "All Products", icon: "🧺" },
-  { id: "grains", label: "Grains", icon: "🌾" },
-  { id: "flours", label: "Flours", icon: "🥣" },
-  { id: "seeds-nuts", label: "Seeds & Nuts", icon: "🥜" },
-  { id: "spices", label: "Spices", icon: "🌶️" },
-  { id: "cooking-essentials", label: "Cooking Essentials", icon: "🛢️" },
-  { id: "fruits-vegetables", label: "Fruits & Vegetables", icon: "🍎" },
-  { id: "meat-poultry", label: "Meat & Poultry", icon: "🥩" },
-];
-
-const categoryFilterOptions = [
-  { id: "grains", label: "Grains" },
-  { id: "flours", label: "Flour" },
-  { id: "seeds-nuts", label: "Seeds" },
-  { id: "cooking-essentials", label: "Food Essentials" },
-];
-
-const weightFilterOptions = [
-  { id: "1-5kg", label: "1–5kg" },
-  { id: "10-25kg", label: "10–25kg" },
-  { id: "50kg-plus", label: "50kg+" },
-];
-
 const sortOptions = [
-  { id: "popular", label: "Popular" },
   { id: "newest", label: "Newest" },
   { id: "price-low-high", label: "Price low → high" },
   { id: "price-high-low", label: "Price high → low" },
+  { id: "name", label: "Name A → Z" },
 ];
 
 const estimateDeliveryFee = (location, quantity = 1) => {
@@ -583,49 +584,25 @@ const getProductBadges = (product) => {
     }));
 };
 
-const normalizeCategorySlug = (product) => {
-  const haystack = [
-    product?.category,
-    product?.type,
-    product?.product_type,
-    product?.name,
-    product?.description,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+const slugifyCategory = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
-  if (!haystack) return "all";
+const getProductCategoryId = (product) =>
+  slugifyCategory(product?.category_slug || product?.category);
 
-  if (/grain|rice|maize|beans|cassava|yam|cereal|millet|sorghum/.test(haystack)) {
-    return "grains";
-  }
+const getProductWeightLabels = (product) => {
+  const variantLabels = getProductVariants(product)
+    .map((variant) => normalizeWeightLabel(getVariantWeightValue(variant), ""))
+    .filter(Boolean);
 
-  if (/flour|powder|meal|semolina|yam flour/.test(haystack)) {
-    return "flours";
-  }
+  if (variantLabels.length) return [...new Set(variantLabels)];
 
-  if (/seed|nut|groundnut|soy|melon|cashew|peanut|sesame/.test(haystack)) {
-    return "seeds-nuts";
-  }
-
-  if (/spice|pepper|ginger|turmeric|curry|seasoning|bay leaf/.test(haystack)) {
-    return "spices";
-  }
-
-  if (/oil|cooking|palm|vegetable|sauce|condiment|stock|broth/.test(haystack)) {
-    return "cooking-essentials";
-  }
-
-  if (/fruit|vegetable|leafy|tomato|onion|carrot|cabbage|okra|plantain/.test(haystack)) {
-    return "fruits-vegetables";
-  }
-
-  if (/meat|poultry|chicken|beef|fish|turkey|goat|animal/.test(haystack)) {
-    return "meat-poultry";
-  }
-
-  return "all";
+  const productLabel = normalizeWeightLabel(product?.weight, "");
+  return productLabel ? [productLabel] : [];
 };
 
 export default function ShopPage() {
@@ -635,10 +612,10 @@ export default function ShopPage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(true);
   const [quantities, setQuantities] = useState({});
-  const [selectedPriceCap, setSelectedPriceCap] = useState(100000);
+  const [selectedPriceCap, setSelectedPriceCap] = useState(null);
   const [selectedWeights, setSelectedWeights] = useState([]);
   const [inStockOnly, setInStockOnly] = useState(true);
-  const [sortBy, setSortBy] = useState("popular");
+  const [sortBy, setSortBy] = useState("newest");
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileSortOpen, setMobileSortOpen] = useState(false);
   const [deliveryLocations, setDeliveryLocations] = useState({});
@@ -672,60 +649,63 @@ export default function ShopPage() {
     fetchProducts();
   }, []);
 
+  const categoryTabs = useMemo(() => {
+    const categories = new Map();
+
+    products.forEach((product) => {
+      const id = getProductCategoryId(product);
+      const label = String(product?.category || "").trim();
+      if (id && label && !categories.has(id)) categories.set(id, label);
+    });
+
+    return [
+      { id: "all", label: "All Products" },
+      ...[...categories.entries()]
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .map(([id, label]) => ({ id, label })),
+    ];
+  }, [products]);
+
+  const categoryFilterOptions = categoryTabs.slice(1);
+
+  const weightFilterOptions = useMemo(() => {
+    const labels = new Set(
+      products.flatMap((product) => getProductWeightLabels(product))
+    );
+
+    return [...labels]
+      .sort((a, b) => {
+        const difference = getWeightNumber(a) - getWeightNumber(b);
+        return Number.isFinite(difference) && difference !== 0
+          ? difference
+          : a.localeCompare(b, undefined, { numeric: true });
+      })
+      .map((label) => ({ id: label.toLowerCase(), label }));
+  }, [products]);
+
+  const maximumCatalogPrice = useMemo(() => {
+    const maximum = Math.max(0, ...products.map((product) => getProductPrice(product)));
+    return Math.max(500, Math.ceil(maximum / 500) * 500);
+  }, [products]);
+
+  const effectivePriceCap = selectedPriceCap ?? maximumCatalogPrice;
+
   const categoryFilteredProducts = useMemo(() => {
     if (activeCategory === "all") return products;
     return products.filter(
-      (product) => normalizeCategorySlug(product) === activeCategory
+      (product) => getProductCategoryId(product) === activeCategory
     );
   }, [products, activeCategory]);
 
-  const getProductWeightValues = (product) => {
-    const labels = getProductVariants(product)
-      .map((variant) =>
-        normalizeWeightLabel(
-          variant?.weight ?? variant?.name ?? variant?.variant_name ?? variant?.label ?? "",
-          ""
-        )
-      )
-      .filter(Boolean);
-
-    const fallbackWeight = normalizeWeightLabel(product?.weight ?? "", "");
-    if (fallbackWeight) labels.push(fallbackWeight);
-
-    return [...new Set(
-      labels.flatMap((label) => {
-        const match = String(label).match(/(\d+(?:\.\d+)?)/);
-        return match ? [Number(match[1])] : [];
-      })
-    )].filter((value) => Number.isFinite(value) && value > 0);
-  };
-
-  const getProductWeightKg = (product) => {
-    const values = getProductWeightValues(product);
-    return values.length ? Math.max(...values) : 0;
-  };
-
-  const matchesSelectedWeight = (product, selectedWeightId) => {
-    const values = getProductWeightValues(product);
-
-    switch (selectedWeightId) {
-      case "1-5kg":
-        return values.some((value) => value >= 1 && value <= 5);
-      case "10-25kg":
-        return values.some((value) => value >= 10 && value <= 25);
-      case "50kg-plus":
-        return values.some((value) => value >= 50);
-      default:
-        return true;
-    }
-  };
+  const matchesSelectedWeight = (product, selectedWeightId) =>
+    getProductWeightLabels(product).some(
+      (label) => label.toLowerCase() === selectedWeightId
+    );
 
   const filteredProducts = useMemo(() => {
     let result = [...categoryFilteredProducts];
 
-    result = result.filter(
-      (product) => getProductPrice(product) <= selectedPriceCap
-    );
+    result = result.filter((product) => getProductPrice(product) <= effectivePriceCap);
 
     if (selectedWeights.length > 0) {
       result = result.filter((product) =>
@@ -762,18 +742,14 @@ export default function ShopPage() {
       case "price-high-low":
         result.sort((a, b) => getProductPrice(b) - getProductPrice(a));
         break;
-      case "popular":
+      case "name":
       default:
-        result.sort(
-          (a, b) =>
-            getProductRating(b) - getProductRating(a) ||
-            getProductPrice(a) - getProductPrice(b)
-        );
+        result.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
         break;
     }
 
     return result;
-  }, [categoryFilteredProducts, query, selectedPriceCap, selectedWeights, inStockOnly, sortBy]);
+  }, [categoryFilteredProducts, query, effectivePriceCap, selectedWeights, inStockOnly, sortBy]);
 
   const activeCategoryLabel =
     categoryTabs.find((category) => category.id === activeCategory)?.label ||
@@ -869,7 +845,6 @@ export default function ShopPage() {
                           : "border-white/20 bg-white/8 text-green-50 hover:bg-white/15"
                       }`}
                     >
-                      <span>{category.icon}</span>
                       {category.label}
                     </button>
                   );
@@ -956,14 +931,14 @@ export default function ShopPage() {
                   <input
                     type="range"
                     min="0"
-                    max="100000"
+                    max={maximumCatalogPrice}
                     step="500"
-                    value={selectedPriceCap}
+                    value={effectivePriceCap}
                     onChange={(event) => setSelectedPriceCap(Number(event.target.value))}
                     className="w-full accent-green-600"
                   />
                   <p className="mt-1 text-sm font-semibold text-slate-700">
-                    ₦0 — ₦{selectedPriceCap.toLocaleString()}
+                    ₦0 — ₦{effectivePriceCap.toLocaleString()}
                   </p>
                 </div>
 
@@ -1030,7 +1005,7 @@ export default function ShopPage() {
         )}
 
         <div className="flex flex-col gap-6 md:flex-row">
-          <aside className="hidden w-full max-w-[280px] shrink-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:block">
+          <aside className="hidden w-full max-w-70 shrink-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:block">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
               Filter by
             </h3>
@@ -1062,14 +1037,14 @@ export default function ShopPage() {
                 <input
                   type="range"
                   min="0"
-                  max="100000"
+                  max={maximumCatalogPrice}
                   step="500"
-                  value={selectedPriceCap}
+                  value={effectivePriceCap}
                   onChange={(event) => setSelectedPriceCap(Number(event.target.value))}
                   className="w-full accent-green-600"
                 />
                 <p className="mt-2 text-sm font-semibold text-slate-700">
-                  ₦0 — ₦{selectedPriceCap.toLocaleString()}
+                  ₦0 — ₦{effectivePriceCap.toLocaleString()}
                 </p>
               </div>
 

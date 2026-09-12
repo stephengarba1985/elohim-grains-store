@@ -97,8 +97,13 @@ const normalizeWeightLabel = (value, fallback = "Standard bag") => {
   const raw = String(value).trim();
   if (!raw) return fallback;
 
+  const numericOnly = raw.match(/^\d+(?:\.\d+)?$/);
+  if (numericOnly) {
+    return `${Number(numericOnly[0])}kg`;
+  }
+
   const cleaned = raw
-    .replace(/\b(?:bags?|packs?|units?)\b/gi, "")
+    .replace(/\b(?:bags?|packs?|units?|sizes?)\b/gi, "")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -106,7 +111,7 @@ const normalizeWeightLabel = (value, fallback = "Standard bag") => {
 
   const numericMatch = cleaned.match(/(\d+(?:\.\d+)?)/);
   if (!numericMatch) {
-    const nonNumeric = cleaned.replace(/^(?:kg|kilogram|kilograms)\b/gi, "").trim();
+    const nonNumeric = cleaned.replace(/^(?:kg|kilogram|kilograms|kilo)\b/gi, "").trim();
     return nonNumeric || fallback;
   }
 
@@ -120,6 +125,30 @@ const normalizeWeightLabel = (value, fallback = "Standard bag") => {
   return `${numericValue}kg`;
 };
 
+const getVariantWeightValue = (variant) =>
+  String(
+    variant?.weight ??
+      variant?.variant_name ??
+      variant?.name ??
+      variant?.label ??
+      variant?.size ??
+      variant?.pack ??
+      ""
+  ).trim();
+
+const getVariantKey = (variant, index = 0) => {
+  if (variant?.id !== null && variant?.id !== undefined && variant?.id !== "") {
+    return String(variant.id);
+  }
+
+  const weightValue = getVariantWeightValue(variant);
+  const normalizedWeight = normalizeWeightLabel(weightValue, `option-${index + 1}`);
+  const priceValue = Number(variant?.price || 0);
+  const stockValue = Number(variant?.stock || 0);
+
+  return `${normalizedWeight}-${priceValue}-${stockValue}-${index}`;
+};
+
 const getProductVariants = (product) => {
   const directVariants = Array.isArray(product?.variants) ? product.variants : [];
   const nestedVariants = (Array.isArray(product?.types) ? product.types : []).flatMap(
@@ -128,18 +157,10 @@ const getProductVariants = (product) => {
 
   const uniqueVariants = new Map();
 
-  [...nestedVariants, ...directVariants].forEach((variant) => {
+  [...nestedVariants, ...directVariants].forEach((variant, index) => {
     if (!variant) return;
 
-    const label = normalizeWeightLabel(
-      variant.weight ?? variant.name ?? variant.variant_name ?? variant.label ?? "",
-      "standard"
-    );
-    const key = String(
-      variant.id ??
-        `${label}-${Number(variant.price || product?.price || 0)}-${Number(variant.stock || 0)}`
-    );
-
+    const key = getVariantKey(variant, index);
     if (!uniqueVariants.has(key)) {
       uniqueVariants.set(key, variant);
     }
@@ -219,22 +240,17 @@ const getProductVariantOptions = (product) => {
   const seenOptions = new Set();
 
   return variants
-    .filter((variant) => variant && (variant.id || variant.weight || variant.name || variant.variant_name))
-    .map((variant) => {
-      const key = String(variant.id ?? normalizeWeightLabel(
-        variant.weight ?? variant.name ?? variant.variant_name ?? variant.label ?? "",
-        "standard"
-      ));
-
+    .map((variant, index) => {
+      const key = getVariantKey(variant, index);
       if (seenOptions.has(key)) return null;
       seenOptions.add(key);
 
+      const weightValue = getVariantWeightValue(variant);
+      const label = normalizeWeightLabel(weightValue, `Option ${index + 1}`);
+
       return {
         id: variant.id ?? key,
-        label: normalizeWeightLabel(
-          variant.weight ?? variant.name ?? variant.variant_name ?? variant.label ?? "Standard bag",
-          "Standard bag"
-        ),
+        label,
         price: Number(variant.price || product?.price || 0),
         bulkPrice: Number(variant.bulk_price || product?.bulk_price || 0),
         stock: Number(variant.stock || 0),
@@ -781,7 +797,9 @@ export default function ShopPage() {
 
     try {
       const productQuantity = Number(quantities[String(product.id)] ?? 1);
-      const selectedVariantId = selectedVariants[String(product.id)] ?? null;
+      const variantOptions = getProductVariantOptions(product);
+      const selectedVariantId =
+        selectedVariants[String(product.id)] ?? variantOptions[0]?.id ?? null;
       await addToCart(product.id, productQuantity, selectedVariantId);
       toast.success(`${productQuantity} item(s) added to cart`);
     } catch (error) {

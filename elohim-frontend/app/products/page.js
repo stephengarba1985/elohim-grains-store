@@ -248,8 +248,18 @@ const getProductStock = (product) => {
   return Math.max(Number(product?.stock_quantity || 0), variantStock);
 };
 
-const getProductVariantOptions = (product) => {
-  const variants = getProductVariants(product);
+const getProductTypes = (product) =>
+  (Array.isArray(product?.types) ? product.types : []).filter(
+    (type) => type && type.status !== false
+  );
+
+const getProductVariantOptions = (product, productTypeId = null) => {
+  const productTypes = getProductTypes(product);
+  const activeTypeId = productTypeId ?? productTypes[0]?.id ?? null;
+  const variants = getProductVariants(product).filter((variant) => {
+    if (activeTypeId === null) return true;
+    return String(variant.product_type_id) === String(activeTypeId);
+  });
 
   if (!variants.length) {
     return [
@@ -629,6 +639,7 @@ export default function ShopPage() {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileSortOpen, setMobileSortOpen] = useState(false);
   const [deliveryLocations, setDeliveryLocations] = useState({});
+  const [selectedTypes, setSelectedTypes] = useState({});
   const [selectedVariants, setSelectedVariants] = useState({});
 
   useEffect(() => {
@@ -783,7 +794,10 @@ export default function ShopPage() {
 
     try {
       const productQuantity = Number(quantities[String(product.id)] ?? 1);
-      const variantOptions = getProductVariantOptions(product);
+      const productTypes = getProductTypes(product);
+      const selectedTypeId =
+        selectedTypes[String(product.id)] ?? productTypes[0]?.id ?? null;
+      const variantOptions = getProductVariantOptions(product, selectedTypeId);
       const selectedVariantId =
         selectedVariants[String(product.id)] ?? variantOptions[0]?.id ?? null;
       await addToCart(product.id, productQuantity, selectedVariantId);
@@ -1134,7 +1148,10 @@ export default function ShopPage() {
                   const currentQuantity = Number(quantities[String(product.id)] ?? 1);
                   const rating = getProductRating(product);
                   const badges = getProductBadges(product);
-                  const variantOptions = getProductVariantOptions(product);
+                  const productTypes = getProductTypes(product);
+                  const selectedTypeId =
+                    selectedTypes[String(product.id)] ?? productTypes[0]?.id ?? null;
+                  const variantOptions = getProductVariantOptions(product, selectedTypeId);
                   const selectedVariantId = selectedVariants[String(product.id)] ?? variantOptions[0]?.id ?? "standard";
                   const selectedVariant = variantOptions.find(
                     (option) => String(option.id) === String(selectedVariantId)
@@ -1200,22 +1217,52 @@ export default function ShopPage() {
                             </span>
                           </div>
 
-                          <select
-                            value={selectedVariantId}
-                            onChange={(event) =>
-                              setSelectedVariants((prev) => ({
-                                ...prev,
-                                [String(product.id)]: event.target.value,
-                              }))
-                            }
-                            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-800 focus:border-green-400 focus:outline-none"
-                          >
-                            {variantOptions.map((option) => (
-                              <option key={String(option.id)} value={String(option.id)}>
-                                {option.label} {option.stock ? `• ${option.stock} in stock` : ""}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="mt-2 space-y-2">
+                            {productTypes.length > 0 && (
+                              <select
+                                aria-label={`Choose type for ${product.name}`}
+                                value={selectedTypeId ?? ""}
+                                onChange={(event) => {
+                                  const nextTypeId = event.target.value;
+                                  const nextOptions = getProductVariantOptions(product, nextTypeId);
+
+                                  setSelectedTypes((prev) => ({
+                                    ...prev,
+                                    [String(product.id)]: nextTypeId,
+                                  }));
+                                  setSelectedVariants((prev) => ({
+                                    ...prev,
+                                    [String(product.id)]: nextOptions[0]?.id ?? "standard",
+                                  }));
+                                }}
+                                className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-800 focus:border-green-400 focus:outline-none"
+                              >
+                                {productTypes.map((type) => (
+                                  <option key={String(type.id)} value={String(type.id)}>
+                                    {type.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+
+                            <select
+                              aria-label={`Choose weight for ${product.name}`}
+                              value={selectedVariantId}
+                              onChange={(event) =>
+                                setSelectedVariants((prev) => ({
+                                  ...prev,
+                                  [String(product.id)]: event.target.value,
+                                }))
+                              }
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-800 focus:border-green-400 focus:outline-none"
+                            >
+                              {variantOptions.map((option) => (
+                                <option key={String(option.id)} value={String(option.id)}>
+                                  {option.label} {option.stock ? `• ${option.stock} in stock` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
 
                         <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">

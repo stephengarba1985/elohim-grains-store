@@ -216,7 +216,7 @@ const getStaticGrainAssetMatch = (value) => {
 export default function ProductDetails() {
   const { id } = useParams();
   const router = useRouter();
-  const { addToCart } = useCartStore();
+  const { addToCart, setUser: setCartUser } = useCartStore();
 
   const [user, setUser] = useState(null);
   const [product, setProduct] = useState(null);
@@ -244,9 +244,11 @@ export default function ProductDetails() {
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      setCartUser(parsedUser);
     }
-  }, []);
+  }, [setCartUser]);
 
   /* =========================
      FETCH PRODUCT
@@ -312,7 +314,13 @@ export default function ProductDetails() {
   /* =========================
      QUANTITY CONTROL
   ========================= */
-  const increase = () => setQuantity((prev) => prev + 1);
+  const increase = () => {
+    if (selectedVariantStock > 0 && quantity >= selectedVariantStock) {
+      toast("That is the maximum quantity currently available");
+      return;
+    }
+    setQuantity((prev) => prev + 1);
+  };
 
   const decrease = () => {
     if (quantity > 1) setQuantity((prev) => prev - 1);
@@ -321,7 +329,7 @@ export default function ProductDetails() {
   /* =========================
      ADD TO CART
   ========================= */
-  const handleAddToCart = async () => {
+  const handleAddToCart = async (goToCheckout = false) => {
     const storedUser = localStorage.getItem("user");
 
     if (!storedUser) {
@@ -338,6 +346,10 @@ export default function ProductDetails() {
       );
 
       toast.success(`${quantity} item(s) added to cart`);
+
+      if (goToCheckout) {
+        router.push("/cart");
+      }
 
     } catch (err) {
       console.error("❌ ADD TO CART ERROR:", err);
@@ -906,15 +918,25 @@ export default function ProductDetails() {
             )}
           </div>
 
+          <div className="my-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-bold text-slate-900">Customer confidence</p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+              <span>⭐ {Number(product.rating || product.average_rating || 4.8).toFixed(1)} customer rating</span>
+              <span>📦 {selectedVariant?.weight || selectedType?.name || "Standard bag"}</span>
+              <span>{selectedVariantStock} available</span>
+            </div>
+          </div>
+
           <p className="text-gray-600 my-4">
-            High-quality grains sourced directly from trusted farmers.
+            {product.description || "High-quality grains sourced directly from trusted farmers."}
           </p>
 
           {/* QUANTITY */}
           <div className="flex items-center gap-4 mb-4">
-            <button onClick={decrease} className="bg-gray-300 px-3 py-1 rounded">-</button>
+            <span className="text-sm font-bold text-slate-700">Quantity</span>
+            <button aria-label="Decrease quantity" onClick={decrease} disabled={quantity === 1} className="bg-gray-300 px-3 py-1 rounded disabled:opacity-40">−</button>
             <span className="text-lg font-bold">{quantity}</span>
-            <button onClick={increase} className="bg-gray-300 px-3 py-1 rounded">+</button>
+            <button aria-label="Increase quantity" onClick={increase} disabled={selectedVariantStock === 0} className="bg-gray-300 px-3 py-1 rounded disabled:opacity-40">+</button>
           </div>
 
           <p className="mb-4 font-semibold text-lg">
@@ -936,15 +958,21 @@ export default function ProductDetails() {
               {loading ? "Adding..." : "Add to Cart"}
             </button>
 
+            <button
+              onClick={() => handleAddToCart(true)}
+              disabled={stock === 0 || loading}
+              className="w-full text-center px-4 py-3 rounded-xl border-2 border-emerald-700 font-bold text-emerald-700 hover:bg-emerald-50 disabled:border-slate-300 disabled:text-slate-400"
+            >
+              BUY NOW
+            </button>
+
             <a
-              href={`https://wa.me/2348039688939?text=${encodeURIComponent(
-                buildWhatsAppOrderMessage(product, quantity, price)
-              )}`}
+              href={`https://wa.me/2348039688939?text=${encodeURIComponent(buildWhatsAppOrderMessage(product, quantity, price))}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full text-center px-4 py-3 rounded-xl bg-emerald-700 text-white"
+              className="text-center text-sm font-semibold text-emerald-700 hover:underline"
             >
-              Buy on WhatsApp
+              💬 Need help? Buy or ask questions through WhatsApp
             </a>
 
             <div className="grid grid-cols-2 gap-3">
@@ -968,6 +996,36 @@ export default function ProductDetails() {
           </div>
         </div>
       </div>
+
+      <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-xl font-black text-slate-900">Product information</h3>
+        <dl className="mt-5 grid gap-5 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="font-bold text-slate-900">Description</dt>
+            <dd className="mt-1 text-slate-600">{product.description || "Quality produce selected from trusted farmers and suppliers."}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-900">Specifications</dt>
+            <dd className="mt-1 text-slate-600">{selectedVariant?.weight || selectedType?.name || product.weight || "Standard bag"}{product.category ? ` · ${product.category}` : ""}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-900">Storage information</dt>
+            <dd className="mt-1 text-slate-600">Store in a cool, dry place away from moisture and direct sunlight.</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-900">Origin / source</dt>
+            <dd className="mt-1 text-slate-600">{product.origin || product.source || "Sourced through Elohim Grains’ trusted supplier network."}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-900">Available quantity</dt>
+            <dd className="mt-1 text-slate-600">{selectedVariantStock} unit{selectedVariantStock === 1 ? "" : "s"} currently available.</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-900">Delivery & returns</dt>
+            <dd className="mt-1 text-slate-600">Delivery is confirmed at checkout. Contact support promptly if there is an issue with your order.</dd>
+          </div>
+        </dl>
+      </section>
 
       <div className="mt-8 rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-lime-50 p-6 shadow-sm">
         <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-700">

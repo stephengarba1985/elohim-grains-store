@@ -626,7 +626,7 @@ const getProductWeightLabels = (product) => {
 };
 
 export default function ShopPage() {
-  const { addToCart } = useCartStore();
+  const { addToCart, setUser: setCartUser } = useCartStore();
   const [products, setProducts] = useState([]);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
@@ -641,6 +641,7 @@ export default function ShopPage() {
   const [deliveryLocations, setDeliveryLocations] = useState({});
   const [selectedTypes, setSelectedTypes] = useState({});
   const [selectedVariants, setSelectedVariants] = useState({});
+  const [cartConfirmation, setCartConfirmation] = useState(null);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -793,6 +794,7 @@ export default function ShopPage() {
     }
 
     try {
+      setCartUser(JSON.parse(storedUser));
       const productQuantity = Number(quantities[String(product.id)] ?? 1);
       const productTypes = getProductTypes(product);
       const selectedTypeId =
@@ -802,6 +804,10 @@ export default function ShopPage() {
         selectedVariants[String(product.id)] ?? variantOptions[0]?.id ?? null;
       await addToCart(product.id, productQuantity, selectedVariantId);
       toast.success(`${productQuantity} item(s) added to cart`);
+      setCartConfirmation({
+        name: product.name,
+        weight: variantOptions.find((option) => String(option.id) === String(selectedVariantId))?.label || "",
+      });
     } catch (error) {
       console.error("Add to cart error:", error);
       toast.error("Unable to add item to cart");
@@ -1388,6 +1394,22 @@ export default function ShopPage() {
           </div>
         </div>
       </section>
+
+      {cartConfirmation && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="shop-cart-confirmation-title">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-xl font-black text-emerald-700">✓</div>
+            <h3 id="shop-cart-confirmation-title" className="mt-4 text-xl font-black text-slate-900">
+              {cartConfirmation.name}{cartConfirmation.weight ? ` ${cartConfirmation.weight}` : ""} added to your cart
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">Your cart is updated and ready when you are.</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button type="button" onClick={() => setCartConfirmation(null)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">CONTINUE SHOPPING</button>
+              <Link href="/cart" className="rounded-xl bg-emerald-600 px-4 py-3 text-center text-sm font-black text-white hover:bg-emerald-700">VIEW CART</Link>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

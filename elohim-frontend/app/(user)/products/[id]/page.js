@@ -228,6 +228,7 @@ export default function ProductDetails() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [deliveryLocation, setDeliveryLocation] = useState("");
+  const [cartConfirmation, setCartConfirmation] = useState(null);
 
   const getBackendRootUrl = () => {
     const apiUrl =
@@ -349,6 +350,11 @@ export default function ProductDetails() {
 
       if (goToCheckout) {
         router.push("/cart");
+      } else {
+        setCartConfirmation({
+          name: product.name,
+          weight: selectedVariant?.weight || selectedType?.name || product.weight || "",
+        });
       }
 
     } catch (err) {
@@ -1026,6 +1032,22 @@ export default function ProductDetails() {
           </div>
         </dl>
       </section>
+
+      {cartConfirmation && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="cart-confirmation-title">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-xl font-black text-emerald-700">✓</div>
+            <h3 id="cart-confirmation-title" className="mt-4 text-xl font-black text-slate-900">
+              {cartConfirmation.name}{cartConfirmation.weight ? ` ${cartConfirmation.weight}` : ""} added to your cart
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">Your cart has been updated. You can keep shopping or review your order now.</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button type="button" onClick={() => setCartConfirmation(null)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">CONTINUE SHOPPING</button>
+              <Link href="/cart" className="rounded-xl bg-emerald-600 px-4 py-3 text-center text-sm font-black text-white hover:bg-emerald-700">VIEW CART</Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-lime-50 p-6 shadow-sm">
         <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-700">

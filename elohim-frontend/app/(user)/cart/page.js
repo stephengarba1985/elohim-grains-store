@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
 import { useCartStore } from "@/lib/cartStore";
@@ -11,6 +12,7 @@ export default function CartPage() {
     fetchCart,
     removeFromCart,
     clearCart,
+    updateQuantity,
     setUser: setCartUser,
   } = useCartStore();
 
@@ -20,6 +22,7 @@ export default function CartPage() {
   const [provider, setProvider] = useState("paystack");
   const [channel, setChannel] = useState("card");
   const [paymentInstructions, setPaymentInstructions] = useState(null);
+  const [updatingItemId, setUpdatingItemId] = useState(null);
 
   /* =========================
      INIT USER + LOAD CART
@@ -69,11 +72,32 @@ export default function CartPage() {
     }
   };
 
+  const handleQuantityChange = async (item, change) => {
+    const nextQuantity = Number(item.quantity) + change;
+    const availableStock = Number(item.stock || 0);
+
+    if (nextQuantity < 1) return;
+    if (availableStock > 0 && nextQuantity > availableStock) {
+      toast.error("That is the maximum quantity available");
+      return;
+    }
+
+    try {
+      setUpdatingItemId(item.id);
+      await updateQuantity(item.id, nextQuantity);
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "Could not update quantity");
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
   /* =========================
      HELPERS
   ========================= */
   const formatPrice = (price) =>
-    `N${Number(price || 0).toLocaleString()}`;
+    `₦${Number(price || 0).toLocaleString()}`;
 
   const total = cart.reduce((sum, item) => {
     const price = Number(item.price || 0);
@@ -375,8 +399,14 @@ export default function CartPage() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Your Cart</h1>
+    <div className="mx-auto max-w-4xl p-4 sm:p-6">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Elohim Grains</p>
+          <h1 className="mt-1 text-3xl font-black text-slate-950">Your Cart</h1>
+        </div>
+        <Link href="/products" className="font-bold text-emerald-700 hover:underline">Continue Shopping</Link>
+      </div>
 
       {paymentNotice && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -385,47 +415,45 @@ export default function CartPage() {
       )}
 
       {cart.length === 0 && (
-        <p className="text-gray-500">No items in cart</p>
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+          <p className="text-lg font-bold text-slate-800">Your cart is empty.</p>
+          <Link href="/products" className="mt-4 inline-block rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Start Shopping</Link>
+        </div>
       )}
 
       {cart.map((item) => {
         const price = Number(item.price || 0);
-        const weight = item.weight || "N/A";
+        const weight = item.weight || item.variant?.weight || "Standard bag";
+        const itemName = item.product?.name || item.name || "Product";
+        const isUpdating = Number(updatingItemId) === Number(item.id);
 
         return (
-          <div key={item.id} className="border p-4 mb-3 rounded shadow-sm">
-            <h2 className="font-bold">{item.name}</h2>
-
-            <p className="text-sm text-gray-600">
-              Weight: {weight}
-            </p>
-
-            <p className="text-gray-600">
-              {formatPrice(price)} x {item.quantity}
-            </p>
-
-            <p className="font-semibold">
-              Total: {formatPrice(price * item.quantity)}
-            </p>
-
-            <button
-              onClick={() => handleRemove(item.id)}
-              className="bg-red-500 text-white px-3 py-1 mt-2 rounded"
-            >
-              Remove
-            </button>
+          <div key={item.id} className="mb-3 grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[1fr_auto_auto] sm:items-center">
+            <div>
+              <h2 className="text-lg font-black text-slate-900">{itemName} <span className="font-semibold text-slate-500">{weight}</span></h2>
+              <p className="mt-1 text-sm text-slate-500">{formatPrice(price)} each</p>
+              <button onClick={() => handleRemove(item.id)} className="mt-2 text-sm font-semibold text-red-600 hover:underline">Remove</button>
+            </div>
+            <div className="inline-flex items-center justify-self-start rounded-xl border border-slate-300 bg-white">
+              <button type="button" aria-label={`Decrease ${itemName} quantity`} onClick={() => handleQuantityChange(item, -1)} disabled={isUpdating || item.quantity <= 1} className="px-3 py-2 text-lg font-black text-slate-700 disabled:opacity-30">−</button>
+              <span className="min-w-10 text-center font-black text-slate-900">{item.quantity}</span>
+              <button type="button" aria-label={`Increase ${itemName} quantity`} onClick={() => handleQuantityChange(item, 1)} disabled={isUpdating || (Number(item.stock || 0) > 0 && item.quantity >= Number(item.stock || 0))} className="px-3 py-2 text-lg font-black text-slate-700 disabled:opacity-30">+</button>
+            </div>
+            <p className="text-xl font-black text-slate-950 sm:text-right">{formatPrice(price * item.quantity)}</p>
           </div>
         );
       })}
 
       {cart.length > 0 && (
         <>
-          <h2 className="text-xl font-bold mt-4">
-            Total: {formatPrice(total)}
-          </h2>
+          <section className="mt-6 rounded-2xl bg-slate-950 p-5 text-white shadow-lg">
+            <div className="flex justify-between gap-4 text-slate-300"><span>Subtotal</span><span>{formatPrice(total)}</span></div>
+            <div className="mt-3 flex justify-between gap-4 text-slate-300"><span>Delivery</span><span>Calculated at checkout</span></div>
+            <div className="mt-4 flex justify-between gap-4 border-t border-slate-700 pt-4 text-xl font-black"><span>Total</span><span>{formatPrice(total)}</span></div>
+          </section>
 
-          <div className="mt-5 border rounded-lg p-4 bg-white">
-            <h3 className="font-bold mb-3">Payment Method</h3>
+          <div className="mt-5 border rounded-2xl p-5 bg-white">
+            <h3 className="font-black mb-3 text-slate-900">Checkout payment method</h3>
             <div className="grid md:grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-sm text-gray-600">Gateway</span>
@@ -484,10 +512,10 @@ export default function CartPage() {
             )}
           </div>
 
-          <div className="flex flex-wrap gap-3 mt-4">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <button
               onClick={handleClearCart}
-              className="bg-gray-700 text-white px-4 py-2 rounded"
+              className="order-2 rounded-xl border border-slate-300 px-4 py-3 font-bold text-slate-700 hover:bg-slate-50 sm:order-1"
             >
               Clear Cart
             </button>
@@ -495,16 +523,16 @@ export default function CartPage() {
             <button
               onClick={payWithPaystack}
               disabled={paymentLoading}
-              className="bg-green-600 text-white px-4 py-2 rounded disabled:bg-gray-400"
+              className="order-1 rounded-xl bg-emerald-600 px-4 py-3 font-black tracking-wide text-white hover:bg-emerald-700 disabled:bg-gray-400 sm:order-2"
             >
-              {paymentLoading ? "Opening..." : "Pay with Paystack"}
+              {paymentLoading ? "OPENING..." : "CHECKOUT"}
             </button>
 
             {paymentInstructions && (
               <button
                 onClick={verifyPayment}
                 disabled={paymentLoading}
-                className="bg-slate-950 text-white px-4 py-2 rounded disabled:bg-gray-400"
+                className="rounded-xl bg-slate-950 px-4 py-3 font-bold text-white disabled:bg-gray-400"
               >
                 Verify & Create Order
               </button>

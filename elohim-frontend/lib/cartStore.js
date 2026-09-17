@@ -45,6 +45,20 @@ export const useCartStore = create((set, get) => ({
     }));
   },
 
+  /* ================= UPDATE QUANTITY ================= */
+  updateQuantity: async (cartId, quantity) => {
+    const { user } = get();
+    if (!user) throw new Error("No user");
+
+    await API.patch(`/cart/${cartId}/${user.id}`, { quantity });
+
+    set((state) => ({
+      cart: state.cart.map((item) =>
+        Number(item.id) === Number(cartId) ? { ...item, quantity } : item
+      ),
+    }));
+  },
+
   /* ================= REMOVE ================= */
   removeFromCart: async (cartId) => {
     const { user } = get();

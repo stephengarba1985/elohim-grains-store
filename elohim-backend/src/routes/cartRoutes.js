@@ -209,6 +209,48 @@ router.get('/:user_id', async (req, res) => {
 })
 
 /* =========================
+   UPDATE CART QUANTITY
+========================= */
+router.patch('/:id/:user_id', async (req, res) => {
+  try {
+    const quantity = Number(req.body.quantity)
+
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      return res.status(400).json({ error: "Quantity must be at least 1" })
+    }
+
+    const cartItem = await pool.query(
+      `SELECT cart.variant_id, cart.product_id, product_variants.stock AS variant_stock, products.stock_quantity
+       FROM cart
+       JOIN products ON products.id = cart.product_id
+       LEFT JOIN product_variants ON product_variants.id = cart.variant_id
+       WHERE cart.id = $1 AND cart.user_id = $2`,
+      [req.params.id, req.params.user_id]
+    )
+
+    if (cartItem.rows.length === 0) {
+      return res.status(404).json({ error: "Cart item not found" })
+    }
+
+    const item = cartItem.rows[0]
+    const stock = Number(item.variant_id ? item.variant_stock : item.stock_quantity) || 0
+    if (quantity > stock) {
+      return res.status(400).json({ error: "Not enough stock" })
+    }
+
+    const updated = await pool.query(
+      'UPDATE cart SET quantity = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [quantity, req.params.id, req.params.user_id]
+    )
+
+    res.json(updated.rows[0])
+  } catch (err) {
+    console.error("UPDATE CART ERROR:", err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+/* =========================
    CLEAR CART
 ========================= */
 router.delete('/clear/:user_id', async (req, res) => {

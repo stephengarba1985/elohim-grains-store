@@ -37,10 +37,12 @@ export default function OrderDetails() {
   const formatPrice = (price) =>
     `₦${Number(price).toLocaleString()}`;
 
-  const total = items.reduce(
+  const productsTotal = items.reduce(
     (sum, item) => sum + Number(item.price) * item.quantity,
     0
   );
+  const deliveryFee = Number(order?.delivery_fee || 0);
+  const total = Number(order?.total_amount || productsTotal + deliveryFee);
 
   if (!order) return <p className="p-6">Loading...</p>;
 
@@ -91,11 +93,14 @@ export default function OrderDetails() {
           ))}
         </div>
 
-        {/* TOTAL */}
-        <div className="bg-white p-4 rounded-xl shadow mt-4">
-          <h2 className="text-xl font-bold text-right text-green-700">
-            Total: {formatPrice(total)}
-          </h2>
+        {/* TRANSACTION TOTAL */}
+        <div className="bg-white p-5 rounded-xl shadow mt-4">
+          <h2 className="text-lg font-bold text-slate-900">Transaction summary</h2>
+          <div className="mt-4 space-y-3">
+            <div className="flex justify-between text-gray-600"><span>Products</span><span>{formatPrice(productsTotal)}</span></div>
+            <div className="flex justify-between text-gray-600"><span>Delivery</span><span>{deliveryFee > 0 ? formatPrice(deliveryFee) : "Confirmed separately for bulk delivery"}</span></div>
+            <div className="flex justify-between border-t pt-3 text-xl font-bold text-green-700"><span>Total paid</span><span>{formatPrice(total)}</span></div>
+          </div>
         </div>
 
         {/* ACTION BUTTONS */}

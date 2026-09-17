@@ -11,6 +11,12 @@ const {
 
 const { verifyToken, isAdmin } = require("../middleware/auth");
 
+const ensureOrderDeliveryFeeColumn = () =>
+  pool.query(`
+    ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS delivery_fee DECIMAL(10,2) NOT NULL DEFAULT 0
+  `);
+
 /* =========================
    CREATE ORDER (USER ONLY)
 ========================= */
@@ -21,6 +27,7 @@ router.post("/create", verifyToken, async (req, res) => {
   try {
     const { reference, user_id } = req.body;
     await ensurePaymentGatewayTables();
+    await ensureOrderDeliveryFeeColumn();
 
     console.log("ORDER BODY:", req.body);
     console.log("ORDER REQUEST:", { reference, user_id });
@@ -184,6 +191,11 @@ router.post("/create", verifyToken, async (req, res) => {
 
     const orderId = orderRes.rows[0].id;
 
+    await client.query(
+      "UPDATE orders SET delivery_fee = $1 WHERE id = $2",
+      [deliveryFee, orderId]
+    );
+
     console.log("ORDER CREATED:", orderId);
 
     for (const item of items) {
@@ -321,6 +333,7 @@ router.post("/create", verifyToken, async (req, res) => {
 router.get("/", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensureEscrowTables();
+    await ensureOrderDeliveryFeeColumn();
 
     const userColumnsRes = await pool.query(`
       SELECT column_name
@@ -365,6 +378,7 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
 router.get("/user/:user_id", verifyToken, async (req, res) => {
   try {
     await ensureEscrowTables();
+    await ensureOrderDeliveryFeeColumn();
 
     const { user_id } = req.params;
 
@@ -389,6 +403,7 @@ router.get("/user/:user_id", verifyToken, async (req, res) => {
 router.get("/:id", verifyToken, async (req, res) => {
   try {
     await ensureEscrowTables();
+    await ensureOrderDeliveryFeeColumn();
 
     const { id } = req.params;
 

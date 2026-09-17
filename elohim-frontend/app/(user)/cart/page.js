@@ -136,6 +136,9 @@ export default function CartPage() {
     const quantity = Number(item.quantity || 0);
     return quantity >= 2 && quantity < 10;
   });
+  const isBulkOrder = user?.role === "bulk" || cart.some((item) => Number(item.quantity || 0) >= 10);
+  const deliveryFee = isBulkOrder ? null : 5000;
+  const payableTotal = total + (deliveryFee || 0);
 
   const providerChannels = {
     paystack: ["card", "bank_transfer", "ussd"],
@@ -162,6 +165,7 @@ export default function CartPage() {
       const res = await API.post("/orders/create", {
         reference,
         user_id: user.id,
+        delivery_fee: deliveryFee || 0,
       });
 
       toast.success("Payment successful");
@@ -204,7 +208,7 @@ export default function CartPage() {
         user_id: user.id,
         provider,
         channel,
-        amount: total,
+        amount: payableTotal,
       });
 
       setPaymentInstructions(res.data.instructions);
@@ -313,7 +317,7 @@ export default function CartPage() {
         user_id: user.id,
         provider: "paystack",
         channel: "card",
-        amount: total,
+        amount: payableTotal,
       });
 
       const paymentInfo = init.data.instructions;
@@ -333,7 +337,7 @@ export default function CartPage() {
         throw new Error("Paystack public key is missing");
       }
 
-      const amountInKobo = Math.round(Number(total) * 100);
+      const amountInKobo = Math.round(Number(payableTotal) * 100);
 
       if (!Number.isFinite(amountInKobo) || amountInKobo <= 0) {
         throw new Error("Invalid payment amount");
@@ -480,9 +484,10 @@ export default function CartPage() {
       {cart.length > 0 && (
         <>
           <section className="mt-6 rounded-2xl bg-slate-950 p-5 text-white shadow-lg">
-            <div className="flex justify-between gap-4 text-slate-300"><span>Subtotal</span><span>{formatPrice(total)}</span></div>
-            <div className="mt-3 flex justify-between gap-4 text-slate-300"><span>Delivery</span><span>Calculated at checkout</span></div>
-            <div className="mt-4 flex justify-between gap-4 border-t border-slate-700 pt-4 text-xl font-black"><span>Total</span><span>{formatPrice(total)}</span></div>
+            <div className="flex justify-between gap-4 text-slate-300"><span>Products</span><span>{formatPrice(total)}</span></div>
+            <div className="mt-3 flex justify-between gap-4 text-slate-300"><span>Delivery</span><span>{isBulkOrder ? "Fee confirmed after order review" : formatPrice(deliveryFee)}</span></div>
+            <div className="mt-4 flex justify-between gap-4 border-t border-slate-700 pt-4 text-xl font-black"><span>Total</span><span>{isBulkOrder ? formatPrice(total) : formatPrice(payableTotal)}</span></div>
+            {isBulkOrder && <p className="mt-3 text-xs text-amber-200">Bulk delivery may require a truck or scheduled delivery. The delivery fee will be confirmed after review.</p>}
           </section>
 
           {bulkSuggestionItem && (

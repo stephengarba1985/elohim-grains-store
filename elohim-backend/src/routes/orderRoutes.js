@@ -95,6 +95,9 @@ router.post("/create", verifyToken, async (req, res) => {
 
     const items = cartRes.rows;
     let totalAmount = 0;
+    const deliveryFee = isBulk || items.some((item) => Number(item.quantity || 0) >= 10)
+      ? 0
+      : 5000;
 
     for (const item of items) {
       const quantity = Number(item.quantity);
@@ -130,6 +133,8 @@ router.post("/create", verifyToken, async (req, res) => {
 
       totalAmount += price * quantity;
     }
+
+    totalAmount += deliveryFee;
 
     const referenceColumnRes = await client.query(`
       SELECT column_name
@@ -284,6 +289,7 @@ router.post("/create", verifyToken, async (req, res) => {
       message: "Order created successfully",
       orderId,
       totalAmount,
+      deliveryFee,
     });
   } catch (err) {
     if (transactionStarted) {

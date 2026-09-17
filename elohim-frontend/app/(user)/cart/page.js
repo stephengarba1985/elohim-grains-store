@@ -104,6 +104,11 @@ export default function CartPage() {
     return sum + price * item.quantity;
   }, 0);
 
+  const bulkSuggestionItem = cart.find((item) => {
+    const quantity = Number(item.quantity || 0);
+    return quantity >= 2 && quantity < 10;
+  });
+
   const providerChannels = {
     paystack: ["card", "bank_transfer", "ussd"],
     flutterwave: ["card", "bank_transfer", "ussd"],
@@ -451,6 +456,22 @@ export default function CartPage() {
             <div className="mt-3 flex justify-between gap-4 text-slate-300"><span>Delivery</span><span>Calculated at checkout</span></div>
             <div className="mt-4 flex justify-between gap-4 border-t border-slate-700 pt-4 text-xl font-black"><span>Total</span><span>{formatPrice(total)}</span></div>
           </section>
+
+          {bulkSuggestionItem && (
+            <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-700">Buying more?</p>
+              <h2 className="mt-2 text-lg font-black text-slate-900">You may qualify for bulk pricing from 10 bags.</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Request a tailored price for {bulkSuggestionItem.product?.name || "this product"} and larger orders.
+              </p>
+              <Link
+                href={`/bulk?product_id=${bulkSuggestionItem.product_id}&quantity=${bulkSuggestionItem.quantity}`}
+                className="mt-4 inline-flex rounded-xl bg-amber-500 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-400"
+              >
+                REQUEST BULK PRICE
+              </Link>
+            </section>
+          )}
 
           <div className="mt-5 border rounded-2xl p-5 bg-white">
             <h3 className="font-black mb-3 text-slate-900">Checkout payment method</h3>

@@ -1165,7 +1165,11 @@ export default function ShopPage() {
                       key={product.id}
                       className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
                     >
-                      <div className="relative h-52 overflow-hidden bg-slate-100">
+                      <Link
+                        href={`/products/${product.id}`}
+                        aria-label={`View details for ${product.name}`}
+                        className="relative block h-52 overflow-hidden bg-slate-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-600"
+                      >
                         <img
                           src={getProductImage(product)}
                           alt={product.name}
@@ -1187,7 +1191,10 @@ export default function ShopPage() {
                         <div className="absolute bottom-3 left-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-green-800 shadow-sm">
                           {inStock ? `${productStock} available` : "Out of stock"}
                         </div>
-                      </div>
+                        <span className="absolute inset-0 flex items-center justify-center bg-slate-950/0 text-sm font-black uppercase tracking-wide text-white opacity-0 transition group-hover:bg-slate-950/35 group-hover:opacity-100">
+                          View product
+                        </span>
+                      </Link>
 
                       <div className="p-4">
                         <div className="flex items-start justify-between gap-3">
@@ -1372,12 +1379,6 @@ export default function ShopPage() {
                           Request Bulk Price
                         </Link>
 
-                        <Link
-                          href={`/products/${product.id}`}
-                          className="mt-2 block text-center text-sm font-semibold text-slate-600 transition hover:text-green-700"
-                        >
-                          View Details
-                        </Link>
                       </div>
                     </div>
                   );

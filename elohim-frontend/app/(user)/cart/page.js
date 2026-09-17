@@ -23,6 +23,9 @@ export default function CartPage() {
   const [channel, setChannel] = useState("card");
   const [paymentInstructions, setPaymentInstructions] = useState(null);
   const [updatingItemId, setUpdatingItemId] = useState(null);
+  const [checkoutDetails, setCheckoutDetails] = useState({
+    fullName: "", phone: "", email: "", state: "", city: "", address: "", landmark: "", deliveryPhone: "", abujaZone: "",
+  });
 
   /* =========================
      INIT USER + LOAD CART
@@ -39,6 +42,17 @@ export default function CartPage() {
       const parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
       setCartUser(parsedUser);
+      const savedCheckout = localStorage.getItem("checkoutDetails");
+      const savedDetails = savedCheckout ? JSON.parse(savedCheckout) : {};
+      setCheckoutDetails((current) => ({
+        ...current,
+        ...savedDetails,
+        fullName: savedDetails.fullName || parsedUser.name || "",
+        phone: savedDetails.phone || parsedUser.phone || "",
+        email: savedDetails.email || parsedUser.email || "",
+        address: savedDetails.address || parsedUser.address || "",
+        deliveryPhone: savedDetails.deliveryPhone || parsedUser.phone || "",
+      }));
       fetchCart();
     } catch (err) {
       console.error("Invalid stored user payload:", err);
@@ -91,6 +105,20 @@ export default function CartPage() {
     } finally {
       setUpdatingItemId(null);
     }
+  };
+
+  const updateCheckoutDetail = (field, value) => {
+    setCheckoutDetails((current) => ({ ...current, [field]: value }));
+  };
+
+  const startCheckout = () => {
+    const requiredFields = ["fullName", "phone", "email", "state", "city", "address", "deliveryPhone"];
+    if (requiredFields.some((field) => !String(checkoutDetails[field] || "").trim())) {
+      toast.error("Please complete your contact and delivery details");
+      return;
+    }
+    localStorage.setItem("checkoutDetails", JSON.stringify(checkoutDetails));
+    payWithPaystack();
   };
 
   /* =========================
@@ -473,46 +501,40 @@ export default function CartPage() {
             </section>
           )}
 
-          <div className="mt-5 border rounded-2xl p-5 bg-white">
-            <h3 className="font-black mb-3 text-slate-900">Checkout payment method</h3>
-            <div className="grid md:grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-sm text-gray-600">Gateway</span>
-                <select
-                  value={provider}
-                  onChange={(event) => {
-                    const nextProvider = event.target.value;
-                    setProvider(nextProvider);
-                    setChannel(providerChannels[nextProvider][0]);
-                    setPaymentInstructions(null);
-                  }}
-                  className="border rounded p-3 w-full mt-1 bg-white"
-                >
-                  <option value="paystack">Paystack</option>
-                  <option value="flutterwave">Flutterwave</option>
-                  <option value="monnify">Monnify</option>
-                  <option value="opay">Opay Transfer</option>
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="text-sm text-gray-600">Channel</span>
-                <select
-                  value={channel}
-                  onChange={(event) => {
-                    setChannel(event.target.value);
-                    setPaymentInstructions(null);
-                  }}
-                  className="border rounded p-3 w-full mt-1 bg-white"
-                >
-                  {providerChannels[provider].map((item) => (
-                    <option key={item} value={item}>
-                      {channelLabels[item]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+          <section className="mt-5 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Step 1</p>
+              <h2 className="mt-1 text-xl font-black text-slate-900">Contact information</h2>
+              <p className="mt-1 text-sm text-slate-500">Your saved account details are filled in automatically.</p>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="sm:col-span-2"><span className="mb-1 block text-sm font-bold text-slate-700">Full name</span><input value={checkoutDetails.fullName} onChange={(event) => updateCheckoutDetail("fullName", event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="name" /></label>
+              <label><span className="mb-1 block text-sm font-bold text-slate-700">Phone number</span><input value={checkoutDetails.phone} onChange={(event) => updateCheckoutDetail("phone", event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="tel" inputMode="tel" /></label>
+              <label><span className="mb-1 block text-sm font-bold text-slate-700">Email</span><input type="email" value={checkoutDetails.email} onChange={(event) => updateCheckoutDetail("email", event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="email" /></label>
+            </div>
+          </section>
+
+          <section className="mt-5 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Step 2</p>
+              <h2 className="mt-1 text-xl font-black text-slate-900">Delivery address</h2>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label><span className="mb-1 block text-sm font-bold text-slate-700">State</span><input value={checkoutDetails.state} onChange={(event) => updateCheckoutDetail("state", event.target.value)} placeholder="e.g. FCT" className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="address-level1" /></label>
+              <label><span className="mb-1 block text-sm font-bold text-slate-700">City</span><input value={checkoutDetails.city} onChange={(event) => updateCheckoutDetail("city", event.target.value)} placeholder="e.g. Abuja" className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="address-level2" /></label>
+              {/(^fct$|abuja)/i.test(checkoutDetails.state) && (
+                <label className="sm:col-span-2"><span className="mb-1 block text-sm font-bold text-slate-700">Abuja delivery zone</span><select value={checkoutDetails.abujaZone} onChange={(event) => updateCheckoutDetail("abujaZone", event.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3"><option value="">Choose a zone</option><option>Central</option><option>Gwarinpa</option><option>Kubwa</option><option>Lugbe</option><option>Airport area</option><option>Other Abuja area</option></select></label>
+              )}
+              <label className="sm:col-span-2"><span className="mb-1 block text-sm font-bold text-slate-700">Address</span><input value={checkoutDetails.address} onChange={(event) => updateCheckoutDetail("address", event.target.value)} placeholder="House number, street and area" className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="street-address" /></label>
+              <label><span className="mb-1 block text-sm font-bold text-slate-700">Landmark <span className="font-normal text-slate-400">(optional)</span></span><input value={checkoutDetails.landmark} onChange={(event) => updateCheckoutDetail("landmark", event.target.value)} placeholder="Closest landmark" className="w-full rounded-xl border border-slate-300 px-3 py-3" /></label>
+              <label><span className="mb-1 block text-sm font-bold text-slate-700">Delivery phone</span><input value={checkoutDetails.deliveryPhone} onChange={(event) => updateCheckoutDetail("deliveryPhone", event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="tel" inputMode="tel" /></label>
+            </div>
+          </section>
+
+          <div className="mt-5 border rounded-2xl p-5 bg-white">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Step 3</p>
+            <h3 className="mt-1 font-black text-slate-900">Secure payment</h3>
+            <p className="mt-2 text-sm text-slate-600">Click checkout to pay securely by card, bank transfer, or USSD.</p>
 
             {paymentInstructions && (
               <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 text-sm">
@@ -542,7 +564,7 @@ export default function CartPage() {
             </button>
 
             <button
-              onClick={payWithPaystack}
+              onClick={startCheckout}
               disabled={paymentLoading}
               className="order-1 rounded-xl bg-emerald-600 px-4 py-3 font-black tracking-wide text-white hover:bg-emerald-700 disabled:bg-gray-400 sm:order-2"
             >

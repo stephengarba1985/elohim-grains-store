@@ -14,7 +14,9 @@ const { verifyToken, isAdmin } = require("../middleware/auth");
 const ensureOrderDeliveryFeeColumn = () =>
   pool.query(`
     ALTER TABLE orders
-    ADD COLUMN IF NOT EXISTS delivery_fee DECIMAL(10,2) NOT NULL DEFAULT 0
+    ADD COLUMN IF NOT EXISTS delivery_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS order_number VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS delivery_address TEXT
   `);
 
 /* =========================
@@ -25,7 +27,7 @@ router.post("/create", verifyToken, async (req, res) => {
   let transactionStarted = false;
 
   try {
-    const { reference, user_id } = req.body;
+    const { reference, user_id, delivery_address } = req.body;
     await ensurePaymentGatewayTables();
     await ensureOrderDeliveryFeeColumn();
 
@@ -191,9 +193,10 @@ router.post("/create", verifyToken, async (req, res) => {
 
     const orderId = orderRes.rows[0].id;
 
+    const orderNumber = `EG-${new Date().getFullYear()}-${String(orderId).padStart(6, "0")}`;
     await client.query(
-      "UPDATE orders SET delivery_fee = $1 WHERE id = $2",
-      [deliveryFee, orderId]
+      "UPDATE orders SET delivery_fee = $1, order_number = $2, delivery_address = $3 WHERE id = $4",
+      [deliveryFee, orderNumber, String(delivery_address || "").trim() || null, orderId]
     );
 
     console.log("ORDER CREATED:", orderId);
@@ -301,6 +304,7 @@ router.post("/create", verifyToken, async (req, res) => {
     res.json({
       message: "Order created successfully",
       orderId,
+      orderNumber,
       totalAmount,
       deliveryFee,
     });

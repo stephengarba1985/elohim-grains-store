@@ -216,6 +216,7 @@ export default function CartPage() {
         reference,
         user_id: user.id,
         delivery_fee: deliveryFee || 0,
+        delivery_address: `${checkoutDetails.address}, ${checkoutDetails.city}, ${checkoutDetails.state}${checkoutDetails.landmark ? ` — Landmark: ${checkoutDetails.landmark}` : ""}`,
       });
 
       toast.success("Payment successful");

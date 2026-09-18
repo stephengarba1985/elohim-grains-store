@@ -43,7 +43,7 @@ export default function OrderDetails() {
   );
   const deliveryFee = Number(order?.delivery_fee || 0);
   const total = Number(order?.total_amount || productsTotal + deliveryFee);
-  const orderReference = `EG-${new Date(order?.created_at || Date.now()).getFullYear()}-${String(order?.id || id).padStart(5, "0")}`;
+  const orderReference = order?.order_number || `EG-${new Date(order?.created_at || Date.now()).getFullYear()}-${String(order?.id || id).padStart(6, "0")}`;
 
   if (!order) return <p className="p-6">Loading...</p>;
 
@@ -61,6 +61,7 @@ export default function OrderDetails() {
           <h1 className="text-2xl font-black mb-2">Order Confirmed</h1>
           <p className="font-black text-emerald-700">Order #{orderReference}</p>
           <p className="mt-2 text-emerald-700">🟢 <b>Payment confirmed</b></p>
+          <p className="mt-1 text-slate-600">Status: <b>Order received</b></p>
 
           <p className="text-gray-500 text-sm">
             {new Date(order.created_at).toLocaleString()}
@@ -99,6 +100,13 @@ export default function OrderDetails() {
             <div className="flex justify-between border-t pt-3 text-xl font-bold text-green-700"><span>Total paid</span><span>{formatPrice(total)}</span></div>
           </div>
         </div>
+
+        {order.delivery_address && (
+          <div className="bg-white p-5 rounded-xl shadow mt-4">
+            <h2 className="text-lg font-black text-slate-900">Delivery address</h2>
+            <p className="mt-2 text-slate-600">{order.delivery_address}</p>
+          </div>
+        )}
 
         <div className="bg-white p-5 rounded-xl shadow mt-4">
           <h2 className="text-lg font-black text-slate-900">Status</h2>

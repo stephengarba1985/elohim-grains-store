@@ -7,13 +7,13 @@ import { useCartStore } from "@/lib/cartStore";
 
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
-const buildWhatsAppOrderMessage = (product, quantity = 1, priceOverride = null) => {
+const buildWhatsAppOrderMessage = (product, quantity = 1, priceOverride = null, weight = "") => {
   const productName = String(product?.name || "this product");
   const quantityValue = Number(quantity || 1);
   const unitPrice = Number(priceOverride ?? getProductPrice(product) ?? 0);
   const totalPrice = Number((unitPrice * quantityValue).toFixed(2));
 
-  return `Hello Elohim Grains, I want to order ${productName} — ${formatPrice(totalPrice)}.`;
+  return `Hello Elohim Grains, I want to order ${productName}${weight ? ` ${weight}` : ""} — ${formatPrice(totalPrice)}. Quantity: ${quantityValue}.`;
 };
 
 const getTieredPriceDisplay = (basePrice, wholesaleOverride) => {
@@ -1368,7 +1368,7 @@ export default function ShopPage() {
 
                           <a
                             href={`https://wa.me/2348039688939?text=${encodeURIComponent(
-                              buildWhatsAppOrderMessage(product, currentQuantity, cardPrice)
+                              buildWhatsAppOrderMessage(product, currentQuantity, cardPrice, selectedVariant?.label || "")
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"

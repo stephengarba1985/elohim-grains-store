@@ -510,10 +510,10 @@ export default function ProductDetails() {
   const formatPrice = (value) =>
     `₦${Number(value || 0).toLocaleString()}`;
 
-  const buildWhatsAppOrderMessage = (productItem, quantityValue = 1, priceOverride = null) => {
+  const buildWhatsAppOrderMessage = (productItem, quantityValue = 1, priceOverride = null, weight = "") => {
     const productName = String(productItem?.name || "this product");
     const totalPrice = Number((Number(priceOverride ?? productItem?.price ?? 0) * Number(quantityValue || 1)).toFixed(2));
-    return `Hello Elohim Grains, I want to order ${productName} — ${formatPrice(totalPrice)}.`;
+    return `Hello Elohim Grains, I want to order ${productName}${weight ? ` ${weight}` : ""} — ${formatPrice(totalPrice)}. Quantity: ${Number(quantityValue || 1)}.`;
   };
 
   const getTieredPricing = (basePrice, wholesaleOverride) => {
@@ -973,12 +973,12 @@ export default function ProductDetails() {
             </button>
 
             <a
-              href={`https://wa.me/2348039688939?text=${encodeURIComponent(buildWhatsAppOrderMessage(product, quantity, price))}`}
+              href={`https://wa.me/2348039688939?text=${encodeURIComponent(buildWhatsAppOrderMessage(product, quantity, price, selectedVariant?.weight || selectedType?.name || product.weight || ""))}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-center text-sm font-semibold text-emerald-700 hover:underline"
             >
-              💬 Need help? Buy or ask questions through WhatsApp
+              💬 BUY ON WHATSAPP
             </a>
 
             <div className="grid grid-cols-2 gap-3">

@@ -253,6 +253,12 @@ export default function OrdersPage() {
 
       {loading && <p>Loading orders...</p>}
 
+      <div className="mb-4 flex flex-wrap gap-2">
+        {[["all", "All"], ["pending", "New"], ["confirmed", "Confirmed"], ["processing", "Preparing"], ["ready_for_delivery", "Ready"], ["in_transit", "Out for Delivery"], ["delivered", "Delivered"], ["cancelled", "Cancelled"]].map(([value, label]) => (
+          <button key={value} onClick={() => setStatusFilter(value)} className={`rounded-full px-3 py-2 text-sm font-bold ${statusFilter === value ? "bg-emerald-600 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}>{label}</button>
+        ))}
+      </div>
+
       <div className="flex flex-col md:flex-row gap-3 mb-5">
 
         <input
@@ -270,7 +276,9 @@ export default function OrdersPage() {
         >
           <option value="all">All Orders</option>
           <option value="pending">Pending</option>
+          <option value="confirmed">Confirmed</option>
           <option value="processing">Processing</option>
+          <option value="ready_for_delivery">Ready for Delivery</option>
           <option value="assigned">Assigned</option>
           <option value="in_transit">In Transit</option>
           <option value="delivered">Delivered</option>
@@ -311,7 +319,7 @@ export default function OrdersPage() {
                 {/* ORDER TITLE + BADGES */}
                 <div className="flex items-center gap-2">
                   <h2 className="font-bold">
-                    Order #{order.id}
+                    Order #{order.order_number || order.id}
                   </h2>
 
                   {/* SUBSCRIPTION BADGE */}

@@ -1,6 +1,6 @@
 const express = require("express");
 const pool = require("../config/db");
-const { ensureWalletTables } = require("./walletRoutes");
+const { ensureWalletTables, getWalletBalance } = require("./walletRoutes");
 const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
@@ -170,6 +170,43 @@ router.get("/money-overview", verifyToken, isAdmin, async (req, res) => {
     ]);
     res.json({ sales_today: sales.rows[0].value, wallet_funds_held: wallet.rows[0].value, savings_funds_held: savings.rows[0].value, outstanding_bnpl: bnpl.rows[0].value, pending_refunds: refunds.rows[0].value });
   } catch (err) { console.error("MONEY OVERVIEW ERROR:", err); res.status(500).json({ error: "Failed to load money overview" }); }
+});
+
+router.get("/transaction-ledger", verifyToken, isAdmin, async (req, res) => {
+  try {
+    await ensureWalletTables();
+    const tableExists = async (name) => Boolean((await pool.query("SELECT to_regclass($1) AS value", [name])).rows[0].value);
+    const [hasPayments, hasPlanPayments] = await Promise.all([tableExists("public.payment_transactions"), tableExists("public.grain_plan_payments")]);
+    const [wallet, payments, savings] = await Promise.all([
+      pool.query(`SELECT wt.id, COALESCE(wt.reference, 'WALLET-' || wt.id) AS reference, wt.type, wt.amount, wt.direction, wt.note, wt.reason, wt.created_at, u.name AS customer_name, a.name AS administrator_name
+        FROM wallet_transactions wt LEFT JOIN users u ON u.id=wt.user_id LEFT JOIN users a ON a.id=wt.administrator_id ORDER BY wt.created_at DESC LIMIT 150`),
+      hasPayments ? pool.query(`SELECT id, reference, CASE WHEN channel='refund' THEN 'Refund' ELSE 'Product payment' END AS type, amount, status, created_at FROM payment_transactions ORDER BY created_at DESC LIMIT 150`) : { rows: [] },
+      hasPlanPayments ? pool.query(`SELECT gpp.id, 'SAVE-' || gpp.id AS reference, 'Savings deposit' AS type, gpp.amount, gpp.created_at, u.name AS customer_name FROM grain_plan_payments gpp JOIN grain_plans gp ON gp.id=gpp.plan_id JOIN users u ON u.id=gp.user_id ORDER BY gpp.created_at DESC LIMIT 150`) : { rows: [] },
+    ]);
+    const ledger = [
+      ...wallet.rows.map((x) => ({ ...x, type: x.type === 'adjustment' ? 'Wallet adjustment' : x.type, status: 'verified' })),
+      ...payments.rows.map((x) => ({ ...x, direction: null })),
+      ...savings.rows.map((x) => ({ ...x, status: 'verified', direction: 'credit' })),
+    ].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    res.json({ transactions: ledger });
+  } catch (err) { console.error("LEDGER ERROR:", err); res.status(500).json({ error: "Failed to load transaction ledger" }); }
+});
+
+router.post("/wallet-adjustments/:userId", verifyToken, isAdmin, async (req, res) => {
+  try {
+    await ensureWalletTables();
+    const amount = Number(req.body.amount);
+    const direction = req.body.direction;
+    const reason = String(req.body.reason || "").trim();
+    if (!Number.isFinite(amount) || amount <= 0 || !["credit", "debit"].includes(direction) || !reason) return res.status(400).json({ error: "Amount, direction and reason are required" });
+    const oldBalance = await getWalletBalance(req.params.userId);
+    if (direction === "debit" && amount > oldBalance) return res.status(400).json({ error: "Adjustment exceeds available wallet balance" });
+    const newBalance = direction === "credit" ? oldBalance + amount : oldBalance - amount;
+    const reference = `ADJ-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+    await pool.query(`INSERT INTO wallet_transactions (user_id, type, direction, amount, note, reason, reference, administrator_id)
+      VALUES ($1,'adjustment',$2,$3,$4,$4,$5,$6)`, [req.params.userId, direction, amount, `Wallet adjustment: ${reason}. ${oldBalance} -> ${newBalance}`, reason, reference, req.user.id]);
+    res.json({ reference, old_balance: oldBalance, adjustment: direction === "credit" ? amount : -amount, new_balance: newBalance });
+  } catch (err) { console.error("WALLET ADJUSTMENT ERROR:", err); res.status(500).json({ error: "Failed to record wallet adjustment" }); }
 });
 
 module.exports = router;

@@ -44,6 +44,13 @@ const ensureWalletTables = async () => {
   `);
 
   await pool.query(`
+    ALTER TABLE wallet_transactions
+      ADD COLUMN IF NOT EXISTS reference VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS administrator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS reason TEXT
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS wallet_virtual_accounts (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,

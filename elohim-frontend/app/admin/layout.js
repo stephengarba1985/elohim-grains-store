@@ -47,6 +47,7 @@ export default function AdminLayout({ children }) {
           <p className="text-xs text-gray-400 mt-4">FINANCE</p>
 
           {navItem("Money Control", "/admin/money")}
+          {navItem("Transaction Ledger", "/admin/ledger")}
           {navItem("Payments", "/admin/payments")}
           {navItem("Wallet", "/admin/wallet")}
           {navItem("Escrow", "/admin/escrow")}

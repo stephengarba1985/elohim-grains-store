@@ -382,10 +382,16 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
         ${nameSelect},
         ${emailSelect},
         ${phoneSelect},
-        ${addressSelect}
+        ${addressSelect},
+        COALESCE(item_counts.item_count, 0)::int AS item_count
       FROM orders o
       LEFT JOIN users u ON o.user_id = u.id
       LEFT JOIN escrow_payments ep ON ep.order_id = o.id AND ep.status = 'held'
+      LEFT JOIN (
+        SELECT order_id, SUM(quantity)::int AS item_count
+        FROM order_items
+        GROUP BY order_id
+      ) item_counts ON item_counts.order_id = o.id
       ORDER BY o.id DESC
     `);
 

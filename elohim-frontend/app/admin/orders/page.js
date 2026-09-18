@@ -245,12 +245,6 @@ export default function OrdersPage() {
 
       </div>
 
-      {/* DEBUG PANEL */}
-      <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
-        <p><b>Orders:</b> {orders.length}</p>
-        <p><b>Riders:</b> {riders.length}</p>
-      </div>
-
       {loading && <p>Loading orders...</p>}
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -294,13 +288,16 @@ export default function OrdersPage() {
 
             const matchesSearch = (
               String(order.id).includes(keyword) ||
+              order.order_number?.toLowerCase().includes(keyword) ||
               order.name?.toLowerCase().includes(keyword) ||
               order.email?.toLowerCase().includes(keyword) ||
               order.phone?.includes(keyword)
             );
 
             const matchesStatus =
-              statusFilter === "all" || order.status === statusFilter;
+              statusFilter === "all" ||
+              order.status === statusFilter ||
+              (statusFilter === "ready_for_delivery" && order.status === "assigned");
 
             return matchesSearch && matchesStatus;
           })
@@ -358,6 +355,8 @@ export default function OrdersPage() {
                     ${
                       order.status === "pending"
                         ? "bg-yellow-100 text-yellow-700"
+                      : order.status === "confirmed"
+                        ? "bg-cyan-100 text-cyan-700"
                       : order.status === "processing"
                         ? "bg-blue-100 text-blue-700"
                       : order.status === "assigned"
@@ -374,9 +373,9 @@ export default function OrdersPage() {
 
                 <div className="mt-2 flex gap-2 flex-wrap">
 
-                  {order.payment_status === "paid" && (
+                  {["paid", "verified"].includes(order.payment_status) && (
                     <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">
-                      PAID
+                      PAYMENT \u2713
                     </span>
                   )}
 
@@ -397,7 +396,11 @@ export default function OrdersPage() {
               </div>
             </div>
 
-            {/* ACTIONS */}
+            <p className="mt-2 text-sm text-slate-600">
+              {order.item_count || 0} product{Number(order.item_count) === 1 ? "" : "s"} &middot; {new Date(order.created_at).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
+            </p>
+
+            {/* Show the single next operational action for this order. */}
             <div className="flex flex-wrap gap-2 mt-3">
               <button
                 onClick={() => viewDetails(order.id)}
@@ -406,40 +409,40 @@ export default function OrdersPage() {
                 View
               </button>
 
-              <button
+              {order.status === "pending" && <button
                 onClick={() => updateStatus(order.id, "confirmed")}
                 className="bg-yellow-500 text-white px-3 py-1 rounded"
               >
                 Confirm Order
-              </button>
+              </button>}
 
-              <button
+              {order.status === "confirmed" && <button
                 onClick={() => updateStatus(order.id, "processing")}
                 className="bg-orange-500 text-white px-3 py-1 rounded"
               >
                 Start Preparing
-              </button>
+              </button>}
 
-              <button
+              {order.status === "processing" && <button
                 onClick={() => updateStatus(order.id, "ready_for_delivery")}
                 className="bg-purple-600 text-white px-3 py-1 rounded"
               >
                 Mark Ready
-              </button>
+              </button>}
 
-              <button
+              {order.status === "assigned" && <button
                 onClick={() => updateStatus(order.id, "in_transit")}
                 className="bg-blue-600 text-white px-3 py-1 rounded"
               >
                 START DELIVERY
-              </button>
+              </button>}
 
-              <button
+              {order.status === "in_transit" && <button
                 onClick={() => verifyDeliveryPin(order.id)}
                 className="bg-green-600 text-white px-3 py-1 rounded"
               >
                 VERIFY & COMPLETE
-              </button>
+              </button>}
 
               {order.escrow_status === "held" && (
                 <button
@@ -459,7 +462,7 @@ export default function OrdersPage() {
             )}
 
             {/* RIDER ASSIGNMENT */}
-            {riders.length > 0 && (
+            {riders.length > 0 && order.status === "ready_for_delivery" && (
               <div className="mt-3 flex gap-2 items-center">
 
                 <select

@@ -29,6 +29,7 @@ export default function CartPage() {
   const [paymentMethod, setPaymentMethod] = useState("online");
   const [walletBalance, setWalletBalance] = useState(null);
   const [bnplEligible, setBnplEligible] = useState(false);
+  const [walletPin, setWalletPin] = useState("");
 
   /* =========================
      INIT USER + LOAD CART
@@ -121,7 +122,7 @@ export default function CartPage() {
     setCheckoutDetails((current) => ({ ...current, [field]: value }));
   };
 
-  const startCheckout = () => {
+  const startCheckout = async () => {
     const requiredFields = ["fullName", "phone", "email", "state", "city", "address", "deliveryPhone"];
     if (requiredFields.some((field) => !String(checkoutDetails[field] || "").trim())) {
       toast.error("Please complete your contact and delivery details");
@@ -133,7 +134,17 @@ export default function CartPage() {
       return;
     }
     if (paymentMethod === "wallet") {
-      toast("Wallet checkout is being prepared. Please choose Pay online for this order today.");
+      if (!walletPin) return toast.error("Enter your Wallet PIN to continue");
+      if (walletBalance === null || walletBalance < payableTotal) return toast.error("Insufficient wallet balance");
+      try {
+        setPaymentLoading(true);
+        const payment = await API.post(`/wallet/${user.id}/pay-cart`, { amount: payableTotal, pin: walletPin });
+        await createOrderFromReference(payment.data.reference);
+      } catch (err) {
+        toast.error(err.response?.data?.error || "Wallet payment failed");
+      } finally {
+        setPaymentLoading(false);
+      }
       return;
     }
     payWithPaystack();
@@ -566,6 +577,15 @@ export default function CartPage() {
                 <input type="radio" name="payment-method" value="wallet" checked={paymentMethod === "wallet"} onChange={() => setPaymentMethod("wallet")} className="mt-1 accent-emerald-600" />
                 <span><span className="block font-black text-slate-900">Elohim Wallet</span><span className="mt-1 block text-sm text-slate-600">Available balance: <b>{walletBalance === null ? "Loading..." : formatPrice(walletBalance)}</b></span></span>
               </label>
+              {paymentMethod === "wallet" && walletBalance !== null && (
+                <div className={`rounded-xl p-4 ${walletBalance >= payableTotal ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}>
+                  {walletBalance >= payableTotal ? (
+                    <><p className="font-bold">Order total: {formatPrice(payableTotal)}</p><p className="mt-1">Remaining balance: <b>{formatPrice(walletBalance - payableTotal)}</b></p><label className="mt-3 block text-sm font-bold">Wallet PIN<input type="password" inputMode="numeric" maxLength="4" value={walletPin} onChange={(event) => setWalletPin(event.target.value)} className="mt-1 w-full rounded-lg border border-emerald-200 bg-white px-3 py-2" /></label></>
+                  ) : (
+                    <><p className="font-bold">Your wallet balance is {formatPrice(walletBalance)}.</p><p className="mt-1">You need {formatPrice(payableTotal - walletBalance)} more.</p><Link href="/user/wallet" className="mt-3 inline-block font-black text-emerald-700 hover:underline">FUND WALLET</Link></>
+                  )}
+                </div>
+              )}
               {bnplEligible && (
                 <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${paymentMethod === "bnpl" ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-slate-300"}`}>
                   <input type="radio" name="payment-method" value="bnpl" checked={paymentMethod === "bnpl"} onChange={() => setPaymentMethod("bnpl")} className="mt-1 accent-emerald-600" />
@@ -607,10 +627,10 @@ export default function CartPage() {
 
             <button
               onClick={startCheckout}
-              disabled={paymentLoading}
+              disabled={paymentLoading || (paymentMethod === "wallet" && (walletBalance === null || walletBalance < payableTotal))}
               className="order-1 rounded-xl bg-emerald-600 px-4 py-3 font-black tracking-wide text-white hover:bg-emerald-700 disabled:bg-gray-400 sm:order-2"
             >
-              {paymentLoading ? "OPENING..." : "CHECKOUT"}
+              {paymentLoading ? "PROCESSING..." : paymentMethod === "wallet" ? `PAY ${formatPrice(payableTotal)} FROM WALLET` : paymentMethod === "bnpl" ? "CONTINUE TO BNPL" : "CHECKOUT"}
             </button>
 
             {paymentInstructions && (

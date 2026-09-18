@@ -953,6 +953,48 @@ router.post("/:userId/fund", async (req, res) => {
   }
 });
 
+router.post("/:userId/pay-cart", verifyToken, async (req, res) => {
+  const amount = parseAmount(req.body.amount);
+  const { pin } = req.body;
+
+  if (String(req.user.id) !== String(req.params.userId)) return res.status(403).json({ error: "Not allowed" });
+  if (!amount || !pin) return res.status(400).json({ error: "Amount and Wallet PIN are required" });
+  if (!(await verifyWalletPin(req.user.id, pin))) return res.status(401).json({ error: "Invalid Wallet PIN" });
+
+  const client = await pool.connect();
+  try {
+    await ensureWalletTables();
+    await client.query(`CREATE TABLE IF NOT EXISTS payment_transactions (
+      id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL, provider VARCHAR(50) NOT NULL,
+      channel VARCHAR(50) NOT NULL, reference VARCHAR(100) UNIQUE NOT NULL,
+      amount DECIMAL(10,2) NOT NULL, status VARCHAR(30) DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, verified_at TIMESTAMP
+    )`);
+    await client.query("BEGIN");
+    const balance = await getWalletBalance(req.user.id, client);
+    if (amount > balance) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Insufficient wallet balance", balance, shortfall: amount - balance });
+    }
+    const reference = `WALLET-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+    await insertTransaction(client, { userId: req.user.id, type: "plan_payment", direction: "debit", amount, note: `Cart payment ${reference}` });
+    await client.query(
+      `INSERT INTO payment_transactions (user_id, provider, channel, reference, amount, status, verified_at)
+       VALUES ($1, 'wallet', 'wallet', $2, $3, 'verified', CURRENT_TIMESTAMP)`,
+      [req.user.id, reference, amount]
+    );
+    await client.query("COMMIT");
+    res.json({ reference, balance: balance - amount });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("WALLET CART PAYMENT ERROR:", err);
+    res.status(500).json({ error: "Wallet payment failed" });
+  } finally {
+    client.release();
+  }
+});
+
 router.post("/:userId/withdraw", verifyToken, async (req, res) => {
   const amount = parseAmount(req.body.amount);
   const { pin } = req.body;

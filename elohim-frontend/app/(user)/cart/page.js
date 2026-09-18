@@ -30,6 +30,8 @@ export default function CartPage() {
   const [walletBalance, setWalletBalance] = useState(null);
   const [bnplEligible, setBnplEligible] = useState(false);
   const [walletPin, setWalletPin] = useState("");
+  const [bnplChecked, setBnplChecked] = useState(false);
+  const [bnplChecking, setBnplChecking] = useState(false);
 
   /* =========================
      INIT USER + LOAD CART
@@ -148,6 +150,20 @@ export default function CartPage() {
       return;
     }
     payWithPaystack();
+  };
+
+  const checkBnplEligibility = async () => {
+    if (!user) return;
+    try {
+      setBnplChecking(true);
+      const result = await API.get(`/bnpl/user/${user.id}`);
+      setBnplEligible(Number(result.data?.credit_score || 0) >= 520);
+      setBnplChecked(true);
+    } catch (err) {
+      toast.error("We could not check BNPL eligibility right now");
+    } finally {
+      setBnplChecking(false);
+    }
   };
 
   /* =========================
@@ -596,12 +612,16 @@ export default function CartPage() {
                   )}
                 </div>
               )}
-              {bnplEligible && (
-                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${paymentMethod === "bnpl" ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-slate-300"}`}>
-                  <input type="radio" name="payment-method" value="bnpl" checked={paymentMethod === "bnpl"} onChange={() => setPaymentMethod("bnpl")} className="mt-1 accent-emerald-600" />
-                  <span><span className="block font-black text-slate-900">BNPL</span><span className="mt-1 block text-sm text-slate-600">You qualify for Buy Now, Pay Later. Continue to choose a repayment plan.</span></span>
-                </label>
-              )}
+              <div className={`rounded-xl border p-4 ${bnplChecked && bnplEligible ? "border-emerald-500 bg-emerald-50" : "border-slate-200"}`}>
+                <p className="font-black text-slate-900">Pay in installments</p>
+                {!bnplChecked ? (
+                  <><p className="mt-1 text-sm text-slate-600">Check eligibility before choosing a weekly or monthly repayment plan.</p><button type="button" onClick={checkBnplEligibility} disabled={bnplChecking} className="mt-3 rounded-lg border border-emerald-600 px-3 py-2 text-sm font-black text-emerald-700 disabled:opacity-50">{bnplChecking ? "CHECKING..." : "CHECK ELIGIBILITY"}</button></>
+                ) : bnplEligible ? (
+                  <label className="mt-3 flex cursor-pointer items-start gap-3"><input type="radio" name="payment-method" value="bnpl" checked={paymentMethod === "bnpl"} onChange={() => setPaymentMethod("bnpl")} className="mt-1 accent-emerald-600" /><span><span className="block font-bold text-slate-900">Approved for BNPL</span><span className="mt-1 block text-sm text-slate-600">Pay toward this order today, then select weekly or monthly installments.</span></span></label>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-600">You are not currently eligible. You can pay online, use your wallet, or build eligibility through Elohim savings.</p>
+                )}
+              </div>
               <details className="rounded-xl border border-slate-200 p-4">
                 <summary className="cursor-pointer font-bold text-slate-700">Other approved payment options</summary>
                 <p className="mt-2 text-sm text-slate-600">Contact Elohim Grains for approved business or special-order payment arrangements.</p>

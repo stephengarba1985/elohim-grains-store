@@ -5,8 +5,6 @@ import { useParams } from "next/navigation";
 import API from "../../../lib/api";
 import toast from "react-hot-toast";
 
-const steps = ["pending", "processing", "assigned", "in_transit", "delivered"];
-
 const statusLabel = (value) =>
   String(value || "pending")
     .replace(/_/g, " ")
@@ -35,7 +33,15 @@ export default function TrackOrder() {
   }, [id]);
 
   const currentStatus = data?.delivery?.status || data?.order?.status || data?.status || "pending";
-  const activeStep = Math.max(0, steps.indexOf(currentStatus));
+  const milestoneDefinitions = [
+    ["Order received", ["pending", "paid", "confirmed", "processing", "assigned", "picked_up", "in_transit", "near_customer", "delivered"]],
+    ["Payment confirmed", ["paid", "confirmed", "processing", "assigned", "picked_up", "in_transit", "near_customer", "delivered"]],
+    ["Preparing", ["processing", "assigned", "picked_up", "in_transit", "near_customer", "delivered"]],
+    ["Ready for delivery", ["assigned", "picked_up", "in_transit", "near_customer", "delivered"]],
+    ["Out for delivery", ["in_transit", "near_customer", "delivered"]],
+    ["Delivered", ["delivered"]],
+  ];
+  const rawStatus = String(data?.order?.status || currentStatus || "pending").toLowerCase();
 
   const etaText = useMemo(() => {
     const eta = data?.delivery?.eta || data?.order?.eta;
@@ -119,26 +125,14 @@ export default function TrackOrder() {
         </div>
 
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-xl font-black text-slate-950">Delivery progress</h2>
-          <div className="mt-5 grid gap-3 md:grid-cols-5">
-            {steps.map((step, index) => (
-              <div
-                key={step}
-                className={`rounded-lg border p-4 ${
-                  index <= activeStep
-                    ? "border-green-200 bg-green-50"
-                    : "border-slate-200 bg-slate-50"
-                }`}
-              >
-                <p
-                  className={`text-sm font-bold ${
-                    index <= activeStep ? "text-green-700" : "text-slate-500"
-                  }`}
-                >
-                  {statusLabel(step)}
-                </p>
-              </div>
-            ))}
+          <h2 className="text-xl font-black text-slate-950">Order milestones</h2>
+          <div className="mt-5 space-y-4">
+            {milestoneDefinitions.map(([label, statuses], index) => {
+              const complete = statuses.includes(rawStatus);
+              const event = (data.events || []).find((item) => statuses.includes(String(item.status || "").toLowerCase()));
+              const timestamp = event?.created_at || (index <= 1 && complete ? data.order?.created_at : null);
+              return <div key={label} className="flex items-start gap-3"><span className={`mt-0.5 ${complete ? "text-emerald-600" : "text-slate-400"}`}>{complete ? "✓" : "○"}</span><div><p className={`font-bold ${complete ? "text-emerald-700" : "text-slate-500"}`}>{label}</p><p className="text-sm text-slate-500">{timestamp ? formatDate(timestamp) : "Waiting for update"}</p></div></div>;
+            })}
           </div>
         </section>
 

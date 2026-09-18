@@ -1,134 +1,92 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import API from "@/lib/api";
-import { toast } from "react-hot-toast";
+
+const money = (value) => `\u20A6${Number(value || 0).toLocaleString()}`;
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState({});
-  const [bulkRequests, setBulkRequests] = useState([]);
+  const [data, setData] = useState({ stats: {}, orders: [], products: [], bulk: [], bnpl: [] });
+  const [loading, setLoading] = useState(true);
 
-  /* =========================
-     FETCH BULK REQUESTS
-  ========================= */
-  const fetchBulkRequests = async () => {
-    try {
-      const res = await API.get("/bulk");
-
-      console.log("📦 ADMIN BULK:", res.data);
-
-      setBulkRequests(Array.isArray(res.data) ? res.data : []);
-    } catch (err) {
-      console.error("❌ BULK FETCH ERROR:", err);
-      toast.error("Failed to load bulk requests");
-    }
-  };
-
-  /* =========================
-     APPROVE BULK
-  ========================= */
-  const approveBulk = async (id) => {
-    try {
-      const price = prompt("Enter approved price:");
-
-      if (!price) return;
-
-      await API.put(`/bulk/${id}`, {
-        status: "approved",
-        approved_price: price,
-      });
-
-      toast.success("Bulk approved 💰");
-
-      fetchBulkRequests();
-    } catch (err) {
-      console.error("❌ APPROVE ERROR:", err);
-      toast.error("Failed to approve");
-    }
-  };
-
-  /* =========================
-     LOAD DATA
-  ========================= */
   useEffect(() => {
-    API.get("/admin/stats")
-      .then((res) => setStats(res.data))
-      .catch((err) => console.error("❌ STATS ERROR:", err));
-
-    fetchBulkRequests();
+    Promise.allSettled([
+      API.get("/admin/stats"), API.get("/orders"), API.get("/products"),
+      API.get("/bulk"), API.get("/bnpl/admin/overview"),
+    ]).then(([stats, orders, products, bulk, bnpl]) => {
+      setData({
+        stats: stats.status === "fulfilled" ? stats.value.data || {} : {},
+        orders: orders.status === "fulfilled" ? orders.value.data || [] : [],
+        products: products.status === "fulfilled" ? products.value.data || [] : [],
+        bulk: bulk.status === "fulfilled" ? bulk.value.data || [] : [],
+        bnpl: bnpl.status === "fulfilled" ? bnpl.value.data?.reminders || [] : [],
+      });
+      setLoading(false);
+    });
   }, []);
 
-  /* =========================
-     UI
-  ========================= */
+  const metrics = useMemo(() => {
+    const pending = data.orders.filter(({ status }) => ["pending", "paid"].includes(status));
+    const deliveries = data.orders.filter(({ status }) =>
+      ["assigned", "ready_for_delivery", "in_transit"].includes(status)
+    );
+    return {
+      pending,
+      deliveries,
+      payments: data.orders.filter(({ payment_status }) => payment_status === "pending"),
+      lowStock: data.products.filter((item) => Number(item.stock_quantity) > 0 && Number(item.stock_quantity) <= 10),
+      bulk: data.bulk.filter(({ status }) => status === "pending"),
+      overdue: data.bnpl.filter(({ overdue }) => overdue),
+    };
+  }, [data]);
+
+  const topCards = [
+    ["Revenue", money(data.stats.todayRevenue), "/admin/payments"],
+    ["Orders", data.stats.todayOrders || 0, "/admin/orders"],
+    ["New Customers", data.stats.newCustomers || 0, "/admin/customers"],
+    ["Pending Orders", metrics.pending.length, "/admin/orders"],
+    ["Deliveries", metrics.deliveries.length, "/admin/logistics"],
+    ["Bulk Requests", metrics.bulk.length, "/admin/bulk"],
+  ];
+  const attention = [
+    [metrics.pending.length, "orders awaiting confirmation", "/admin/orders"],
+    [metrics.payments.length, "payments awaiting verification", "/admin/payments"],
+    [metrics.lowStock.length || data.stats.lowStock || 0, "products low in stock", "/admin/inventory"],
+    [metrics.deliveries.length, "deliveries not completed", "/admin/logistics"],
+    [metrics.bulk.length, "new bulk requests", "/admin/bulk"],
+    [metrics.overdue.length, "BNPL payments overdue", "/admin/bnpl"],
+  ];
+
   return (
-    <div className="p-6">
+    <main className="min-h-screen bg-slate-50 p-6">
+      <div className="mx-auto max-w-7xl">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">Elohim operations</p>
+        <h1 className="mt-1 text-3xl font-black text-slate-950">What needs my attention today?</h1>
+        <p className="mt-2 text-slate-600">Live priorities for orders, payments, stock and deliveries.</p>
 
-      {/* =========================
-         STATS
-      ========================= */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {topCards.map(([label, value, href]) => (
+            <Link key={label} href={href} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 transition hover:ring-emerald-400">
+              <p className="text-sm font-semibold text-slate-500">{label}</p>
+              <p className="mt-2 text-2xl font-black text-slate-950">{loading ? "\u2014" : value}</p>
+              <span className="mt-3 block text-xs font-bold text-emerald-700">View details &rarr;</span>
+            </Link>
+          ))}
+        </section>
 
-        <div className="bg-white p-4 rounded shadow">
-          <p>Total Revenue</p>
-          <h2>₦{Number(stats.revenue || 0).toLocaleString()}</h2>
-        </div>
-
-        <div className="bg-white p-4 rounded shadow">
-          <p>Orders</p>
-          <h2>{stats.orders || 0}</h2>
-        </div>
-
-        <div className="bg-white p-4 rounded shadow">
-          <p>Subscriptions</p>
-          <h2>{stats.subscriptions || 0}</h2>
-        </div>
-
-        <div className="bg-white p-4 rounded shadow">
-          <p>Users</p>
-          <h2>{stats.users || 0}</h2>
-        </div>
-
+        <section className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-6">
+          <h2 className="text-xl font-black text-slate-950">&#9888; Requires Attention</h2>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {attention.map(([count, label, href]) => (
+              <Link key={label} href={href} className="rounded-xl bg-white p-4 shadow-sm transition hover:bg-amber-100">
+                <b className="text-2xl text-amber-700">{loading ? "\u2014" : count}</b>
+                <span className="ml-2 font-semibold text-slate-800">{label}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
       </div>
-
-      {/* =========================
-         BULK REQUESTS
-      ========================= */}
-      <h2 className="text-xl font-bold mt-6 mb-3">
-        Bulk Requests 💰
-      </h2>
-
-      {bulkRequests.length === 0 && (
-        <p>No bulk requests</p>
-      )}
-
-      {bulkRequests.map((b) => (
-        <div key={b.id} className="bg-white p-4 rounded shadow mb-3">
-
-          <h3 className="font-bold">{b.product_name}</h3>
-
-          <p>User: {b.user_name}</p>
-
-          <p>Quantity: {b.quantity}</p>
-
-          <p>
-            Requested: ₦{Number(b.requested_price || 0).toLocaleString()}
-          </p>
-
-          <p>Status: {b.status}</p>
-
-          {b.status === "pending" && (
-            <button
-              onClick={() => approveBulk(b.id)}
-              className="bg-green-600 text-white px-3 py-1 rounded mt-2"
-            >
-              Approve
-            </button>
-          )}
-
-        </div>
-      ))}
-
-    </div>
+    </main>
   );
 }

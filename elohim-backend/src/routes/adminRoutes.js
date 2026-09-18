@@ -23,6 +23,7 @@ router.get("/stats", async (req, res) => {
       orders,
       todayOrders,
       customers,
+      newCustomers,
       products,
       riders,
       lowStock,
@@ -59,6 +60,13 @@ router.get("/stats", async (req, res) => {
         SELECT COUNT(*)::int AS total
         FROM users
         WHERE COALESCE(is_admin,false)=false
+      `),
+
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM users
+        WHERE COALESCE(is_admin,false)=false
+          AND DATE(created_at)=CURRENT_DATE
       `),
 
       pool.query(`
@@ -118,6 +126,8 @@ router.get("/stats", async (req, res) => {
       todayOrders: todayOrders.rows[0].total,
 
       customers: customers.rows[0].total,
+
+      newCustomers: newCustomers.rows[0].total,
 
       products: products.rows[0].total,
 

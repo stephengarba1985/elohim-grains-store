@@ -745,7 +745,7 @@ export default async function Home() {
               and buy in bulk with confidence through one trusted platform.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Link
                 href="/products"
                 className="rounded-xl bg-green-700 px-6 py-3 text-center font-bold text-white shadow-sm transition hover:bg-green-800"
@@ -757,6 +757,12 @@ export default async function Home() {
                 className="rounded-xl bg-white px-6 py-3 text-center font-bold text-slate-950 shadow-sm transition hover:bg-slate-100"
               >
                 Buy in Bulk
+              </Link>
+              <Link
+                href="/user/plans"
+                className="rounded-xl border border-white/50 bg-white/10 px-6 py-3 text-center font-bold text-white shadow-sm transition hover:bg-white/20"
+              >
+                Save for Food
               </Link>
             </div>
 
@@ -1124,6 +1130,9 @@ export default async function Home() {
               </Link>
               <Link href="/bulk" className="rounded-xl border border-white/30 px-6 py-3 font-bold text-white hover:bg-white/10">
                 Buy in Bulk
+              </Link>
+              <Link href="/user/plans" className="rounded-xl border border-white/30 px-6 py-3 font-bold text-white hover:bg-white/10">
+                Save for Food
               </Link>
             </div>
           </div>

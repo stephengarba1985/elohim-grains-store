@@ -143,7 +143,7 @@ Elohim Grains 🌾`;
         [orderId, sub.product_id, sub.quantity, sub.price]
       );
 
-      const interval = sub.plan === "weekly" ? "7 days" : "30 days";
+      const interval = sub.plan === "weekly" ? "7 days" : sub.plan === "biweekly" ? "14 days" : "30 days";
 
       await pool.query(
         `UPDATE subscriptions

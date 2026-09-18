@@ -14,6 +14,7 @@ export default function OrderDetails() {
   const [items, setItems] = useState([]);
   const [user, setUser] = useState(null);
   const [reordering, setReordering] = useState(false);
+  const [subscribingPlan, setSubscribingPlan] = useState("");
   const { addToCart, setUser: setCartUser } = useCartStore();
 
   useEffect(() => {
@@ -70,6 +71,16 @@ export default function OrderDetails() {
     } catch (err) {
       toast.error("Could not add all items to your cart");
     } finally { setReordering(false); }
+  };
+
+  const scheduleRepeatOrder = async (plan) => {
+    if (!user) return toast.error("Please login first");
+    try {
+      setSubscribingPlan(plan);
+      for (const item of items) await API.post("/subscriptions", { user_id: user.id, product_id: item.product_id, quantity: item.quantity, plan });
+      toast.success("Your repeat delivery schedule is active");
+    } catch (err) { toast.error("Could not schedule this delivery"); }
+    finally { setSubscribingPlan(""); }
   };
 
   return (
@@ -140,6 +151,10 @@ export default function OrderDetails() {
             <div className="mt-5 flex flex-wrap justify-center gap-3">
               <button onClick={() => toast("Order ratings are coming next—thank you for your feedback!")} className="rounded-xl border border-emerald-300 bg-white px-4 py-3 font-bold">⭐ RATE YOUR ORDER</button>
               <button onClick={buyAgain} disabled={reordering} className="rounded-xl bg-emerald-600 px-4 py-3 font-black text-white disabled:bg-slate-300">{reordering ? "ADDING..." : "BUY AGAIN"}</button>
+            </div>
+            <div className="mt-6 border-t border-emerald-200 pt-5">
+              <p className="font-black">You buy these items regularly.</p><p className="mt-1 text-sm">Save time by scheduling your next delivery.</p>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">{[["weekly", "Weekly"], ["biweekly", "Every 2 Weeks"], ["monthly", "Monthly"]].map(([plan, label]) => <button key={plan} onClick={() => scheduleRepeatOrder(plan)} disabled={Boolean(subscribingPlan)} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-bold">{subscribingPlan === plan ? "SCHEDULING..." : label}</button>)}</div>
             </div>
           </div>
         )}

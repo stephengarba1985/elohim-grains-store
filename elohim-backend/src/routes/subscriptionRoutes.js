@@ -69,8 +69,8 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ error: "Quantity must be greater than 0" });
   }
 
-  if (!["weekly", "monthly"].includes(normalizedPlan)) {
-    return res.status(400).json({ error: "Plan must be weekly or monthly" });
+  if (!["weekly", "biweekly", "monthly"].includes(normalizedPlan)) {
+    return res.status(400).json({ error: "Plan must be weekly, every 2 weeks, or monthly" });
   }
 
   const client = await pool.connect();
@@ -113,8 +113,9 @@ router.post("/", async (req, res) => {
          $2,
          $3,
          $4::varchar,
-         NOW() + CASE
+           NOW() + CASE
            WHEN $4::text = 'weekly' THEN INTERVAL '7 days'
+           WHEN $4::text = 'biweekly' THEN INTERVAL '14 days'
            ELSE INTERVAL '30 days'
          END,
          'active'
@@ -299,7 +300,7 @@ router.put("/:id/skip", async (req, res) => {
     }
 
     const plan = subRes.rows[0].plan;
-    const interval = plan === "weekly" ? "7 days" : "30 days";
+    const interval = plan === "weekly" ? "7 days" : plan === "biweekly" ? "14 days" : "30 days";
 
     await pool.query(
       `UPDATE subscriptions

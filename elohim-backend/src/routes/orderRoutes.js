@@ -290,6 +290,7 @@ router.post("/create", verifyToken, async (req, res) => {
           customerName: customer.name,
           orderId,
           totalAmount,
+          deliveryFee,
           items: itemsRes.rows,
         });
       }

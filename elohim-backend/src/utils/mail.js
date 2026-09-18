@@ -135,6 +135,12 @@ const sendVerificationEmail = async (email, verifyLink) => {
    ORDER CONFIRMATION EMAIL
 ========================= */
 const sendOrderConfirmationEmail = async (email, order) => {
+  const productsTotal = (order.items || []).reduce(
+    (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
+    0
+  );
+  const deliveryFee = Number(order.deliveryFee || 0);
+  const orderReference = `EG-${new Date().getFullYear()}-${String(order.orderId).padStart(5, "0")}`;
   const rows = order.items
     .map(
       (item) => `
@@ -152,7 +158,7 @@ const sendOrderConfirmationEmail = async (email, order) => {
     <div style="font-family:Arial,sans-serif;max-width:700px;margin:auto">
 
       <h2 style="color:#15803d;">
-        Order Confirmation
+        🎉 Order Confirmed
       </h2>
 
       <p>Hello <strong>${order.customerName}</strong>,</p>
@@ -162,11 +168,11 @@ const sendOrderConfirmationEmail = async (email, order) => {
         <strong>Elohim Grains Store</strong>.
       </p>
 
-      <p>Your order has been received successfully.</p>
+      <p>Your payment has been confirmed and we are preparing your order.</p>
 
       <h3>Order Details</h3>
 
-      <p><strong>Order Number:</strong> #${order.orderId}</p>
+      <p><strong>Order Number:</strong> ${orderReference}</p>
 
       <table
         style="
@@ -189,9 +195,13 @@ const sendOrderConfirmationEmail = async (email, order) => {
         </tbody>
       </table>
 
-      <h3 style="margin-top:20px;">
-        Total: ₦${Number(order.totalAmount).toLocaleString()}
-      </h3>
+      <div style="margin-top:20px;padding:16px;background:#f8fafc;border-radius:8px;max-width:400px">
+        <p style="margin:0 0 8px"><strong>Products:</strong> ₦${productsTotal.toLocaleString()}</p>
+        <p style="margin:0 0 8px"><strong>Delivery:</strong> ${deliveryFee > 0 ? `₦${deliveryFee.toLocaleString()}` : "Confirmed separately for bulk delivery"}</p>
+        <p style="margin:12px 0 0;font-size:18px"><strong>Total paid: ₦${Number(order.totalAmount).toLocaleString()}</strong></p>
+      </div>
+
+      <p style="margin-top:20px"><strong>Status:</strong> 🟢 Payment confirmed &nbsp; 🟡 Processing &nbsp; ⚪ Out for delivery &nbsp; ⚪ Delivered</p>
 
       <p>
         We are preparing your order and will notify you again once it has been dispatched.

@@ -112,7 +112,8 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
           SELECT
             u.name,
             u.email,
-            o.total_amount
+            o.total_amount,
+            o.delivery_fee
           FROM orders o
           JOIN users u ON u.id = o.user_id
           WHERE o.id = $1
@@ -140,6 +141,7 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
             customerName: userRes.rows[0].name || "Customer",
             orderId: updated.rows[0].order_id,
             totalAmount: userRes.rows[0].total_amount,
+            deliveryFee: userRes.rows[0].delivery_fee,
             items: itemsRes.rows,
           });
         }

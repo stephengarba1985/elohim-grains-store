@@ -52,6 +52,29 @@ const tableExists = async (qualifiedName) => {
   return Boolean(result.rows[0]?.exists);
 };
 
+const ensureStockHistory = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stock_history (
+      id SERIAL PRIMARY KEY,
+      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      admin_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      change INTEGER NOT NULL,
+      previous_stock INTEGER NOT NULL,
+      new_stock INTEGER NOT NULL,
+      reason VARCHAR(80) NOT NULL DEFAULT 'adjustment',
+      note TEXT,
+      reference VARCHAR(120),
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await pool.query(`
+    ALTER TABLE stock_history
+      ADD COLUMN IF NOT EXISTS reason VARCHAR(80) NOT NULL DEFAULT 'adjustment',
+      ADD COLUMN IF NOT EXISTS note TEXT,
+      ADD COLUMN IF NOT EXISTS reference VARCHAR(120)
+  `);
+};
+
 const columnExists = async (tableName, columnName) => {
   const result = await pool.query(
     `
@@ -1616,12 +1639,57 @@ router.delete(
    STOCK HISTORY
 ========================================================= */
 
+router.post("/stock/:product_id/movement", verifyToken, isAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await ensureStockHistory();
+    const productId = Number(req.params.product_id);
+    const { action, quantity, target_stock, reason, note, reference } = req.body;
+    const amount = Number(quantity);
+    if (!Number.isInteger(productId) || productId < 1) return res.status(400).json({ error: "Invalid product" });
+    if (!["add", "remove", "adjust"].includes(action)) return res.status(400).json({ error: "Invalid stock action" });
+    if ((action !== "adjust" && (!Number.isFinite(amount) || amount <= 0)) ||
+      (action === "adjust" && (!Number.isFinite(Number(target_stock)) || Number(target_stock) < 0))) {
+      return res.status(400).json({ error: "Enter a valid stock quantity" });
+    }
+
+    await client.query("BEGIN");
+    const currentResult = await client.query("SELECT id, name, stock_quantity FROM products WHERE id = $1 FOR UPDATE", [productId]);
+    if (!currentResult.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Product not found" });
+    }
+    const current = Number(currentResult.rows[0].stock_quantity || 0);
+    const next = action === "add" ? current + amount : action === "remove" ? current - amount : Number(target_stock);
+    if (next < 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Cannot remove more stock than is available" });
+    }
+
+    await client.query("UPDATE products SET stock_quantity = $1 WHERE id = $2", [next, productId]);
+    const movement = await client.query(
+      `INSERT INTO stock_history (product_id, admin_id, change, previous_stock, new_stock, reason, note, reference)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [productId, req.user.id, next - current, current, next, reason || action, note || null, reference || null]
+    );
+    await client.query("COMMIT");
+    res.json({ product: { ...currentResult.rows[0], stock_quantity: next }, movement: movement.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("STOCK MOVEMENT ERROR:", err);
+    res.status(500).json({ error: "Failed to record stock movement" });
+  } finally {
+    client.release();
+  }
+});
+
 router.get(
   "/history/:product_id",
   verifyToken,
   isAdmin,
   async (req, res) => {
     try {
+      await ensureStockHistory();
       const productId = Number(req.params.product_id);
 
       const result = await pool.query(
@@ -1630,7 +1698,7 @@ router.get(
           stock_history.*,
           users.name
         FROM stock_history
-        JOIN users
+        LEFT JOIN users
           ON stock_history.admin_id = users.id
         WHERE stock_history.product_id = $1
         ORDER BY created_at DESC

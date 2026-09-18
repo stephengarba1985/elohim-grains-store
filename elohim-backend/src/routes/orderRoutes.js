@@ -16,7 +16,8 @@ const ensureOrderDeliveryFeeColumn = () =>
     ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS delivery_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS order_number VARCHAR(30),
-    ADD COLUMN IF NOT EXISTS delivery_address TEXT
+    ADD COLUMN IF NOT EXISTS delivery_address TEXT,
+    ADD COLUMN IF NOT EXISTS inventory_restored BOOLEAN NOT NULL DEFAULT FALSE
   `);
 
 const ensureOrderStatusEvents = () =>
@@ -635,6 +636,7 @@ router.post("/:id/notify-customer", verifyToken, isAdmin, async (req, res) => {
 router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensureOrderStatusEvents();
+    await ensureOrderDeliveryFeeColumn();
     const { id } = req.params;
     const { status } = req.body;
 
@@ -659,7 +661,7 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
     }
 
     const existingOrderRes = await pool.query(
-      `SELECT rider_id, status FROM orders WHERE id = $1`,
+      `SELECT rider_id, status, inventory_restored FROM orders WHERE id = $1`,
       [id]
     );
 
@@ -668,6 +670,24 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
     }
 
     const order = existingOrderRes.rows[0];
+
+    const canRestoreInventory = ["pending", "paid", "confirmed", "processing", "ready_for_delivery"].includes(order.status);
+    if (status === "cancelled" && canRestoreInventory && !order.inventory_restored) {
+      const itemsRes = await pool.query(
+        "SELECT product_id, variant_id, quantity FROM order_items WHERE order_id = $1",
+        [id]
+      );
+
+      for (const item of itemsRes.rows) {
+        if (item.variant_id) {
+          await pool.query("UPDATE product_variants SET stock = stock + $1 WHERE id = $2", [item.quantity, item.variant_id]);
+        } else {
+          await pool.query("UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2", [item.quantity, item.product_id]);
+        }
+      }
+
+      await pool.query("UPDATE orders SET inventory_restored = TRUE WHERE id = $1", [id]);
+    }
     const delivery = await ensureDeliveryForOrder(id, order.rider_id, status);
 
     const result = await pool.query(

@@ -192,6 +192,23 @@ router.get("/transaction-ledger", verifyToken, isAdmin, async (req, res) => {
   } catch (err) { console.error("LEDGER ERROR:", err); res.status(500).json({ error: "Failed to load transaction ledger" }); }
 });
 
+router.get("/analytics", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const realized = "(o.payment_status='verified' OR o.status IN ('paid','processing','delivered'))";
+    const [summary, periods, products, categories, channels, customers, delivery] = await Promise.all([
+      pool.query(`SELECT COALESCE(SUM(total_amount) FILTER (WHERE ${realized}),0) AS revenue, COUNT(*)::int AS orders, COALESCE(AVG(total_amount) FILTER (WHERE ${realized}),0) AS average_order_value FROM orders o`),
+      pool.query(`SELECT DATE_TRUNC('day',created_at) AS day, COALESCE(SUM(total_amount) FILTER (WHERE ${realized}),0) AS revenue, COUNT(*)::int AS orders FROM orders o GROUP BY 1 ORDER BY 1 DESC LIMIT 30`),
+      pool.query(`SELECT p.name, COALESCE(SUM(oi.quantity),0)::int AS units, COALESCE(SUM(oi.quantity*oi.price),0) AS revenue FROM order_items oi JOIN products p ON p.id=oi.product_id JOIN orders o ON o.id=oi.order_id WHERE ${realized} GROUP BY p.id,p.name ORDER BY revenue DESC LIMIT 10`),
+      pool.query(`SELECT COALESCE(c.name,'Uncategorised') AS name, COALESCE(SUM(oi.quantity*oi.price),0) AS revenue FROM order_items oi JOIN products p ON p.id=oi.product_id JOIN orders o ON o.id=oi.order_id LEFT JOIN categories c ON c.id=p.category_id WHERE ${realized} GROUP BY c.name ORDER BY revenue DESC LIMIT 10`),
+      pool.query(`SELECT CASE WHEN is_bulk THEN 'Bulk' WHEN is_subscription THEN 'Subscription' ELSE 'Retail' END AS name, COALESCE(SUM(total_amount) FILTER (WHERE ${realized}),0) AS revenue FROM orders o GROUP BY 1 ORDER BY 1`),
+      pool.query(`SELECT CASE WHEN COUNT(o.id)=0 THEN 'New' WHEN COUNT(o.id)=1 THEN 'New' ELSE 'Returning' END AS name, COUNT(*)::int AS customers FROM users u LEFT JOIN orders o ON o.user_id=u.id WHERE COALESCE(u.is_admin,false)=false GROUP BY u.id`),
+      pool.query(`SELECT COUNT(*) FILTER (WHERE status='delivered')::int AS delivered, COUNT(*) FILTER (WHERE status IN ('delivery_failed','failed'))::int AS failed, COUNT(*) FILTER (WHERE status='in_transit')::int AS out_for_delivery FROM orders`),
+    ]);
+    const customerSegments = customers.rows.reduce((acc, row) => { acc[row.name] = (acc[row.name] || 0) + Number(row.customers); return acc; }, {});
+    res.json({ summary: summary.rows[0], daily: periods.rows.reverse(), top_products: products.rows, revenue_by_category: categories.rows, revenue_by_channel: channels.rows, customers: customerSegments, delivery: delivery.rows[0], gross_profit: null, gross_profit_note: "Add product cost prices to calculate gross profit." });
+  } catch (err) { console.error("ANALYTICS ERROR:", err); res.status(500).json({ error: "Failed to load analytics" }); }
+});
+
 router.post("/wallet-adjustments/:userId", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensureWalletTables();

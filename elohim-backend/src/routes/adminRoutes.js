@@ -1,11 +1,13 @@
 const express = require("express");
 const pool = require("../config/db");
 const { ensureWalletTables, getWalletBalance } = require("./walletRoutes");
-const { verifyToken, isAdmin } = require("../middleware/auth");
+const { verifyToken, isAdmin, requirePermission } = require("../middleware/auth");
+
+const ensureAdminAudit = () => pool.query(`CREATE TABLE IF NOT EXISTS admin_audit_log (id SERIAL PRIMARY KEY, administrator_id INTEGER REFERENCES users(id) ON DELETE SET NULL, action VARCHAR(120) NOT NULL, target_type VARCHAR(80), target_id VARCHAR(80), details JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
 
 const router = express.Router();
 
-router.get("/stats", async (req, res) => {
+router.get("/stats", verifyToken, requirePermission("dashboard"), async (req, res) => {
   try {
     const paymentStatusColumnRes = await pool.query(`
       SELECT column_name
@@ -156,7 +158,7 @@ router.get("/stats", async (req, res) => {
   }
 });
 
-router.get("/money-overview", verifyToken, isAdmin, async (req, res) => {
+router.get("/money-overview", verifyToken, requirePermission("wallet"), async (req, res) => {
   try {
     await ensureWalletTables();
     const tableExists = async (name) => Boolean((await pool.query("SELECT to_regclass($1) AS value", [name])).rows[0].value);
@@ -172,7 +174,7 @@ router.get("/money-overview", verifyToken, isAdmin, async (req, res) => {
   } catch (err) { console.error("MONEY OVERVIEW ERROR:", err); res.status(500).json({ error: "Failed to load money overview" }); }
 });
 
-router.get("/transaction-ledger", verifyToken, isAdmin, async (req, res) => {
+router.get("/transaction-ledger", verifyToken, requirePermission("ledger"), async (req, res) => {
   try {
     await ensureWalletTables();
     const tableExists = async (name) => Boolean((await pool.query("SELECT to_regclass($1) AS value", [name])).rows[0].value);
@@ -192,7 +194,7 @@ router.get("/transaction-ledger", verifyToken, isAdmin, async (req, res) => {
   } catch (err) { console.error("LEDGER ERROR:", err); res.status(500).json({ error: "Failed to load transaction ledger" }); }
 });
 
-router.get("/analytics", verifyToken, isAdmin, async (req, res) => {
+router.get("/analytics", verifyToken, requirePermission("reports"), async (req, res) => {
   try {
     const realized = "(o.payment_status='verified' OR o.status IN ('paid','processing','delivered'))";
     const [summary, periods, products, categories, channels, customers, delivery] = await Promise.all([
@@ -209,7 +211,7 @@ router.get("/analytics", verifyToken, isAdmin, async (req, res) => {
   } catch (err) { console.error("ANALYTICS ERROR:", err); res.status(500).json({ error: "Failed to load analytics" }); }
 });
 
-router.get("/profit-analytics", verifyToken, isAdmin, async (req, res) => {
+router.get("/profit-analytics", verifyToken, requirePermission("profit"), async (req, res) => {
   try {
     await pool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_price NUMERIC");
     const [summary, products] = await Promise.all([
@@ -220,7 +222,7 @@ router.get("/profit-analytics", verifyToken, isAdmin, async (req, res) => {
   } catch (err) { console.error("PROFIT ANALYTICS ERROR:", err); res.status(500).json({ error: "Failed to load profit analytics" }); }
 });
 
-router.post("/wallet-adjustments/:userId", verifyToken, isAdmin, async (req, res) => {
+router.post("/wallet-adjustments/:userId", verifyToken, requirePermission("wallet"), async (req, res) => {
   try {
     await ensureWalletTables();
     const amount = Number(req.body.amount);
@@ -233,8 +235,26 @@ router.post("/wallet-adjustments/:userId", verifyToken, isAdmin, async (req, res
     const reference = `ADJ-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
     await pool.query(`INSERT INTO wallet_transactions (user_id, type, direction, amount, note, reason, reference, administrator_id)
       VALUES ($1,'adjustment',$2,$3,$4,$4,$5,$6)`, [req.params.userId, direction, amount, `Wallet adjustment: ${reason}. ${oldBalance} -> ${newBalance}`, reason, reference, req.user.id]);
+    await ensureAdminAudit();
+    await pool.query("INSERT INTO admin_audit_log (administrator_id,action,target_type,target_id,details) VALUES ($1,'wallet_adjustment','wallet',$2,$3)", [req.user.id, req.params.userId, JSON.stringify({ reference, oldBalance, direction, amount, newBalance, reason })]);
     res.json({ reference, old_balance: oldBalance, adjustment: direction === "credit" ? amount : -amount, new_balance: newBalance });
   } catch (err) { console.error("WALLET ADJUSTMENT ERROR:", err); res.status(500).json({ error: "Failed to record wallet adjustment" }); }
+});
+
+router.get("/staff", verifyToken, isAdmin, async (req, res) => {
+  if (req.user.staff_role !== "super_admin") return res.status(403).json({ error: "Super Admin access required" });
+  const result = await pool.query("SELECT id,name,email,staff_role FROM users WHERE COALESCE(is_admin,false)=true ORDER BY name");
+  res.json(result.rows);
+});
+
+router.put("/staff/:id/role", verifyToken, isAdmin, async (req, res) => {
+  if (req.user.staff_role !== "super_admin") return res.status(403).json({ error: "Super Admin access required" });
+  const valid = ["super_admin","operations_manager","finance","warehouse","delivery_manager","customer_support","vendor_manager"];
+  if (!valid.includes(req.body.staff_role)) return res.status(400).json({ error: "Invalid staff role" });
+  const updated = await pool.query("UPDATE users SET staff_role=$1,is_admin=true WHERE id=$2 RETURNING id,name,email,staff_role", [req.body.staff_role,req.params.id]);
+  if (!updated.rows[0]) return res.status(404).json({ error: "Staff member not found" });
+  await ensureAdminAudit(); await pool.query("INSERT INTO admin_audit_log (administrator_id,action,target_type,target_id,details) VALUES ($1,'staff_role_changed','user',$2,$3)",[req.user.id,req.params.id,JSON.stringify({staff_role:req.body.staff_role})]);
+  res.json(updated.rows[0]);
 });
 
 module.exports = router;

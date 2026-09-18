@@ -64,8 +64,11 @@ const ensureAuthColumns = async () => {
   await pool.query(`
     ALTER TABLE users
       ADD COLUMN IF NOT EXISTS email_verified BOOLEAN,
-      ADD COLUMN IF NOT EXISTS verification_token TEXT
+      ADD COLUMN IF NOT EXISTS verification_token TEXT,
+      ADD COLUMN IF NOT EXISTS staff_role VARCHAR(40)
   `);
+
+  await pool.query("UPDATE users SET staff_role='super_admin' WHERE COALESCE(is_admin,false)=true AND staff_role IS NULL");
 
   // Legacy rows without an explicit verification flag must stay unverified
   // until the user completes email verification.
@@ -461,6 +464,7 @@ router.post("/login", async (req, res) => {
         id: user.id,
         role: user.role,
         is_admin: user.is_admin,
+        staff_role: user.staff_role,
       },
       process.env.JWT_SECRET || "elohim_123456",
       {
@@ -478,6 +482,7 @@ router.post("/login", async (req, res) => {
         phone: user.phone,
         role: user.role,
         is_admin: user.is_admin,
+        staff_role: user.staff_role,
       },
     });
 

@@ -2,9 +2,16 @@
 
 import { useRouter, usePathname } from "next/navigation";
 
+const rolePaths = {
+  super_admin: ["*"], operations_manager: ["/admin/dashboard","/admin/orders","/admin/products","/admin/inventory","/admin/customers","/admin/logistics","/admin/bulk","/admin/subscriptions"],
+  finance: ["/admin/dashboard","/admin/payments","/admin/money","/admin/ledger","/admin/bnpl","/admin/analytics","/admin/profit"],
+  warehouse: ["/admin/orders","/admin/products","/admin/inventory"], delivery_manager: ["/admin/orders","/admin/logistics"], customer_support: ["/admin/orders","/admin/customers"], vendor_manager: ["/admin/products","/admin/vendors"],
+};
+
 export default function AdminLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
+  const staffRole = typeof window === "undefined" ? "" : JSON.parse(localStorage.getItem("user") || "{}").staff_role;
 
   const logout = () => {
     localStorage.clear();
@@ -12,7 +19,10 @@ export default function AdminLayout({ children }) {
     router.push("/login");
   };
 
-  const navItem = (label, path, color = "hover:bg-gray-100") => (
+  const navItem = (label, path, color = "hover:bg-gray-100") => {
+    const paths = rolePaths[staffRole] || [];
+    if (!paths.includes("*") && !paths.includes(path)) return null;
+    return (
     <button
       onClick={() => router.push(path)}
       className={`text-left px-3 py-2 rounded transition ${
@@ -21,7 +31,8 @@ export default function AdminLayout({ children }) {
     >
       {label}
     </button>
-  );
+    );
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-100">

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import API from "../../../lib/api";
 import toast from "react-hot-toast";
+import { useCartStore } from "@/lib/cartStore";
 
 export default function OrderDetails() {
   const { id } = useParams();
@@ -12,6 +13,8 @@ export default function OrderDetails() {
   const [order, setOrder] = useState(null);
   const [items, setItems] = useState([]);
   const [user, setUser] = useState(null);
+  const [reordering, setReordering] = useState(false);
+  const { addToCart, setUser: setCartUser } = useCartStore();
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -55,6 +58,19 @@ export default function OrderDetails() {
   const customerStatuses = ["Order Received", "Confirmed", "Preparing", "Ready for Delivery", "Out for Delivery", "Delivered"];
 
   if (!order) return <p className="p-6">Loading...</p>;
+
+  const buyAgain = async () => {
+    if (!user) return toast.error("Please login first");
+    try {
+      setReordering(true);
+      setCartUser(user);
+      for (const item of items) await addToCart(item.product_id, item.quantity, item.variant_id || null);
+      toast.success("Your previous order is back in the cart");
+      router.push("/cart");
+    } catch (err) {
+      toast.error("Could not add all items to your cart");
+    } finally { setReordering(false); }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
@@ -114,6 +130,17 @@ export default function OrderDetails() {
           <div className="bg-white p-5 rounded-xl shadow mt-4">
             <h2 className="text-lg font-black text-slate-900">Delivery address</h2>
             <p className="mt-2 text-slate-600">{order.delivery_address}</p>
+          </div>
+        )}
+
+        {order.status === "delivered" && (
+          <div className="mt-4 rounded-2xl bg-emerald-50 p-6 text-center text-emerald-900 shadow-sm">
+            <h2 className="text-2xl font-black">Your order has been delivered 🎉</h2>
+            <p className="mt-2">We hope you enjoyed your purchase.</p>
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
+              <button onClick={() => toast("Order ratings are coming next—thank you for your feedback!")} className="rounded-xl border border-emerald-300 bg-white px-4 py-3 font-bold">⭐ RATE YOUR ORDER</button>
+              <button onClick={buyAgain} disabled={reordering} className="rounded-xl bg-emerald-600 px-4 py-3 font-black text-white disabled:bg-slate-300">{reordering ? "ADDING..." : "BUY AGAIN"}</button>
+            </div>
           </div>
         )}
 

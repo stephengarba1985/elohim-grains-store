@@ -3,6 +3,18 @@ const pool = require("../config/db");
 
 const router = express.Router();
 
+const ensureBulkColumns = () => pool.query(`
+  ALTER TABLE bulk_requests
+    ADD COLUMN IF NOT EXISTS order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS counter_price NUMERIC,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+`);
+
+router.use(async (req, res, next) => {
+  try { await ensureBulkColumns(); next(); }
+  catch (err) { res.status(500).json({ error: "Bulk workspace setup failed" }); }
+});
+
 /* =========================
    CREATE BULK REQUEST
 ========================= */
@@ -40,6 +52,8 @@ router.get("/", async (req, res) => {
       SELECT 
         b.*,
         p.name AS product_name,
+        p.price AS product_price,
+        p.price,
         u.name AS user_name
       FROM bulk_requests b
       LEFT JOIN products p ON b.product_id = p.id
@@ -69,9 +83,12 @@ router.put("/:id", async (req, res) => {
   }
 
   try {
+    if (!["offered", "rejected", "pending"].includes(status) || (status === "offered" && (!Number.isFinite(Number(approved_price)) || Number(approved_price) <= 0))) {
+      return res.status(400).json({ error: "A valid offer price is required" });
+    }
     await pool.query(
       `UPDATE bulk_requests
-       SET status = $1, approved_price = $2
+       SET status = $1, approved_price = $2, updated_at = CURRENT_TIMESTAMP
        WHERE id = $3`,
       [status, approved_price || null, req.params.id]
     );
@@ -108,8 +125,8 @@ router.post("/:id/accept", async (req, res) => {
     const bulk = bulkRes.rows[0];
     console.log("🔍 BULK REQUEST:", bulk);
 
-    if (!bulk || bulk.status !== "approved") {
-      throw new Error("Deal not approved");
+    if (!bulk || !["offered", "approved"].includes(bulk.status) || bulk.order_id) {
+      throw new Error("This offer cannot be accepted");
     }
 
     /* =========================
@@ -147,9 +164,9 @@ router.post("/:id/accept", async (req, res) => {
     ========================= */
     await client.query(
       `UPDATE bulk_requests
-       SET status = 'accepted'
+       SET status = 'accepted', order_id = $2, updated_at = CURRENT_TIMESTAMP
        WHERE id = $1`,
-      [id]
+      [id, orderId]
     );
 
     await client.query("COMMIT");
@@ -166,6 +183,19 @@ router.post("/:id/accept", async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+router.post("/:id/respond", async (req, res) => {
+  const { action, counter_price } = req.body;
+  try {
+    const request = await pool.query("SELECT * FROM bulk_requests WHERE id=$1", [req.params.id]);
+    if (!request.rows[0] || request.rows[0].status !== "offered") return res.status(400).json({ error: "Offer is no longer available" });
+    if (action === "accept") return res.redirect(307, `/${req.params.id}/accept`);
+    if (action === "reject") await pool.query("UPDATE bulk_requests SET status='rejected', updated_at=CURRENT_TIMESTAMP WHERE id=$1", [req.params.id]);
+    else if (action === "counter" && Number(counter_price) > 0) await pool.query("UPDATE bulk_requests SET status='countered', counter_price=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2", [counter_price, req.params.id]);
+    else return res.status(400).json({ error: "Invalid response" });
+    res.json({ message: "Bulk response recorded" });
+  } catch (err) { res.status(500).json({ error: "Failed to record response" }); }
 });
 
 module.exports = router;

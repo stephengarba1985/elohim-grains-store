@@ -44,6 +44,15 @@ export default function OrderDetails() {
   const deliveryFee = Number(order?.delivery_fee || 0);
   const total = Number(order?.total_amount || productsTotal + deliveryFee);
   const orderReference = order?.order_number || `EG-${new Date(order?.created_at || Date.now()).getFullYear()}-${String(order?.id || id).padStart(6, "0")}`;
+  const statusIndex = {
+    pending: 0, paid: 1, confirmed: 1, processing: 2,
+    assigned: 3, picked_up: 3, ready_for_delivery: 3,
+    in_transit: 4, near_customer: 4, delivered: 5,
+  }[String(order?.status || "").toLowerCase()] ?? 0;
+  const exceptionalStatus = {
+    payment_pending: "Payment Pending", cancelled: "Cancelled", delivery_failed: "Delivery Failed", refunded: "Refunded",
+  }[String(order?.status || "").toLowerCase()];
+  const customerStatuses = ["Order Received", "Confirmed", "Preparing", "Ready for Delivery", "Out for Delivery", "Delivered"];
 
   if (!order) return <p className="p-6">Loading...</p>;
 
@@ -111,10 +120,9 @@ export default function OrderDetails() {
         <div className="bg-white p-5 rounded-xl shadow mt-4">
           <h2 className="text-lg font-black text-slate-900">Status</h2>
           <div className="mt-4 space-y-3 text-sm font-semibold">
-            <p className="text-emerald-700">🟢 Payment confirmed</p>
-            <p className="text-amber-700">🟡 Processing</p>
-            <p className="text-slate-400">⚪ Out for delivery</p>
-            <p className="text-slate-400">⚪ Delivered</p>
+            {exceptionalStatus ? <p className="text-red-700">● {exceptionalStatus}</p> : customerStatuses.map((status, index) => (
+              <p key={status} className={index <= statusIndex ? "text-emerald-700" : "text-slate-400"}>{index <= statusIndex ? "●" : "○"} {status}</p>
+            ))}
           </div>
         </div>
 

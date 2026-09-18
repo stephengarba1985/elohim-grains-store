@@ -209,6 +209,17 @@ router.get("/analytics", verifyToken, isAdmin, async (req, res) => {
   } catch (err) { console.error("ANALYTICS ERROR:", err); res.status(500).json({ error: "Failed to load analytics" }); }
 });
 
+router.get("/profit-analytics", verifyToken, isAdmin, async (req, res) => {
+  try {
+    await pool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_price NUMERIC");
+    const [summary, products] = await Promise.all([
+      pool.query(`SELECT COALESCE(SUM(oi.quantity*oi.price),0) AS revenue, COALESCE(SUM(oi.quantity*COALESCE(p.cost_price,0)),0) AS cost_of_goods, COALESCE(SUM(oi.quantity*(oi.price-COALESCE(p.cost_price,0))),0) AS gross_profit, COUNT(*) FILTER (WHERE p.cost_price IS NULL)::int AS uncosted_lines FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN products p ON p.id=oi.product_id WHERE o.payment_status='verified' OR o.status IN ('paid','processing','delivered')`),
+      pool.query(`SELECT p.id,p.name,p.price,p.cost_price,COALESCE(SUM(oi.quantity) FILTER (WHERE o.id IS NOT NULL),0)::int AS units_sold,COALESCE(SUM(oi.quantity*oi.price) FILTER (WHERE o.id IS NOT NULL),0) AS revenue,COALESCE(SUM(oi.quantity*COALESCE(p.cost_price,0)) FILTER (WHERE o.id IS NOT NULL),0) AS cost_of_goods,COALESCE(SUM(oi.quantity*(oi.price-COALESCE(p.cost_price,0))) FILTER (WHERE o.id IS NOT NULL),0) AS gross_profit FROM products p LEFT JOIN order_items oi ON oi.product_id=p.id LEFT JOIN orders o ON o.id=oi.order_id AND (o.payment_status='verified' OR o.status IN ('paid','processing','delivered')) GROUP BY p.id,p.name,p.price,p.cost_price ORDER BY gross_profit DESC`),
+    ]);
+    res.json({ summary: summary.rows[0], products: products.rows, note: "Profit uses the current recorded product purchase cost. Record costs for every product for complete reporting." });
+  } catch (err) { console.error("PROFIT ANALYTICS ERROR:", err); res.status(500).json({ error: "Failed to load profit analytics" }); }
+});
+
 router.post("/wallet-adjustments/:userId", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensureWalletTables();

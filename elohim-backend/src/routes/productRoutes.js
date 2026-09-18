@@ -18,7 +18,8 @@ const ensureCatalogColumns = async () => {
       ADD COLUMN IF NOT EXISTS image TEXT,
       ADD COLUMN IF NOT EXISTS image_url TEXT,
       ADD COLUMN IF NOT EXISTS slug VARCHAR(255),
-      ADD COLUMN IF NOT EXISTS bulk_price NUMERIC
+      ADD COLUMN IF NOT EXISTS bulk_price NUMERIC,
+      ADD COLUMN IF NOT EXISTS cost_price NUMERIC
   `);
 
   await pool.query(`
@@ -1681,6 +1682,17 @@ router.post("/stock/:product_id/movement", verifyToken, isAdmin, async (req, res
   } finally {
     client.release();
   }
+});
+
+router.put("/:id/cost-price", verifyToken, isAdmin, async (req, res) => {
+  try {
+    await ensureCatalogColumns();
+    const costPrice = Number(req.body.cost_price);
+    if (!Number.isFinite(costPrice) || costPrice < 0) return res.status(400).json({ error: "Enter a valid purchase cost" });
+    const result = await pool.query("UPDATE products SET cost_price=$1 WHERE id=$2 RETURNING id,name,cost_price,price", [costPrice, req.params.id]);
+    if (!result.rows[0]) return res.status(404).json({ error: "Product not found" });
+    res.json(result.rows[0]);
+  } catch (err) { console.error("COST PRICE ERROR:", err); res.status(500).json({ error: "Failed to save purchase cost" }); }
 });
 
 router.get(

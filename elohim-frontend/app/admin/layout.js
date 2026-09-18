@@ -59,6 +59,7 @@ export default function AdminLayout({ children }) {
           {navItem("Price AI", "/admin/price-insights")}
           {navItem("AI Assistant", "/admin/ai-assistant")}
           {navItem("Sales Analytics", "/admin/analytics")}
+          {navItem("Profit Analytics", "/admin/profit")}
 
           <p className="text-xs text-gray-400 mt-4">SUPPLY CHAIN</p>
 

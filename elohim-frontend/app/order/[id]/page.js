@@ -43,6 +43,7 @@ export default function OrderDetails() {
   );
   const deliveryFee = Number(order?.delivery_fee || 0);
   const total = Number(order?.total_amount || productsTotal + deliveryFee);
+  const orderReference = `EG-${new Date(order?.created_at || Date.now()).getFullYear()}-${String(order?.id || id).padStart(5, "0")}`;
 
   if (!order) return <p className="p-6">Loading...</p>;
 
@@ -57,13 +58,9 @@ export default function OrderDetails() {
 
         {/* ORDER HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow mb-4">
-          <h1 className="text-2xl font-bold mb-2">
-            Order #{order.id}
-          </h1>
-
-          <p className="text-gray-600">
-            Status: <b>{order.status}</b>
-          </p>
+          <h1 className="text-2xl font-black mb-2">Order Confirmed</h1>
+          <p className="font-black text-emerald-700">Order #{orderReference}</p>
+          <p className="mt-2 text-emerald-700">🟢 <b>Payment confirmed</b></p>
 
           <p className="text-gray-500 text-sm">
             {new Date(order.created_at).toLocaleString()}
@@ -103,6 +100,16 @@ export default function OrderDetails() {
           </div>
         </div>
 
+        <div className="bg-white p-5 rounded-xl shadow mt-4">
+          <h2 className="text-lg font-black text-slate-900">Status</h2>
+          <div className="mt-4 space-y-3 text-sm font-semibold">
+            <p className="text-emerald-700">🟢 Payment confirmed</p>
+            <p className="text-amber-700">🟡 Processing</p>
+            <p className="text-slate-400">⚪ Out for delivery</p>
+            <p className="text-slate-400">⚪ Delivered</p>
+          </div>
+        </div>
+
         {/* ACTION BUTTONS */}
         <div className="mt-6 flex gap-3">
 
@@ -117,8 +124,17 @@ export default function OrderDetails() {
             onClick={() => router.push(`/track/${order.id}`)}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow"
           >
-            Track Delivery
+            TRACK MY ORDER
           </button>
+
+          <a
+            href={`https://wa.me/2348039688939?text=${encodeURIComponent(`Hello Elohim Grains, I need help with order ${orderReference}.`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-xl shadow font-bold"
+          >
+            CHAT ON WHATSAPP
+          </a>
 
           <button
             onClick={() => {

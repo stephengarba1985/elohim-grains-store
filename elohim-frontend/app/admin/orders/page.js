@@ -387,17 +387,38 @@ export default function OrdersPage() {
               </button>
 
               <button
-                onClick={() => updateStatus(order.id, "processing")}
+                onClick={() => updateStatus(order.id, "confirmed")}
                 className="bg-yellow-500 text-white px-3 py-1 rounded"
               >
-                Processing
+                Confirm Order
+              </button>
+
+              <button
+                onClick={() => updateStatus(order.id, "processing")}
+                className="bg-orange-500 text-white px-3 py-1 rounded"
+              >
+                Start Preparing
+              </button>
+
+              <button
+                onClick={() => updateStatus(order.id, "ready_for_delivery")}
+                className="bg-purple-600 text-white px-3 py-1 rounded"
+              >
+                Mark Ready
+              </button>
+
+              <button
+                onClick={() => updateStatus(order.id, "in_transit")}
+                className="bg-blue-600 text-white px-3 py-1 rounded"
+              >
+                Mark Out for Delivery
               </button>
 
               <button
                 onClick={() => updateStatus(order.id, "delivered")}
                 className="bg-green-600 text-white px-3 py-1 rounded"
               >
-                Delivered
+                Complete
               </button>
 
               {order.escrow_status === "held" && (

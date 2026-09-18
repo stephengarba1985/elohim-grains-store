@@ -19,6 +19,19 @@ const ensureOrderDeliveryFeeColumn = () =>
     ADD COLUMN IF NOT EXISTS delivery_address TEXT
   `);
 
+const ensureOrderStatusEvents = () =>
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS order_status_events (
+      id SERIAL PRIMARY KEY,
+      order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
+      previous_status VARCHAR(40),
+      status VARCHAR(40) NOT NULL,
+      changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      note TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
 /* =========================
    CREATE ORDER (USER ONLY)
 ========================= */
@@ -621,18 +634,24 @@ router.post("/:id/notify-customer", verifyToken, isAdmin, async (req, res) => {
 });
 router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
   try {
+    await ensureOrderStatusEvents();
     const { id } = req.params;
     const { status } = req.body;
 
     const allowed = [
       "pending",
       "processing",
+      "confirmed",
+      "ready_for_delivery",
       "paid",
       "assigned",
       "picked_up",
       "in_transit",
       "near_customer",
       "delivered",
+      "cancelled",
+      "delivery_failed",
+      "refunded",
     ];
 
     if (!allowed.includes(status)) {
@@ -640,7 +659,7 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
     }
 
     const existingOrderRes = await pool.query(
-      `SELECT rider_id FROM orders WHERE id = $1`,
+      `SELECT rider_id, status FROM orders WHERE id = $1`,
       [id]
     );
 
@@ -657,6 +676,12 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
        WHERE id = $2
        RETURNING *`,
       [status, id]
+    );
+
+    await pool.query(
+      `INSERT INTO order_status_events (order_id, previous_status, status, changed_by, note)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, order.status || null, status, req.user.id, req.body.note || null]
     );
 
     await pool.query(

@@ -582,7 +582,17 @@ export default function CartPage() {
                   {walletBalance >= payableTotal ? (
                     <><p className="font-bold">Order total: {formatPrice(payableTotal)}</p><p className="mt-1">Remaining balance: <b>{formatPrice(walletBalance - payableTotal)}</b></p><label className="mt-3 block text-sm font-bold">Wallet PIN<input type="password" inputMode="numeric" maxLength="4" value={walletPin} onChange={(event) => setWalletPin(event.target.value)} className="mt-1 w-full rounded-lg border border-emerald-200 bg-white px-3 py-2" /></label></>
                   ) : (
-                    <><p className="font-bold">Your wallet balance is {formatPrice(walletBalance)}.</p><p className="mt-1">You need {formatPrice(payableTotal - walletBalance)} more.</p><Link href="/user/wallet" className="mt-3 inline-block font-black text-emerald-700 hover:underline">FUND WALLET</Link></>
+                    <>
+                      <p className="font-bold">Your wallet balance is {formatPrice(walletBalance)}.</p>
+                      <p className="mt-1">You need {formatPrice(payableTotal - walletBalance)} more.</p>
+                      <div className="mt-4 rounded-lg border border-amber-200 bg-white/70 p-3">
+                        <p className="font-black text-slate-900">Not ready to buy yet?</p>
+                        <p className="mt-1 text-sm">Start a food savings plan toward this product.</p>
+                        {cart[0] && <Link href={`/user/plans?product_id=${cart[0].product_id}&quantity=${cart[0].quantity}&payment_frequency=weekly&duration=3`} className="mt-3 inline-block font-black text-emerald-700 hover:underline">SAVE FOR THIS {cart[0].product?.name?.toUpperCase() || "PRODUCT"}</Link>}
+                      </div>
+                      <Link href="/user/wallet" className="mt-4 inline-block font-black text-emerald-700 hover:underline">FUND WALLET</Link>
+                      <button type="button" onClick={() => setPaymentMethod("online")} className="ml-4 font-black text-slate-700 hover:underline">PAY WITH ANOTHER METHOD</button>
+                    </>
                   )}
                 </div>
               )}

@@ -32,6 +32,7 @@ export default function CartPage() {
   const [walletPin, setWalletPin] = useState("");
   const [bnplChecked, setBnplChecked] = useState(false);
   const [bnplChecking, setBnplChecking] = useState(false);
+  const [showOrderReview, setShowOrderReview] = useState(false);
 
   /* =========================
      INIT USER + LOAD CART
@@ -124,13 +125,17 @@ export default function CartPage() {
     setCheckoutDetails((current) => ({ ...current, [field]: value }));
   };
 
-  const startCheckout = async () => {
+  const startCheckout = () => {
     const requiredFields = ["fullName", "phone", "email", "state", "city", "address", "deliveryPhone"];
     if (requiredFields.some((field) => !String(checkoutDetails[field] || "").trim())) {
       toast.error("Please complete your contact and delivery details");
       return;
     }
     localStorage.setItem("checkoutDetails", JSON.stringify(checkoutDetails));
+    setShowOrderReview(true);
+  };
+
+  const placeOrderAndPay = async () => {
     if (paymentMethod === "bnpl") {
       window.location.href = "/bnpl";
       return;
@@ -674,6 +679,19 @@ export default function CartPage() {
             )}
           </div>
         </>
+      )}
+
+      {showOrderReview && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="order-review-title">
+          <div className="mx-auto my-8 w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Final step</p>
+            <h2 id="order-review-title" className="mt-1 text-2xl font-black text-slate-900">Review your order</h2>
+            <section className="mt-5 border-b border-slate-200 pb-4"><h3 className="font-bold text-slate-900">Items</h3>{cart.map((item) => <div key={item.id} className="mt-3 flex justify-between gap-4 text-sm"><span>{item.product?.name || "Product"} {item.weight || item.variant?.weight || ""} × {item.quantity}</span><b>{formatPrice(Number(item.price || 0) * item.quantity)}</b></div>)}</section>
+            <section className="space-y-3 border-b border-slate-200 py-4 text-sm"><div className="flex justify-between"><span>Delivery</span><b>{isBulkOrder ? "Confirmed after review" : formatPrice(deliveryFee)}</b></div><div className="flex justify-between"><span>Subtotal</span><b>{formatPrice(total)}</b></div><div className="flex justify-between text-xl font-black text-slate-950"><span>Total</span><span>{formatPrice(isBulkOrder ? total : payableTotal)}</span></div></section>
+            <section className="py-4 text-sm"><p className="font-bold text-slate-900">Delivery address</p><p className="mt-1 text-slate-600">{checkoutDetails.address}, {checkoutDetails.city}, {checkoutDetails.state}{checkoutDetails.landmark ? ` — ${checkoutDetails.landmark}` : ""}</p><p className="mt-4 font-bold text-slate-900">Payment</p><p className="mt-1 text-slate-600">{paymentMethod === "wallet" ? "Elohim Wallet" : paymentMethod === "bnpl" ? "Pay in installments" : "Online payment"}</p></section>
+            <div className="grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setShowOrderReview(false)} className="rounded-xl border border-slate-300 px-4 py-3 font-bold text-slate-700">EDIT ORDER</button><button type="button" onClick={placeOrderAndPay} disabled={paymentLoading} className="rounded-xl bg-emerald-600 px-4 py-3 font-black text-white disabled:bg-slate-300">{paymentLoading ? "PROCESSING..." : `PLACE ORDER & PAY ${formatPrice(isBulkOrder ? total : payableTotal)}`}</button></div>
+          </div>
+        </div>
       )}
     </div>
   );

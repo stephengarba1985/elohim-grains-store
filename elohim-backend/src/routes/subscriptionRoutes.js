@@ -1,6 +1,7 @@
 const express = require("express");
 const pool = require("../config/db");
 const sendWhatsApp = require("../utils/sendWhatsApp");
+const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 let schemaInitPromise;
@@ -45,6 +46,27 @@ router.use(async (req, res, next) => {
       detail: err.message,
     });
   }
+});
+
+router.get("/admin/all", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT s.*, u.name AS customer_name, u.email AS customer_email, u.phone AS customer_phone,
+        p.name AS product_name, p.weight,
+        (SELECT COUNT(*)::int FROM orders o WHERE o.user_id=s.user_id AND o.is_subscription=TRUE AND o.status IN ('failed','payment_pending')) AS failed_payments
+      FROM subscriptions s JOIN users u ON u.id=s.user_id JOIN products p ON p.id=s.product_id
+      ORDER BY s.next_delivery ASC`);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const week = new Date(today); week.setDate(week.getDate()+7);
+    const rows = result.rows;
+    res.json({ subscriptions: rows, stats: {
+      active: rows.filter((x)=>x.status==='active').length,
+      due_today: rows.filter((x)=>x.status==='active' && new Date(x.next_delivery).toDateString()===today.toDateString()).length,
+      due_week: rows.filter((x)=>x.status==='active' && new Date(x.next_delivery)>=today && new Date(x.next_delivery)<week).length,
+      failed_payments: rows.reduce((sum,x)=>sum+Number(x.failed_payments||0),0),
+      paused: rows.filter((x)=>x.status==='paused').length,
+    }});
+  } catch (err) { console.error("ADMIN SUBSCRIPTIONS ERROR:", err); res.status(500).json({ error: "Failed to load subscriptions" }); }
 });
 
 /* =========================

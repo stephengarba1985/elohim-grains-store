@@ -64,6 +64,7 @@ export default function AdminLayout({ children }) {
 
           {navItem("Warehouse", "/admin/warehouse")}
           {navItem("Bulk Requests", "/admin/bulk")}
+          {navItem("Subscriptions", "/admin/subscriptions")}
           {navItem("Grain Plans", "/admin/plans")}
           {navItem("Cooperatives", "/admin/cooperatives")}
 

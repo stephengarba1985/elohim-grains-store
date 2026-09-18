@@ -16,6 +16,7 @@ const pageGroups = [
       { label: "Bulk Orders", href: "/bulk" },
       { label: "Subscriptions", href: "/subscriptions" },
       { label: "Cart", href: "/cart" },
+      { label: "My Orders", href: "/orders" },
     ],
   },
   {

@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 const { verifyToken, isAdmin } = require("../middleware/auth");
+const sendWhatsApp = require("../utils/sendWhatsApp");
 
 let trackingSetupPromise = null;
 
@@ -303,6 +304,15 @@ router.post("/order/:order_id/confirm-otp", verifyToken, isAdmin, async (req, re
     }
 
     await addDeliveryEvent(req.params.order_id, delivery.id, "delivered", "Delivery OTP confirmed");
+
+    const customerRes = await pool.query(
+      `SELECT u.name, u.phone, o.order_number FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = $1`,
+      [req.params.order_id]
+    );
+    const customer = customerRes.rows[0];
+    if (customer?.phone) {
+      sendWhatsApp(customer.phone, `Hello ${customer.name || "Customer"}, your Elohim Grains order ${customer.order_number || `#${req.params.order_id}`} has been delivered and verified. Thank you for shopping with us.`);
+    }
 
     res.json(updated.rows[0]);
   } catch (err) {

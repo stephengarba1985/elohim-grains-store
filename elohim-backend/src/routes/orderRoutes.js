@@ -311,6 +311,10 @@ router.post("/create", verifyToken, async (req, res) => {
           deliveryFee,
           items: itemsRes.rows,
         });
+        const customerPhoneRes = await pool.query("SELECT phone FROM users WHERE id = $1", [user_id]);
+        if (customerPhoneRes.rows[0]?.phone) {
+          sendWhatsApp(customerPhoneRes.rows[0].phone, `Hello ${customer.name || "Customer"}, your Elohim Grains order ${orderNumber} has been received. We will notify you as it progresses.`);
+        }
       }
     } catch (emailErr) {
       console.error("ORDER CONFIRMATION EMAIL ERROR:", emailErr.message);
@@ -719,13 +723,18 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
 
     await addDeliveryEvent(id, delivery.id, status, `Order status updated to ${status}`);
 
-    if (status === "in_transit") {
+    const customerNotifications = {
+      confirmed: "Payment confirmed. Your order is now confirmed.",
+      processing: "Your order is now being prepared.",
+      in_transit: "Your order is now out for delivery. You can track it from My Orders.",
+    };
+    if (customerNotifications[status]) {
       const customerRes = await pool.query("SELECT name, phone FROM users WHERE id = $1", [order.user_id]);
       const customer = customerRes.rows[0];
       if (customer?.phone) {
         sendWhatsApp(
           customer.phone,
-          `Hello ${customer.name || "Customer"}, your Elohim Grains order ${order.order_number || `#${id}`} is now out for delivery. You can track it from My Orders.`
+          `Hello ${customer.name || "Customer"}, ${customerNotifications[status]} Order: ${order.order_number || `#${id}`}`
         );
       }
     }

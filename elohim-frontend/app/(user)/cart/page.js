@@ -26,6 +26,9 @@ export default function CartPage() {
   const [checkoutDetails, setCheckoutDetails] = useState({
     fullName: "", phone: "", email: "", state: "", city: "", address: "", landmark: "", deliveryPhone: "", abujaZone: "",
   });
+  const [paymentMethod, setPaymentMethod] = useState("online");
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [bnplEligible, setBnplEligible] = useState(false);
 
   /* =========================
      INIT USER + LOAD CART
@@ -54,6 +57,13 @@ export default function CartPage() {
         deliveryPhone: savedDetails.deliveryPhone || parsedUser.phone || "",
       }));
       fetchCart();
+      Promise.allSettled([
+        API.get(`/wallet/${parsedUser.id}`),
+        API.get(`/bnpl/user/${parsedUser.id}`),
+      ]).then(([walletResult, bnplResult]) => {
+        if (walletResult.status === "fulfilled") setWalletBalance(Number(walletResult.value.data?.balance || 0));
+        if (bnplResult.status === "fulfilled") setBnplEligible(Number(bnplResult.value.data?.credit_score || 0) >= 520);
+      });
     } catch (err) {
       console.error("Invalid stored user payload:", err);
       toast.error("Please login again");
@@ -118,6 +128,14 @@ export default function CartPage() {
       return;
     }
     localStorage.setItem("checkoutDetails", JSON.stringify(checkoutDetails));
+    if (paymentMethod === "bnpl") {
+      window.location.href = "/bnpl";
+      return;
+    }
+    if (paymentMethod === "wallet") {
+      toast("Wallet checkout is being prepared. Please choose Pay online for this order today.");
+      return;
+    }
     payWithPaystack();
   };
 

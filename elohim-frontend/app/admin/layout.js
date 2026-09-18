@@ -30,49 +30,32 @@ export default function AdminLayout({ children }) {
           Elohim Admin
         </h1>
 
-        <div className="flex flex-col gap-2">
-          <p className="text-xs text-gray-400 mt-2">OPERATIONS</p>
-
-          {navItem("Dashboard", "/admin")}
-          {navItem("Products & Inventory", "/admin/products")}
-          {navItem("Categories", "/admin/categories")}
-          {navItem("Product Types", "/admin/product-types")}
-          {navItem("Variants", "/admin/variants")}
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-gray-400 mt-2">DAILY OPERATIONS</p>
+          {navItem("Dashboard", "/admin/dashboard")}
           {navItem("Orders", "/admin/orders")}
+          {navItem("Products", "/admin/products")}
+          {navItem("Inventory", "/admin/inventory")}
           {navItem("Customers", "/admin/customers")}
-          {navItem("Vendors", "/admin/vendors")}
-          {navItem("Riders", "/admin/riders")}
-          {navItem("Logistics", "/admin/logistics")}
+          {navItem("Deliveries", "/admin/logistics")}
+          {navItem("Bulk Orders", "/admin/bulk")}
+          {navItem("Subscriptions", "/admin/subscriptions")}
 
-          <p className="text-xs text-gray-400 mt-4">FINANCE</p>
-
-          {navItem("Money Control", "/admin/money")}
-          {navItem("Transaction Ledger", "/admin/ledger")}
+          <p className="text-xs text-gray-400 mt-4">MONEY</p>
           {navItem("Payments", "/admin/payments")}
-          {navItem("Wallet", "/admin/wallet")}
-          {navItem("Escrow", "/admin/escrow")}
+          {navItem("Wallet & Savings", "/admin/money")}
+          {navItem("Transaction Ledger", "/admin/ledger")}
           {navItem("BNPL", "/admin/bnpl")}
-          {navItem("Inventory Finance", "/admin/inventory-finance")}
 
-          <p className="text-xs text-gray-400 mt-4">AI & ANALYTICS</p>
-
-          {navItem("Price AI", "/admin/price-insights")}
-          {navItem("AI Assistant", "/admin/ai-assistant")}
-          {navItem("Sales Analytics", "/admin/analytics")}
+          <p className="text-xs text-gray-400 mt-4">BUSINESS NETWORK</p>
+          {navItem("Vendors", "/admin/vendors")}
+          {navItem("Cooperatives", "/admin/cooperatives")}
+          {navItem("Price Intelligence", "/admin/price-insights")}
+          {navItem("Reports", "/admin/analytics")}
           {navItem("Profit Analytics", "/admin/profit")}
 
-          <p className="text-xs text-gray-400 mt-4">SUPPLY CHAIN</p>
-
-          {navItem("Warehouse", "/admin/warehouse")}
-          {navItem("Bulk Requests", "/admin/bulk")}
-          {navItem("Subscriptions", "/admin/subscriptions")}
-          {navItem("Grain Plans", "/admin/plans")}
-          {navItem("Cooperatives", "/admin/cooperatives")}
-
-          <p className="text-xs text-gray-400 mt-4">SECURITY</p>
-
-          {navItem("KYC Verification", "/admin/kyc")}
-          {navItem("Mobile App", "/admin/mobile")}
+          <p className="text-xs text-gray-400 mt-4">ADMINISTRATION</p>
+          {navItem("Settings", "/admin/settings")}
 
           <button
             onClick={logout}

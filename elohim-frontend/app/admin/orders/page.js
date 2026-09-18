@@ -411,7 +411,7 @@ export default function OrdersPage() {
                 onClick={() => updateStatus(order.id, "in_transit")}
                 className="bg-blue-600 text-white px-3 py-1 rounded"
               >
-                Mark Out for Delivery
+                START DELIVERY
               </button>
 
               <button
@@ -465,7 +465,7 @@ export default function OrdersPage() {
                   onClick={() => assignRider(order.id)}
                   className="bg-purple-600 text-white px-3 py-1 rounded text-sm"
                 >
-                  Assign Rider
+                  ASSIGN DELIVERY
                 </button>
 
               </div>

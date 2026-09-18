@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 const { sendOrderConfirmationEmail } = require("../utils/mail");
+const sendWhatsApp = require("../utils/sendWhatsApp");
 const { ensureEscrowTables } = require("./escrowRoutes");
 const { ensurePaymentGatewayTables } = require("./paymentGatewayRoutes");
 const {
@@ -661,7 +662,7 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
     }
 
     const existingOrderRes = await pool.query(
-      `SELECT rider_id, status, inventory_restored FROM orders WHERE id = $1`,
+      `SELECT user_id, rider_id, status, inventory_restored, order_number FROM orders WHERE id = $1`,
       [id]
     );
 
@@ -713,6 +714,17 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
     );
 
     await addDeliveryEvent(id, delivery.id, status, `Order status updated to ${status}`);
+
+    if (status === "in_transit") {
+      const customerRes = await pool.query("SELECT name, phone FROM users WHERE id = $1", [order.user_id]);
+      const customer = customerRes.rows[0];
+      if (customer?.phone) {
+        sendWhatsApp(
+          customer.phone,
+          `Hello ${customer.name || "Customer"}, your Elohim Grains order ${order.order_number || `#${id}`} is now out for delivery. You can track it from My Orders.`
+        );
+      }
+    }
 
     if (status === "delivered" && order.rider_id) {
       await pool.query(

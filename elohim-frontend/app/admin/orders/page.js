@@ -110,6 +110,18 @@ export default function OrdersPage() {
     }
   };
 
+  const verifyDeliveryPin = async (orderId) => {
+    const otp = window.prompt("Enter the delivery PIN provided by the customer");
+    if (!otp) return;
+    try {
+      await API.post(`/tracking/order/${orderId}/confirm-otp`, { otp });
+      toast.success("Delivery verified");
+      fetchOrders();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Delivery PIN verification failed");
+    }
+  };
+
   /* ========================= ASSIGN RIDER ========================= */
   const assignRider = async (deliveryId) => {
     const rider_id = selectedRiders[deliveryId];
@@ -415,10 +427,10 @@ export default function OrdersPage() {
               </button>
 
               <button
-                onClick={() => updateStatus(order.id, "delivered")}
+                onClick={() => verifyDeliveryPin(order.id)}
                 className="bg-green-600 text-white px-3 py-1 rounded"
               >
-                Complete
+                VERIFY & COMPLETE
               </button>
 
               {order.escrow_status === "held" && (

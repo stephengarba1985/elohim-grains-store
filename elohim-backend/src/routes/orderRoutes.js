@@ -661,6 +661,10 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
       return res.status(400).json({ error: "Invalid status" });
     }
 
+    if (status === "delivered") {
+      return res.status(400).json({ error: "Delivery must be verified with the customer delivery PIN" });
+    }
+
     const existingOrderRes = await pool.query(
       `SELECT user_id, rider_id, status, inventory_restored, order_number FROM orders WHERE id = $1`,
       [id]

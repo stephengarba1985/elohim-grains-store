@@ -538,8 +538,27 @@ export default function CartPage() {
 
           <div className="mt-5 border rounded-2xl p-5 bg-white">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Step 3</p>
-            <h3 className="mt-1 font-black text-slate-900">Secure payment</h3>
-            <p className="mt-2 text-sm text-slate-600">Click checkout to pay securely by card, bank transfer, or USSD.</p>
+            <h3 className="mt-1 text-xl font-black text-slate-900">Choose payment method</h3>
+            <div className="mt-4 grid gap-3">
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${paymentMethod === "online" ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-slate-300"}`}>
+                <input type="radio" name="payment-method" value="online" checked={paymentMethod === "online"} onChange={() => setPaymentMethod("online")} className="mt-1 accent-emerald-600" />
+                <span><span className="block font-black text-slate-900">Pay online</span><span className="mt-1 block text-sm text-slate-600">Secure card, bank transfer, or USSD payment.</span></span>
+              </label>
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${paymentMethod === "wallet" ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-slate-300"}`}>
+                <input type="radio" name="payment-method" value="wallet" checked={paymentMethod === "wallet"} onChange={() => setPaymentMethod("wallet")} className="mt-1 accent-emerald-600" />
+                <span><span className="block font-black text-slate-900">Elohim Wallet</span><span className="mt-1 block text-sm text-slate-600">Available balance: <b>{walletBalance === null ? "Loading..." : formatPrice(walletBalance)}</b></span></span>
+              </label>
+              {bnplEligible && (
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${paymentMethod === "bnpl" ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-slate-300"}`}>
+                  <input type="radio" name="payment-method" value="bnpl" checked={paymentMethod === "bnpl"} onChange={() => setPaymentMethod("bnpl")} className="mt-1 accent-emerald-600" />
+                  <span><span className="block font-black text-slate-900">BNPL</span><span className="mt-1 block text-sm text-slate-600">You qualify for Buy Now, Pay Later. Continue to choose a repayment plan.</span></span>
+                </label>
+              )}
+              <details className="rounded-xl border border-slate-200 p-4">
+                <summary className="cursor-pointer font-bold text-slate-700">Other approved payment options</summary>
+                <p className="mt-2 text-sm text-slate-600">Contact Elohim Grains for approved business or special-order payment arrangements.</p>
+              </details>
+            </div>
 
             {paymentInstructions && (
               <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 text-sm">

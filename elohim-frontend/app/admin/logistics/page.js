@@ -164,13 +164,14 @@ export default function LogisticsPage() {
     }
   };
 
-  const pendingOrders = orders.filter((o) => o.status === "pending").length;
+  const pendingOrders = orders.filter((o) => ["ready_for_delivery", "pending"].includes(o.status) && !o.rider_id).length;
   const assignedOrders = orders.filter((o) => o.status === "assigned").length;
   const transitOrders = orders.filter((o) => o.status === "in_transit").length;
   const deliveredOrders = orders.filter((o) => o.status === "delivered").length;
+  const failedOrders = orders.filter((o) => ["delivery_failed", "failed"].includes(o.status)).length;
   const availableRiders = riders.filter((r) => r.status === "available").length;
   const busyRiders = riders.filter((r) => r.status === "busy").length;
-  const waitingOrders = orders.filter((o) => o.status === "pending").length;
+  const waitingOrders = pendingOrders;
   const lateOrders = orders.filter((o) => {
     if (!o.created_at) return false;
 
@@ -191,7 +192,7 @@ export default function LogisticsPage() {
       order.email?.toLowerCase().includes(search.toLowerCase()) ||
       String(order.id).includes(search);
 
-    const matchesStatus = statusTab === "all" ? true : order.status === statusTab;
+    const matchesStatus = statusTab === "all" ? true : statusTab === "awaiting" ? (["ready_for_delivery", "pending"].includes(order.status) && !order.rider_id) : order.status === statusTab;
 
     const orderDateRaw = order.created_at || order.createdAt || order.order_date;
     const orderDate = orderDateRaw ? new Date(orderDateRaw) : null;
@@ -209,10 +210,11 @@ export default function LogisticsPage() {
   });
 
   const getStatusBadgeClass = (status) => {
-    if (status === "pending") return "bg-yellow-100 text-yellow-700";
+    if (["pending", "ready_for_delivery"].includes(status)) return "bg-yellow-100 text-yellow-700";
     if (status === "assigned") return "bg-orange-100 text-orange-700";
     if (status === "in_transit") return "bg-blue-100 text-blue-700";
     if (status === "delivered") return "bg-green-100 text-green-700";
+    if (["delivery_failed", "failed"].includes(status)) return "bg-red-100 text-red-700";
     return "bg-gray-200 text-gray-700";
   };
 
@@ -268,7 +270,7 @@ export default function LogisticsPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
 
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-gray-500 text-sm">Pending</p>
+          <p className="text-gray-500 text-sm">Awaiting Assignment</p>
           <h2 className="text-3xl font-bold text-yellow-600">
             {pendingOrders}
           </h2>
@@ -282,7 +284,7 @@ export default function LogisticsPage() {
         </div>
 
         <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-gray-500 text-sm">In Transit</p>
+          <p className="text-gray-500 text-sm">Out for Delivery</p>
           <h2 className="text-3xl font-bold text-blue-600">
             {transitOrders}
           </h2>
@@ -307,6 +309,11 @@ export default function LogisticsPage() {
           <h2 className="text-3xl font-bold text-red-600">
             {busyRiders}
           </h2>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-4">
+          <p className="text-gray-500 text-sm">Failed</p>
+          <h2 className="text-3xl font-bold text-red-600">{failedOrders}</h2>
         </div>
 
       </div>
@@ -396,12 +403,12 @@ export default function LogisticsPage() {
           All ({orders.length})
         </button>
         <button
-          onClick={() => setStatusTab("pending")}
+          onClick={() => setStatusTab("awaiting")}
           className={`px-3 py-2 rounded text-sm ${
-            statusTab === "pending" ? "bg-yellow-600 text-white" : "bg-yellow-100 text-yellow-700"
+            statusTab === "awaiting" ? "bg-yellow-600 text-white" : "bg-yellow-100 text-yellow-700"
           }`}
         >
-          Pending ({pendingOrders})
+          Awaiting Assignment ({pendingOrders})
         </button>
         <button
           onClick={() => setStatusTab("assigned")}
@@ -417,7 +424,7 @@ export default function LogisticsPage() {
             statusTab === "in_transit" ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-700"
           }`}
         >
-          In Transit ({transitOrders})
+          Out for Delivery ({transitOrders})
         </button>
         <button
           onClick={() => setStatusTab("delivered")}
@@ -427,6 +434,7 @@ export default function LogisticsPage() {
         >
           Delivered ({deliveredOrders})
         </button>
+        <button onClick={() => setStatusTab("delivery_failed")} className={`px-3 py-2 rounded text-sm ${statusTab === "delivery_failed" ? "bg-red-600 text-white" : "bg-red-100 text-red-700"}`}>Failed ({failedOrders})</button>
       </div>
 
       {/* 🔥 LIVE MAP */}
@@ -487,14 +495,17 @@ export default function LogisticsPage() {
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
                 <h2 className="font-bold">
-                  Order #{order.id}
+                  {order.order_number || `Order #${order.id}`}
                 </h2>
                 <p>{order.name} ({order.email})</p>
                 <p className="text-sm text-gray-600">
                   Phone: {order.phone || "-"}
                 </p>
                 <p className="text-sm text-gray-600">
-                  Address: {order.address || "-"}
+                  Delivery zone: {order.delivery_address || order.address || "-"}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Delivery fee: {String.fromCodePoint(0x20a6)}{Number(order.delivery_fee || 0).toLocaleString()}
                 </p>
                 <p className="text-sm font-semibold text-green-700">
                   ₦{Number(order.total_amount || 0).toLocaleString()}
@@ -523,7 +534,7 @@ export default function LogisticsPage() {
             <Progress status={order.status} />
 
             {/* RIDER ASSIGN */}
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+            {order.status === "ready_for_delivery" && <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
               <select
                 value={selectedRiders[order.id] || ""}
                 onChange={(e) =>
@@ -549,9 +560,9 @@ export default function LogisticsPage() {
                 onClick={() => assignRider(order.id)}
                 className="bg-purple-600 text-white px-3 py-2 rounded"
               >
-                Assign
+                Assign Delivery
               </button>
-            </div>
+            </div>}
 
             <div className="mt-3 grid gap-2 grid-cols-1 md:grid-cols-[150px_auto_150px_auto_auto]">
               <input
@@ -631,6 +642,10 @@ export default function LogisticsPage() {
 
                 <option value="near_customer">
                   Near Customer
+                </option>
+
+                <option value="delivery_failed">
+                  Delivery Failed
                 </option>
 
                 <option value="delivered">

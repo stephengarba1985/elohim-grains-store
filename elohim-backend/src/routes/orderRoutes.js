@@ -790,6 +790,14 @@ router.put("/:id/assign-rider", verifyToken, isAdmin, async (req, res) => {
 
     await addDeliveryEvent(id, delivery.id, "assigned", `Rider assigned to order #${id}`);
 
+    const customer = await pool.query(
+      `SELECT u.name, u.phone, o.order_number FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=$1`,
+      [id]
+    );
+    if (customer.rows[0]?.phone) {
+      sendWhatsApp(customer.rows[0].phone, `Hello ${customer.rows[0].name || "Customer"}, your Elohim Grains order ${customer.rows[0].order_number || `#${id}`} is being prepared for delivery. A rider has been assigned and you will be notified when delivery begins.`);
+    }
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error("ASSIGN RIDER ERROR:", err);

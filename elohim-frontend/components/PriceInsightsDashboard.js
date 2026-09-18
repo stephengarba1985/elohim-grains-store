@@ -33,10 +33,12 @@ export default function PriceInsightsDashboard({ admin = false }) {
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [inventorySignals, setInventorySignals] = useState([]);
 
   useEffect(() => {
     setMounted(true);
     fetchInsights();
+    if (admin) API.get("/price-insights/admin/inventory-signals").then((res) => setInventorySignals(res.data?.signals || [])).catch(() => {});
   }, []);
 
   const recommendations = insights?.recommendations || [];
@@ -230,6 +232,14 @@ export default function PriceInsightsDashboard({ admin = false }) {
             <p className="text-sm text-slate-500 mt-3">{signals.data_note}</p>
           </section>
         </div>
+
+        {admin && <section className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
+          <div className="flex items-center justify-between"><div><h2 className="text-lg font-bold text-slate-950">Price AI + Inventory Signals</h2><p className="text-sm text-slate-500">Advisory restocking guidance from stock and the last 30 days of sales. No purchase is made automatically.</p></div></div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{inventorySignals.map((item) => {
+            const trend = item.name?.toLowerCase().includes("rice") ? summary.riceChange : item.name?.toLowerCase().includes("maize") ? summary.maizeChange : 0;
+            return <div key={item.id} className="rounded-lg border border-slate-200 p-4"><h3 className="font-bold">{item.name}</h3><p className="mt-2 text-sm">Stock: <b className={item.stock <= 20 ? "text-amber-700" : "text-emerald-700"}>{item.stock <= 0 ? "Out" : item.stock <= 20 ? "Low" : "Good"} ({item.stock})</b></p><p className="text-sm">Price trend: <b>{trend >= 0 ? "↑" : "↓"} {formatPercent(Math.abs(trend))}</b></p><p className="text-sm">Sales velocity: <b>{item.velocity}</b></p><p className="mt-3 rounded bg-emerald-50 p-2 text-sm font-bold text-emerald-800">Suggested action: {item.action}</p></div>;
+          })}</div>
+        </section>}
       </div>
     </div>
   );

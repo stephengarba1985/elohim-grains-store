@@ -1,5 +1,6 @@
 const express = require("express");
 const pool = require("../config/db");
+const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -62,6 +63,18 @@ const getRecommendation = (trend) => {
     expected_change: change,
   };
 };
+
+router.get("/admin/inventory-signals", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const rows = await pool.query(`
+      SELECT p.id,p.name,COALESCE(p.stock_quantity,0)::int AS stock,
+        COALESCE(SUM(oi.quantity) FILTER (WHERE o.created_at >= CURRENT_DATE - INTERVAL '30 days'),0)::int AS units_sold
+      FROM products p LEFT JOIN order_items oi ON oi.product_id=p.id LEFT JOIN orders o ON o.id=oi.order_id
+      GROUP BY p.id,p.name,p.stock_quantity ORDER BY units_sold DESC, stock ASC LIMIT 30`);
+    const velocity = rows.rows.map((x) => ({ ...x, velocity: Number(x.units_sold) >= 20 ? "High" : Number(x.units_sold) >= 5 ? "Medium" : "Low" }));
+    res.json({ signals: velocity.map((x) => ({ ...x, action: x.stock <= 0 ? "Restock urgently" : x.stock <= 20 && x.velocity === "High" ? "Review restocking" : x.stock <= 20 ? "Monitor stock" : "Stock healthy" })) });
+  } catch (err) { console.error("PRICE INVENTORY SIGNAL ERROR:", err); res.status(500).json({ error: "Failed to load inventory signals" }); }
+});
 
 router.get("/", async (req, res) => {
   try {

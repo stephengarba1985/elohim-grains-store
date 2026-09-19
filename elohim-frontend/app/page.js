@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import HomeWalletCard from "@/components/HomeWalletCard";
+import HomeProductSearch from "@/components/HomeProductSearch";
 
 export const metadata = {
   title: "Elohim Grains Store | Agro Fintech",
@@ -737,17 +738,18 @@ export default async function Home() {
           <div className="absolute -right-10 bottom-10 h-52 w-52 rounded-full bg-amber-300/20 blur-3xl" />
         </div>
 
-        <div className="relative mx-auto grid min-h-[32rem] max-w-7xl items-center gap-8 px-4 py-14 md:px-6 lg:grid-cols-[1.2fr_420px]">
+        <div className="relative mx-auto grid min-h-[27rem] max-w-7xl items-center gap-8 px-4 py-10 md:min-h-[32rem] md:px-6 md:py-14 lg:grid-cols-[1.2fr_420px]">
           <div className="max-w-3xl text-white">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wide text-green-200 backdrop-blur">
               ELOHIM GRAINS
             </div>
             <h1 className="mt-4 text-4xl font-black leading-tight text-white [text-shadow:0_3px_14px_rgba(0,0,0,0.55)] md:text-6xl">
-              Fresh staples, smart buying, and better food planning.
+              <span className="md:hidden">Fresh food and staples delivered to you.</span>
+              <span className="hidden md:inline">Fresh staples, smart buying, and better food planning.</span>
             </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-100">
-              Shop grain essentials, fund your wallet, save toward food security,
-              and buy in bulk with confidence through one trusted platform.
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-100 md:mt-5 md:text-lg md:leading-8">
+              <span className="md:hidden">Shop quality grains and everyday food essentials.</span>
+              <span className="hidden md:inline">Shop grain essentials, fund your wallet, save toward food security, and buy in bulk with confidence through one trusted platform.</span>
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -767,11 +769,11 @@ export default async function Home() {
                 href="/user/plans"
                 className="rounded-xl border border-white/50 bg-white/10 px-6 py-3 text-center font-bold text-white shadow-sm transition hover:bg-white/20"
               >
-                Save for Food
+                Save for Food <span className="md:hidden">→</span>
               </Link>
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-5 hidden flex-wrap gap-2 md:flex">
               {quickActions.map((item) => (
                 <Link
                   key={item.label}
@@ -783,7 +785,7 @@ export default async function Home() {
               ))}
             </div>
 
-            <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mt-10 hidden grid-cols-2 gap-3 sm:grid md:grid-cols-4">
               {trustMetrics.map((metric) => (
                 <div
                   key={metric.label}
@@ -798,11 +800,11 @@ export default async function Home() {
             </div>
           </div>
 
-          <HomeWalletCard marketSignals={marketSignals} />
+          <div className="hidden lg:block"><HomeWalletCard marketSignals={marketSignals} /></div>
         </div>
       </section>
 
-      <section className="border-y border-slate-200 bg-white">
+      <section className="hidden border-y border-slate-200 bg-white md:block">
         <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 md:grid-cols-3 md:px-6">
           {marketSignals.map((signal) => (
             <div
@@ -819,26 +821,31 @@ export default async function Home() {
         </div>
       </section>
 
-      <section id="shop-by-category" className="mx-auto max-w-7xl px-4 py-14 md:px-6">
+      <section id="shop-by-category" className="mx-auto max-w-7xl px-4 py-8 md:py-14 md:px-6">
         <div className="mb-6 flex items-end justify-between gap-4">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-green-700">
               Shop by category
             </p>
             <h2 className="mt-1 text-3xl font-black text-slate-950">
-              Everyday essentials for every kitchen
+              <span className="md:hidden">Find what you need</span><span className="hidden md:inline">Everyday essentials for every kitchen</span>
             </h2>
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="md:hidden">
+          <p className="text-sm font-bold text-slate-700">Search products</p>
+          <HomeProductSearch />
+        </div>
+
+        <div className="-mx-4 mt-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:mt-0 md:grid md:overflow-visible md:px-0 md:pb-0 sm:grid-cols-2 lg:grid-cols-3">
           {shopByCategory.map((category) => (
             <Link
               key={category.title}
-              href="#best-sellers"
-              className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+              href={`/products?search=${encodeURIComponent(category.title.split(" & ")[0])}`}
+              className="group w-36 shrink-0 snap-start overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg md:w-auto"
             >
-              <div className="relative h-52 overflow-hidden">
+              <div className="relative h-28 overflow-hidden md:h-52">
                 <img
                   src={normalizeImagePath(category.image)}
                   alt={category.title}
@@ -849,7 +856,7 @@ export default async function Home() {
                   <h3 className="text-xl font-black">{category.title}</h3>
                 </div>
               </div>
-              <div className="p-4">
+              <div className="hidden p-4 md:block">
                 <p className="text-sm leading-6 text-slate-600">{category.description}</p>
               </div>
             </Link>

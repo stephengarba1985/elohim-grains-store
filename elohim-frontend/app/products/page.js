@@ -649,6 +649,10 @@ export default function ShopPage() {
   const [cartConfirmation, setCartConfirmation] = useState(null);
 
   useEffect(() => {
+    setQuery(new URLSearchParams(window.location.search).get("search") || "");
+  }, []);
+
+  useEffect(() => {
     const fetchProducts = async () => {
       try {
         const baseUrl =

@@ -3,6 +3,8 @@ const pool = require("../config/db");
 const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
+const SUPPORTED_VENDOR_CATEGORIES = ["grains", "flour", "oil_seasoning", "spices", "fruits", "vegetables", "poultry_meat"];
+const canonicalProductName = (value) => String(value || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ");
 
 let vendorSetupPromise = null;
 
@@ -58,7 +60,8 @@ const ensureVendorTables = async () => {
       ADD COLUMN IF NOT EXISTS category VARCHAR(120), ADD COLUMN IF NOT EXISTS description TEXT,
       ADD COLUMN IF NOT EXISTS wholesale_quantity INTEGER, ADD COLUMN IF NOT EXISTS wholesale_price DECIMAL(10,2),
       ADD COLUMN IF NOT EXISTS origin_source VARCHAR(255), ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP,
-      ADD COLUMN IF NOT EXISTS reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+      ADD COLUMN IF NOT EXISTS reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS catalog_name VARCHAR(255), ADD COLUMN IF NOT EXISTS packaging VARCHAR(120)`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS vendor_ratings (
@@ -257,12 +260,12 @@ router.post("/register", verifyToken, async (req, res) => {
 
 router.post("/products", verifyToken, async (req, res) => {
   try {
-    const { name, price, stock_quantity, weight, image_url, category, description, wholesale_quantity, wholesale_price, origin_source } = req.body;
+    const { name, price, stock_quantity, weight, image_url, category, description, wholesale_quantity, wholesale_price, origin_source, packaging } = req.body;
     const parsedPrice = parsePositiveNumber(price);
     const parsedStock = Number(stock_quantity || 0);
 
-    if (!name || !parsedPrice) {
-      return res.status(400).json({ error: "Product name and price are required" });
+    if (!name || !parsedPrice || !SUPPORTED_VENDOR_CATEGORIES.includes(category)) {
+      return res.status(400).json({ error: "Product name, selling price and a supported category are required" });
     }
 
     const vendorRes = await pool.query(
@@ -282,8 +285,8 @@ router.post("/products", verifyToken, async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO vendor_products
-       (vendor_id, name, price, stock_quantity, weight, image_url, category, description, wholesale_quantity, wholesale_price, origin_source, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending_review')
+       (vendor_id, name, price, stock_quantity, weight, image_url, category, description, wholesale_quantity, wholesale_price, origin_source, packaging, catalog_name, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending_review')
        RETURNING *`,
       [
         vendor.id,
@@ -297,6 +300,8 @@ router.post("/products", verifyToken, async (req, res) => {
         Number(wholesale_quantity) || null,
         Number(wholesale_price) || null,
         origin_source || "",
+        packaging || "",
+        canonicalProductName(name),
       ]
     );
 
@@ -311,11 +316,17 @@ router.patch("/admin/products/:id/review", verifyToken, isAdmin, async (req,res)
   try {
     const status = req.body.status;
     if (!["active","rejected","suspended"].includes(status)) return res.status(400).json({error:"Invalid product review status"});
-    const result = await pool.query("UPDATE vendor_products SET status=$1,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=$2 WHERE id=$3 RETURNING *",[status,req.user.id,req.params.id]);
+    const submission = await pool.query("SELECT * FROM vendor_products WHERE id=$1",[req.params.id]);
+    if (!submission.rows[0]) return res.status(404).json({error:"Product submission not found"});
+    const product = submission.rows[0];
+    if (status === "active" && (!product.category || !product.description || !product.weight || !product.packaging || !product.image_url)) return res.status(400).json({error:"Category, description, unit/weight, packaging and image are required before publishing"});
+    const result = await pool.query("UPDATE vendor_products SET status=$1,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=$2,catalog_name=COALESCE(catalog_name,$4) WHERE id=$3 RETURNING *",[status,req.user.id,req.params.id,canonicalProductName(product.name)]);
     if(!result.rows[0]) return res.status(404).json({error:"Product submission not found"});
     res.json(result.rows[0]);
   } catch(err){console.error("VENDOR PRODUCT REVIEW ERROR:",err);res.status(500).json({error:"Failed to review product"});}
 });
+
+router.get("/catalog-standards", async (req,res) => res.json({ categories: SUPPORTED_VENDOR_CATEGORIES, required_before_publish:["Product name","Category","Image","Description","Weight or unit","Packaging","Selling price","Available quantity"], prohibited:["Illegal, unsafe or unsupported products","Misleading product names","Duplicate catalogue names without a variant distinction"] }));
 
 router.post("/orders", verifyToken, async (req, res) => {
   try {

@@ -131,10 +131,16 @@ export default function VendorMarketplacePage() {
   });
   const [productForm, setProductForm] = useState({
     name: "",
+    category: "",
+    description: "",
     price: "",
     stock_quantity: "",
     weight: "",
     image_url: "",
+    packaging: "",
+    wholesale_quantity: "",
+    wholesale_price: "",
+    origin_source: "",
   });
   const [orderForm, setOrderForm] = useState({
     vendor_product_id: "",
@@ -214,7 +220,7 @@ export default function VendorMarketplacePage() {
     try {
       await API.post("/vendors/products", productForm);
       toast.success("Vendor product added");
-      setProductForm({ name: "", price: "", stock_quantity: "", weight: "", image_url: "" });
+      setProductForm({ name: "", category: "", description: "", price: "", stock_quantity: "", weight: "", image_url: "", packaging: "", wholesale_quantity: "", wholesale_price: "", origin_source: "" });
       fetchMyVendor();
       fetchMarketplace();
     } catch (err) {
@@ -394,8 +400,8 @@ export default function VendorMarketplacePage() {
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
+               <input
+                 type="number"
                   min="1"
                   value={orderForm.quantity}
                   onChange={(event) =>
@@ -403,8 +409,11 @@ export default function VendorMarketplacePage() {
                   }
                   className="w-full rounded-lg border border-slate-300 p-3"
                   placeholder="Quantity"
-                  required
-                />
+                 required
+               />
+               <select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })} className="rounded-lg border border-slate-300 p-3" required>
+                 <option value="">Category</option><option value="grains">Grains</option><option value="flour">Flour</option><option value="oil_seasoning">Oil & Seasoning</option><option value="spices">Spices</option><option value="fruits">Fruits</option><option value="vegetables">Vegetables</option><option value="poultry_meat">Poultry & Meat</option>
+               </select>
                 <textarea
                   value={orderForm.delivery_address}
                   onChange={(event) =>
@@ -476,7 +485,7 @@ export default function VendorMarketplacePage() {
               Register as a grain vendor
             </h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <input
+             <input
                 value={vendorForm.business_name}
                 onChange={(event) =>
                   setVendorForm({ ...vendorForm, business_name: event.target.value })
@@ -576,8 +585,16 @@ export default function VendorMarketplacePage() {
                 setProductForm({ ...productForm, image_url: event.target.value })
               }
               className="mt-3 w-full rounded-lg border border-slate-300 p-3"
-              placeholder="Image file e.g. Rice.jpg"
-            />
+               placeholder="Image file e.g. Rice.jpg"
+               required
+             />
+             <div className="mt-3 grid gap-3 sm:grid-cols-2">
+               <input value={productForm.packaging} onChange={(e)=>setProductForm({...productForm,packaging:e.target.value})} className="rounded-lg border border-slate-300 p-3" placeholder="Packaging e.g. sealed 50kg bag" required />
+               <input value={productForm.origin_source} onChange={(e)=>setProductForm({...productForm,origin_source:e.target.value})} className="rounded-lg border border-slate-300 p-3" placeholder="Origin/source" />
+               <input type="number" value={productForm.wholesale_quantity} onChange={(e)=>setProductForm({...productForm,wholesale_quantity:e.target.value})} className="rounded-lg border border-slate-300 p-3" placeholder="Wholesale quantity" />
+               <input type="number" value={productForm.wholesale_price} onChange={(e)=>setProductForm({...productForm,wholesale_price:e.target.value})} className="rounded-lg border border-slate-300 p-3" placeholder="Wholesale price" />
+             </div>
+             <textarea value={productForm.description} onChange={(e)=>setProductForm({...productForm,description:e.target.value})} className="mt-3 w-full rounded-lg border border-slate-300 p-3" placeholder="Clear product description" required rows={3} />
             <button className="mt-4 rounded-lg bg-slate-950 px-5 py-3 font-bold text-white hover:bg-slate-800">
               Add Product
             </button>

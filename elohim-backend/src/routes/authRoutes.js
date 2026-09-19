@@ -4,7 +4,7 @@ const pool = require("../config/db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const { sendVerificationEmail } = require("../utils/mail");
+const { sendVerificationEmail, sendEmail } = require("../utils/mail");
 const { normalizePhone } = require("../utils/phone");
 
 const resolveFrontendBaseUrl = (req) => {
@@ -65,6 +65,8 @@ const ensureAuthColumns = async () => {
     ALTER TABLE users
       ADD COLUMN IF NOT EXISTS email_verified BOOLEAN,
       ADD COLUMN IF NOT EXISTS verification_token TEXT,
+      ADD COLUMN IF NOT EXISTS password_reset_token_hash TEXT,
+      ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS staff_role VARCHAR(40)
   `);
 
@@ -401,6 +403,37 @@ router.post("/resend-verification", async (req, res) => {
 /* =========================
    LOGIN
 ========================= */
+router.post("/forgot-password", async (req,res) => {
+  try {
+    await ensureAuthColumns();
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const generic = { success: true, message: "If an account exists, reset instructions have been sent." };
+    if (!email) return res.json(generic);
+    const user = await pool.query("SELECT id,email FROM users WHERE LOWER(email)=LOWER($1)",[email]);
+    if (!user.rows[0]) return res.json(generic);
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    await pool.query("UPDATE users SET password_reset_token_hash=$1,password_reset_expires_at=NOW()+INTERVAL '30 minutes' WHERE id=$2",[tokenHash,user.rows[0].id]);
+    const link=`${resolveFrontendBaseUrl(req)}/reset-password?token=${rawToken}`;
+    await sendEmail({to:user.rows[0].email,subject:"Reset your Elohim Grains password",htmlContent:`<p>Use this secure link to reset your password. It expires in 30 minutes.</p><p><a href="${link}">Reset password</a></p><p>If you did not request this, ignore this email.</p>`});
+    res.json(generic);
+  } catch(err){console.error("FORGOT PASSWORD ERROR:",err);res.status(500).json({error:"Could not start password reset"});}
+});
+
+router.post("/reset-password", async (req,res) => {
+  try {
+    await ensureAuthColumns();
+    const { token,password }=req.body;
+    if (!token || !password || String(password).length < 8) return res.status(400).json({error:"A valid reset token and password of at least 8 characters are required"});
+    const tokenHash=crypto.createHash("sha256").update(String(token)).digest("hex");
+    const user=await pool.query("SELECT id FROM users WHERE password_reset_token_hash=$1 AND password_reset_expires_at>NOW()",[tokenHash]);
+    if(!user.rows[0])return res.status(400).json({error:"This reset link is invalid or has expired"});
+    const hashed=await bcrypt.hash(password,12);
+    await pool.query("UPDATE users SET password=$1,password_reset_token_hash=NULL,password_reset_expires_at=NULL WHERE id=$2",[hashed,user.rows[0].id]);
+    res.json({success:true,message:"Password reset successfully. Please sign in."});
+  } catch(err){console.error("RESET PASSWORD ERROR:",err);res.status(500).json({error:"Could not reset password"});}
+});
+
 router.post("/login", async (req, res) => {
   try {
     await ensureAuthColumns();

@@ -96,6 +96,7 @@ const ensureVendorTables = async () => {
     )`);
     await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS commission_rate_applied DECIMAL(5,2)");
     await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS settlement_status VARCHAR(30) NOT NULL DEFAULT 'pending', ADD COLUMN IF NOT EXISTS settled_at TIMESTAMP");
+    await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS escrow_status VARCHAR(30) NOT NULL DEFAULT 'not_applicable', ADD COLUMN IF NOT EXISTS escrow_note TEXT");
     await pool.query(`CREATE TABLE IF NOT EXISTS vendor_payouts (
       id SERIAL PRIMARY KEY, vendor_id INTEGER REFERENCES vendor_profiles(id) ON DELETE SET NULL,
       vendor_order_id INTEGER UNIQUE REFERENCES vendor_orders(id) ON DELETE CASCADE,
@@ -531,9 +532,10 @@ router.patch("/admin/vendors/:id/verification", verifyToken, isAdmin, async (req
 
 router.patch("/admin/orders/:id/delivery", verifyToken, isAdmin, async (req, res) => {
   try {
-    const { delivery_status, payment_status } = req.body;
+    const { delivery_status, payment_status, escrow_status, escrow_note } = req.body;
     const allowedDelivery = ["pending", "processing", "assigned", "in_transit", "delivered", "cancelled"];
     const allowedPayment = ["pending", "paid", "escrow", "failed", "refunded"];
+    const allowedEscrow = ["not_applicable", "held_for_review", "released", "cancelled"];
 
     if (delivery_status && !allowedDelivery.includes(delivery_status)) {
       return res.status(400).json({ error: "Invalid delivery status" });
@@ -542,18 +544,27 @@ router.patch("/admin/orders/:id/delivery", verifyToken, isAdmin, async (req, res
     if (payment_status && !allowedPayment.includes(payment_status)) {
       return res.status(400).json({ error: "Invalid payment status" });
     }
+    if (escrow_status && !allowedEscrow.includes(escrow_status)) {
+      return res.status(400).json({ error: "Invalid funds-hold status" });
+    }
 
     const result = await pool.query(
       `UPDATE vendor_orders
        SET delivery_status = COALESCE($1, delivery_status),
-           payment_status = COALESCE($2, payment_status)
-       WHERE id = $3
+           payment_status = COALESCE($2, payment_status),
+           escrow_status = COALESCE($3, escrow_status),
+           escrow_note = COALESCE($4, escrow_note)
+       WHERE id = $5
        RETURNING *`,
-      [delivery_status || null, payment_status || null, req.params.id]
+      [delivery_status || null, payment_status || null, escrow_status || null, escrow_note || null, req.params.id]
     );
 
     const order = result.rows[0];
     if (["paid", "escrow"].includes(order.payment_status) && order.delivery_status === "delivered") {
+      if (order.payment_status === "escrow" && order.escrow_status === "held_for_review") {
+        const released = await pool.query("UPDATE vendor_orders SET escrow_status='released' WHERE id=$1 RETURNING *", [order.id]);
+        Object.assign(order, released.rows[0]);
+      }
       const settlementAmount = Number(order.total_amount) - Number(order.commission_amount || 0);
       await pool.query(`INSERT INTO vendor_payouts (vendor_id,vendor_order_id,gross_amount,commission_amount,settlement_amount,status)
         VALUES ($1,$2,$3,$4,$5,'available') ON CONFLICT (vendor_order_id) DO UPDATE SET status='available',settlement_amount=EXCLUDED.settlement_amount`,[order.vendor_id,order.id,order.total_amount,order.commission_amount,settlementAmount]);

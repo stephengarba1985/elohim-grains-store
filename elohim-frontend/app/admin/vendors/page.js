@@ -296,7 +296,18 @@ export default function AdminVendorsPage() {
                       <option key={status} value={status}>{status}</option>
                     ))}
                   </select>
+                  <select
+                    value={order.escrow_status || "not_applicable"}
+                    onChange={(event) => updateOrder(order, "escrow_status", event.target.value)}
+                    className="rounded border border-slate-300 p-2"
+                  >
+                    <option value="not_applicable">Standard settlement</option>
+                    <option value="held_for_review">Funds held for review</option>
+                    <option value="released">Funds-hold released</option>
+                    <option value="cancelled">Funds-hold cancelled</option>
+                  </select>
                 </div>
+                {(order.payment_status === "escrow" || order.escrow_status === "held_for_review") && <p className="mt-2 text-xs text-amber-700">Operational funds hold only. Do not describe this as legally protected escrow until payment-provider and legal terms are in place.</p>}
               </div>
             ))}
             {orders.length === 0 && (

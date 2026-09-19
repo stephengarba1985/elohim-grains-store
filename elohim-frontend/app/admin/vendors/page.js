@@ -70,6 +70,16 @@ export default function AdminVendorsPage() {
     }
   };
 
+  const reviewProduct = async (product, status) => {
+    try {
+      await API.patch(`/vendors/admin/products/${product.id}/review`, { status });
+      toast.success("Product review updated");
+      fetchOverview();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Product review failed");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -201,6 +211,13 @@ export default function AdminVendorsPage() {
                   </div>
                   <p className="font-bold text-green-700">{formatPrice(product.price)}</p>
                 </div>
+                <p className="mt-2 text-xs font-bold text-amber-700">{product.status}</p>
+                {product.status === "pending_review" && (
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={() => reviewProduct(product, "active")} className="rounded bg-green-700 px-3 py-1 text-xs font-bold text-white">Publish</button>
+                    <button onClick={() => reviewProduct(product, "rejected")} className="rounded bg-red-600 px-3 py-1 text-xs font-bold text-white">Reject</button>
+                  </div>
+                )}
               </div>
             ))}
             {products.length === 0 && (

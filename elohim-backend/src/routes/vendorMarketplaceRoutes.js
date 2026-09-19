@@ -45,10 +45,20 @@ const ensureVendorTables = async () => {
         stock_quantity INTEGER DEFAULT 0,
         weight VARCHAR(255),
         image_url VARCHAR(500),
-        status VARCHAR(30) DEFAULT 'active',
+        category VARCHAR(120),
+        description TEXT,
+        wholesale_quantity INTEGER,
+        wholesale_price DECIMAL(10,2),
+        origin_source VARCHAR(255),
+        status VARCHAR(30) DEFAULT 'pending_review',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await pool.query(`ALTER TABLE vendor_products
+      ADD COLUMN IF NOT EXISTS category VARCHAR(120), ADD COLUMN IF NOT EXISTS description TEXT,
+      ADD COLUMN IF NOT EXISTS wholesale_quantity INTEGER, ADD COLUMN IF NOT EXISTS wholesale_price DECIMAL(10,2),
+      ADD COLUMN IF NOT EXISTS origin_source VARCHAR(255), ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS vendor_ratings (
@@ -247,7 +257,7 @@ router.post("/register", verifyToken, async (req, res) => {
 
 router.post("/products", verifyToken, async (req, res) => {
   try {
-    const { name, price, stock_quantity, weight, image_url } = req.body;
+    const { name, price, stock_quantity, weight, image_url, category, description, wholesale_quantity, wholesale_price, origin_source } = req.body;
     const parsedPrice = parsePositiveNumber(price);
     const parsedStock = Number(stock_quantity || 0);
 
@@ -272,8 +282,8 @@ router.post("/products", verifyToken, async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO vendor_products
-       (vendor_id, name, price, stock_quantity, weight, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
+       (vendor_id, name, price, stock_quantity, weight, image_url, category, description, wholesale_quantity, wholesale_price, origin_source, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending_review')
        RETURNING *`,
       [
         vendor.id,
@@ -282,6 +292,11 @@ router.post("/products", verifyToken, async (req, res) => {
         Number.isFinite(parsedStock) ? parsedStock : 0,
         weight || "",
         image_url || "",
+        category || "",
+        description || "",
+        Number(wholesale_quantity) || null,
+        Number(wholesale_price) || null,
+        origin_source || "",
       ]
     );
 
@@ -290,6 +305,16 @@ router.post("/products", verifyToken, async (req, res) => {
     console.error("CREATE VENDOR PRODUCT ERROR:", err);
     res.status(500).json({ error: "Failed to create vendor product" });
   }
+});
+
+router.patch("/admin/products/:id/review", verifyToken, isAdmin, async (req,res) => {
+  try {
+    const status = req.body.status;
+    if (!["active","rejected","suspended"].includes(status)) return res.status(400).json({error:"Invalid product review status"});
+    const result = await pool.query("UPDATE vendor_products SET status=$1,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=$2 WHERE id=$3 RETURNING *",[status,req.user.id,req.params.id]);
+    if(!result.rows[0]) return res.status(404).json({error:"Product submission not found"});
+    res.json(result.rows[0]);
+  } catch(err){console.error("VENDOR PRODUCT REVIEW ERROR:",err);res.status(500).json({error:"Failed to review product"});}
 });
 
 router.post("/orders", verifyToken, async (req, res) => {

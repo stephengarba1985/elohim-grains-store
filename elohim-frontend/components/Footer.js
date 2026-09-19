@@ -85,6 +85,15 @@ export default function Footer() {
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-5 text-sm text-slate-500 md:flex-row md:items-center md:justify-between md:px-6">
           <p>Copyright {year} Elohim Grains Store. All rights reserved.</p>
           <div className="flex flex-wrap gap-4">
+            <Link href="/policies/privacy" className="hover:text-slate-300">
+              Privacy
+            </Link>
+            <Link href="/policies/terms" className="hover:text-slate-300">
+              Terms
+            </Link>
+            <Link href="/policies" className="hover:text-slate-300">
+              Policies
+            </Link>
             <Link href="/contact" className="hover:text-slate-300">
               Support
             </Link>

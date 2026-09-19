@@ -4,6 +4,7 @@ const { verifyToken, isAdmin } = require("../middleware/auth");
 const { ensureWalletTables, getWalletBalance } = require("./walletRoutes");
 
 const router = express.Router();
+const ensureCustomerSegments = () => pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS business_name VARCHAR(255)");
 
 /* =========================
    CUSTOMER STATISTICS
@@ -30,6 +31,7 @@ router.get("/stats", verifyToken, isAdmin, async (req, res) => {
 ========================= */
 router.get("/", verifyToken, isAdmin, async (req, res) => {
   try {
+    await ensureCustomerSegments();
 
     const result = await pool.query(`
       SELECT
@@ -38,7 +40,7 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
         u.email,
         u.phone,
         u.address,
-        u.created_at,
+        u.created_at, u.business_name,
 
         COUNT(o.id)::int AS total_orders,
 
@@ -47,12 +49,17 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
           0
         ) AS total_spent,
 
-        MAX(o.created_at) AS last_purchase
+        MAX(o.created_at) AS last_purchase,
+        COUNT(o.id) FILTER (WHERE o.status='delivered')::int AS completed_orders,
+        COUNT(DISTINCT s.id) FILTER (WHERE s.status='active')::int AS active_subscriptions,
+        COUNT(DISTINCT b.id)::int AS bulk_orders
 
       FROM users u
 
       LEFT JOIN orders o
       ON o.user_id = u.id
+      LEFT JOIN subscriptions s ON s.user_id = u.id
+      LEFT JOIN bulk_requests b ON b.user_id = u.id
 
       WHERE COALESCE(u.is_admin,false)=false
 
@@ -61,7 +68,17 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
       ORDER BY u.created_at DESC
     `);
 
-    res.json(result.rows);
+    res.json(result.rows.map((customer) => {
+      const inactive = customer.last_purchase && Date.now() - new Date(customer.last_purchase).getTime() > 90 * 24 * 60 * 60 * 1000;
+      const segments = [];
+      if (Number(customer.completed_orders) <= 1) segments.push("New Customer");
+      if (Number(customer.completed_orders) > 1) segments.push("Returning Customer");
+      if (Number(customer.active_subscriptions) > 0) segments.push("Subscriber");
+      if (Number(customer.bulk_orders) > 0) segments.push("Bulk Buyer");
+      if (customer.business_name) segments.push("Business Customer");
+      if (inactive) segments.push("Inactive Customer");
+      return { ...customer, segments };
+    }));
 
   } catch (err) {
     console.error(err);

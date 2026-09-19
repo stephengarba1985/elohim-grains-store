@@ -12,6 +12,8 @@ export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [registrationComplete, setRegistrationComplete] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState("");
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
 
   const [form, setForm] = useState({
     name: "",
@@ -35,6 +37,8 @@ export default function AuthPage() {
           email: form.email,
           password: form.password,
         });
+
+        if (res.data.mfa_required) { setMfaRequired(true); toast.success("Admin verification code sent"); return; }
 
         localStorage.setItem("token", res.data.token);
         localStorage.setItem("user", JSON.stringify(res.data.user));
@@ -78,6 +82,8 @@ export default function AuthPage() {
       toast.error(serverMessage);
     }
   };
+
+  const verifyAdminMfa = async (event) => { event.preventDefault(); try { const res=await API.post("/auth/verify-admin-mfa",{email:form.email,code:mfaCode}); localStorage.setItem("token",res.data.token);localStorage.setItem("user",JSON.stringify(res.data.user));window.dispatchEvent(new Event("auth:changed"));toast.success("Admin login verified");router.push("/admin"); } catch(err){toast.error(err.response?.data?.error||"Verification failed");} };
 
   // Success screen after registration
   if (registrationComplete) {
@@ -137,6 +143,7 @@ export default function AuthPage() {
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-3">
+          {mfaRequired ? <><p className="text-sm text-slate-600">Enter the 6-digit code sent to your verified admin email.</p><input required inputMode="numeric" maxLength="6" placeholder="Admin verification code" className="border p-2 w-full rounded" value={mfaCode} onChange={(e)=>setMfaCode(e.target.value)}/><button type="button" onClick={verifyAdminMfa} className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold">Verify admin login</button></> : <>
           {!isLogin && (
             <>
               <input
@@ -221,12 +228,13 @@ export default function AuthPage() {
           {isLogin ? (
             <>
               Don't have an account?{" "}
-              <button
+          <button
                 onClick={() => setIsLogin(false)}
                 className="text-green-600 font-semibold"
               >
                 Register
-              </button>
+          </button>
+          </>}
             </>
           ) : (
             <>

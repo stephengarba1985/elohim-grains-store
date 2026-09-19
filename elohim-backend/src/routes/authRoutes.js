@@ -67,6 +67,8 @@ const ensureAuthColumns = async () => {
       ADD COLUMN IF NOT EXISTS verification_token TEXT,
       ADD COLUMN IF NOT EXISTS password_reset_token_hash TEXT,
       ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS admin_mfa_code_hash TEXT,
+      ADD COLUMN IF NOT EXISTS admin_mfa_expires_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS staff_role VARCHAR(40)
   `);
 
@@ -491,6 +493,14 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    if (user.is_admin) {
+      const code = String(crypto.randomInt(100000, 1000000));
+      const codeHash = crypto.createHash("sha256").update(code).digest("hex");
+      await pool.query("UPDATE users SET admin_mfa_code_hash=$1,admin_mfa_expires_at=NOW()+INTERVAL '10 minutes' WHERE id=$2", [codeHash,user.id]);
+      await sendEmail({ to:user.email, subject:"Your Elohim Admin verification code", htmlContent:`<p>Your admin verification code is <strong>${code}</strong>.</p><p>It expires in 10 minutes. Do not share it.</p>` });
+      return res.json({ success:true, mfa_required:true, message:"Enter the verification code sent to your admin email." });
+    }
+
     // Create JWT
     const token = jwt.sign(
       {
@@ -527,6 +537,21 @@ router.post("/login", async (req, res) => {
       error: "Login failed.",
     });
   }
+});
+
+router.post("/verify-admin-mfa", async (req,res) => {
+  try {
+    await ensureAuthColumns();
+    const { email, code } = req.body;
+    if (!email || !/^\d{6}$/.test(String(code||""))) return res.status(400).json({error:"Email and 6-digit verification code are required"});
+    const hash=crypto.createHash("sha256").update(String(code)).digest("hex");
+    const result=await pool.query("SELECT * FROM users WHERE LOWER(email)=LOWER($1) AND is_admin=TRUE AND admin_mfa_code_hash=$2 AND admin_mfa_expires_at>NOW()",[email,hash]);
+    if(!result.rows[0])return res.status(401).json({error:"Invalid or expired admin verification code"});
+    const user=result.rows[0];
+    await pool.query("UPDATE users SET admin_mfa_code_hash=NULL,admin_mfa_expires_at=NULL WHERE id=$1",[user.id]);
+    const token=jwt.sign({id:user.id,role:user.role,is_admin:true,staff_role:user.staff_role,auth_time:Math.floor(Date.now()/1000)},process.env.JWT_SECRET||"elohim_123456",{expiresIn:"4h"});
+    res.json({success:true,token,user:{id:user.id,name:user.name,email:user.email,phone:user.phone,role:user.role,is_admin:true,staff_role:user.staff_role}});
+  } catch(err){console.error("ADMIN MFA ERROR:",err);res.status(500).json({error:"Admin verification failed"});}
 });
 
 module.exports = router;

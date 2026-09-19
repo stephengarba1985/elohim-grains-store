@@ -398,41 +398,11 @@ router.post("/verify", async (req, res) => {
       return res.status(404).json({ error: "Payment transaction not found" });
     }
 
-    const result = await pool.query(
-      `UPDATE payment_transactions
-       SET status='verified', verified_at=COALESCE(verified_at, NOW())
-       WHERE reference=$1
-       RETURNING *`,
-      [reference]
-    );
-    const transaction = result.rows[0];
-
-    let notificationQueued = false;
-
-    if (transaction.user_id) {
-      try {
-        await queueMobileNotification({
-          userId: transaction.user_id,
-          type: "payment_reminder",
-          title: "Payment verified",
-          body: `Your payment of NGN ${Number(transaction.amount || 0).toLocaleString()} has been verified.`,
-          data: {
-            payment_transaction_id: transaction.id,
-            reference: transaction.reference,
-            status: transaction.status,
-          },
-        });
-        notificationQueued = true;
-      } catch (notifyErr) {
-        console.error("PAYMENT VERIFY NOTIFICATION ERROR:", notifyErr.message);
-      }
-    }
-
-    res.json({
-      success: true,
-      transaction,
-      notification_queued: notificationQueued,
-      note: "Simulated verification complete. Replace this with provider webhook/API verification in production.",
+    return res.status(409).json({
+      error: "Browser verification cannot mark a payment as successful.",
+      reference: existing.rows[0].reference,
+      status: existing.rows[0].status,
+      next_step: "Await provider API verification or signed webhook confirmation.",
     });
   } catch (err) {
     console.error("PAYMENT VERIFY ERROR:", err);

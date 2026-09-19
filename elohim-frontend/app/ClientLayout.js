@@ -50,7 +50,7 @@ export default function ClientLayout({ children }) {
   return (
     <>
       {!hidePublicNavbar && <Navbar user={user} logout={logout} />}
-      {children}
+      <div className={!hidePublicNavbar ? "pb-20 md:pb-0" : ""}>{children}</div>
       {!hidePublicNavbar && <Footer />}
       <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
     </>

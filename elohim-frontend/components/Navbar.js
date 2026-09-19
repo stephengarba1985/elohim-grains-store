@@ -75,6 +75,11 @@ export default function Navbar({ user: initialUser }) {
         : "text-slate-700 hover:bg-slate-50 hover:text-green-700"
     }`;
 
+  const mobileNavClass = (href) =>
+    `flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[11px] font-bold transition ${
+      isActive(href) ? "text-green-700" : "text-slate-500"
+    }`;
+
   useEffect(() => {
     setLocalUser(initialUser);
 
@@ -286,6 +291,28 @@ export default function Navbar({ user: initialUser }) {
           </div>
         </div>
       )}
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-50 flex border-t border-slate-200 bg-white/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden"
+        aria-label="Mobile primary navigation"
+      >
+        <Link href="/" onClick={() => setMobileOpen(false)} className={mobileNavClass("/")} aria-current={isActive("/") ? "page" : undefined}>
+          <span className="text-lg leading-none">⌂</span><span>Home</span>
+        </Link>
+        <Link href="/products" onClick={() => setMobileOpen(false)} className={mobileNavClass("/products")} aria-current={isActive("/products") ? "page" : undefined}>
+          <span className="text-lg leading-none">🛍</span><span>Shop</span>
+        </Link>
+        <Link href="/cart" onClick={() => setMobileOpen(false)} className={`${mobileNavClass("/cart")} relative`} aria-current={isActive("/cart") ? "page" : undefined}>
+          <span className="text-lg leading-none">🛒</span><span>Cart</span>
+          {cartCount > 0 && <span className="absolute left-1/2 top-0 ml-2 min-w-4 rounded-full bg-green-700 px-1 text-center text-[10px] leading-4 text-white">{cartCount}</span>}
+        </Link>
+        <Link href="/orders" onClick={() => setMobileOpen(false)} className={mobileNavClass("/orders")} aria-current={isActive("/orders") ? "page" : undefined}>
+          <span className="text-lg leading-none">📦</span><span>Orders</span>
+        </Link>
+        <button type="button" onClick={() => setMobileOpen((open) => !open)} className={`${mobileNavClass("/dashboard")} ${mobileOpen ? "text-green-700" : ""}`} aria-expanded={mobileOpen} aria-label="Open account menu">
+          <span className="text-lg leading-none">👤</span><span>Account</span>
+        </button>
+      </nav>
     </header>
   );
 }

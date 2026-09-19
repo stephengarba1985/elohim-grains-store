@@ -76,8 +76,10 @@ export default function OrderDetails() {
   const scheduleRepeatOrder = async (plan) => {
     if (!user) return toast.error("Please login first");
     try {
+      let custom_days;
+      if (plan === "custom") { custom_days = Number(window.prompt("Deliver every how many days?", "30")); if (!Number.isInteger(custom_days) || custom_days < 1) return; }
       setSubscribingPlan(plan);
-      for (const item of items) await API.post("/subscriptions", { user_id: user.id, product_id: item.product_id, quantity: item.quantity, plan });
+      await API.post("/subscriptions/from-order", { order_id: order.id, plan, custom_days });
       toast.success("Your repeat delivery schedule is active");
     } catch (err) { toast.error("Could not schedule this delivery"); }
     finally { setSubscribingPlan(""); }
@@ -154,7 +156,7 @@ export default function OrderDetails() {
             </div>
             <div className="mt-6 border-t border-emerald-200 pt-5">
               <p className="font-black">You buy these items regularly.</p><p className="mt-1 text-sm">Save time by scheduling your next delivery.</p>
-              <div className="mt-3 flex flex-wrap justify-center gap-2">{[["weekly", "Weekly"], ["biweekly", "Every 2 Weeks"], ["monthly", "Monthly"]].map(([plan, label]) => <button key={plan} onClick={() => scheduleRepeatOrder(plan)} disabled={Boolean(subscribingPlan)} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-bold">{subscribingPlan === plan ? "SCHEDULING..." : label}</button>)}</div>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">{[["weekly", "Weekly"], ["biweekly", "Every 2 Weeks"], ["monthly", "Monthly"], ["custom", "Custom"]].map(([plan, label]) => <button key={plan} onClick={() => scheduleRepeatOrder(plan)} disabled={Boolean(subscribingPlan)} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-bold">{subscribingPlan === plan ? "SCHEDULING..." : label}</button>)}</div>
             </div>
           </div>
         )}

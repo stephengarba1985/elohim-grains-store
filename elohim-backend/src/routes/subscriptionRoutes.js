@@ -26,6 +26,12 @@ const ensureSubscriptionSchema = async () => {
         ALTER TABLE orders
         ADD COLUMN IF NOT EXISTS is_subscription BOOLEAN DEFAULT FALSE
       `);
+      await pool.query(`CREATE TABLE IF NOT EXISTS subscription_groups (
+        id SERIAL PRIMARY KEY,user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,name VARCHAR(120),plan VARCHAR(20) NOT NULL,custom_days INTEGER,next_delivery TIMESTAMP NOT NULL,status VARCHAR(20) NOT NULL DEFAULT 'active',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS subscription_group_items (
+        id SERIAL PRIMARY KEY,subscription_group_id INTEGER REFERENCES subscription_groups(id) ON DELETE CASCADE,product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,quantity INTEGER NOT NULL
+      )`);
     })().catch((err) => {
       schemaInitPromise = null;
       throw err;
@@ -67,6 +73,33 @@ router.get("/admin/all", verifyToken, isAdmin, async (req, res) => {
       paused: rows.filter((x)=>x.status==='paused').length,
     }});
   } catch (err) { console.error("ADMIN SUBSCRIPTIONS ERROR:", err); res.status(500).json({ error: "Failed to load subscriptions" }); }
+});
+
+router.post("/from-order", verifyToken, async (req,res) => {
+  const client = await pool.connect();
+  try {
+    const { order_id, plan, custom_days } = req.body;
+    const days = plan === "weekly" ? 7 : plan === "biweekly" ? 14 : plan === "monthly" ? 30 : Number(custom_days);
+    if (!order_id || !Number.isInteger(days) || days < 1 || days > 365) return res.status(400).json({ error: "Choose weekly, every 2 weeks, monthly, or a valid custom schedule" });
+    await client.query("BEGIN");
+    const order = await client.query("SELECT * FROM orders WHERE id=$1 AND user_id=$2", [order_id,req.user.id]);
+    if (!order.rows[0]) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Order not found" }); }
+    const items = await client.query("SELECT product_id,quantity FROM order_items WHERE order_id=$1", [order_id]);
+    if (!items.rows.length) { await client.query("ROLLBACK"); return res.status(400).json({ error: "This order has no products to schedule" }); }
+    const name = plan === "monthly" ? "Monthly Family Pantry" : plan === "weekly" ? "Weekly Supply" : plan === "biweekly" ? "Family Pantry" : "Custom Restock";
+    const group = await client.query("INSERT INTO subscription_groups (user_id,name,plan,custom_days,next_delivery) VALUES ($1,$2,$3,$4,NOW()+($5 * INTERVAL '1 day')) RETURNING *", [req.user.id,name,plan,plan === "custom" ? days : null,days]);
+    for (const item of items.rows) await client.query("INSERT INTO subscription_group_items (subscription_group_id,product_id,quantity) VALUES ($1,$2,$3)", [group.rows[0].id,item.product_id,item.quantity]);
+    await client.query("COMMIT"); res.status(201).json(group.rows[0]);
+  } catch (err) { await client.query("ROLLBACK"); console.error("CREATE SUBSCRIPTION GROUP ERROR:",err); res.status(500).json({ error:"Failed to schedule repeat order" }); } finally { client.release(); }
+});
+
+router.get("/groups/me", verifyToken, async (req,res) => {
+  try { const groups=await pool.query("SELECT * FROM subscription_groups WHERE user_id=$1 ORDER BY created_at DESC",[req.user.id]); const items=await pool.query("SELECT i.*,p.name,p.weight FROM subscription_group_items i JOIN products p ON p.id=i.product_id WHERE i.subscription_group_id=ANY($1::int[])",[groups.rows.map(g=>g.id)]); res.json(groups.rows.map(g=>({...g,items:items.rows.filter(i=>i.subscription_group_id===g.id)}))); }
+  catch(err){console.error("GET SUBSCRIPTION GROUPS ERROR:",err);res.status(500).json({error:"Failed to load subscriptions"});}
+});
+router.patch("/groups/:id", verifyToken, async (req,res) => {
+  try { const { action,next_delivery }=req.body; const statuses={pause:"paused",resume:"active",cancel:"cancelled"}; if (!statuses[action] && action!=="skip" && action!=="reschedule") return res.status(400).json({error:"Invalid subscription action"}); const result=action==="skip"?await pool.query("UPDATE subscription_groups SET next_delivery=next_delivery+(CASE WHEN plan='weekly' THEN INTERVAL '7 days' WHEN plan='biweekly' THEN INTERVAL '14 days' WHEN plan='monthly' THEN INTERVAL '30 days' ELSE custom_days*INTERVAL '1 day' END) WHERE id=$1 AND user_id=$2 RETURNING *",[req.params.id,req.user.id]):action==="reschedule"?await pool.query("UPDATE subscription_groups SET next_delivery=$1 WHERE id=$2 AND user_id=$3 RETURNING *",[next_delivery,req.params.id,req.user.id]):await pool.query("UPDATE subscription_groups SET status=$1 WHERE id=$2 AND user_id=$3 RETURNING *",[statuses[action],req.params.id,req.user.id]); if(!result.rows[0])return res.status(404).json({error:"Subscription not found"});res.json(result.rows[0]); }
+  catch(err){console.error("MANAGE SUBSCRIPTION ERROR:",err);res.status(500).json({error:"Failed to update subscription"});}
 });
 
 /* =========================

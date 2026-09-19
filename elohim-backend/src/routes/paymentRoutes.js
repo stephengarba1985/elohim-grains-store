@@ -89,10 +89,12 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
            '{paystack}',
            $2::jsonb
          )
-       WHERE reference=$1
+       WHERE reference=$1 AND status <> 'verified'
        RETURNING *`,
       [reference, JSON.stringify(payment)]
     );
+
+    if (!updated.rows[0]) return res.sendStatus(200);
 
     if (updated.rows[0].order_id) {
       await pool.query(
@@ -274,13 +276,15 @@ router.post("/verify", async (req, res) => {
            '{paystack}',
            $2::jsonb
          )
-       WHERE reference=$1
+       WHERE reference=$1 AND status <> 'verified'
        RETURNING *`,
       [
         reference,
         JSON.stringify(payment),
       ]
     );
+
+    if (!updated.rows[0]) return res.json({ success: true, message: "Payment already verified." });
 
     if (updated.rows[0].order_id) {
       await pool.query(

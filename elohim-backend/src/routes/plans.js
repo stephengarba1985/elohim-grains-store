@@ -5,6 +5,7 @@ const {
   getWalletBalance,
   insertTransaction,
 } = require("./walletRoutes");
+const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -28,6 +29,8 @@ const planSelect = `
 `;
 
 const ensurePlanColumns = async () => {
+  await pool.query(`CREATE TABLE IF NOT EXISTS food_savings_terms (id INTEGER PRIMARY KEY DEFAULT 1, terms_version VARCHAR(30) NOT NULL DEFAULT '1.0', cancellation_fee_percent DECIMAL(5,2) NOT NULL DEFAULT 0, food_only BOOLEAN NOT NULL DEFAULT TRUE, wallet_held BOOLEAN NOT NULL DEFAULT TRUE, updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+  await pool.query("INSERT INTO food_savings_terms (id) VALUES (1) ON CONFLICT (id) DO NOTHING");
   await ensureWalletTables();
   await pool.query(`CREATE OR REPLACE FUNCTION mirror_savings_ledger() RETURNS trigger AS $$ BEGIN INSERT INTO financial_ledger (user_id,source,source_id,direction,amount,reference,note) SELECT user_id,'savings',NEW.id,'credit',NEW.amount,'PLAN-' || NEW.plan_id,'Food savings contribution' FROM grain_plans WHERE id=NEW.plan_id; RETURN NEW; END; $$ LANGUAGE plpgsql`);
   await pool.query(`DROP TRIGGER IF EXISTS savings_ledger_mirror ON grain_plan_payments; CREATE TRIGGER savings_ledger_mirror AFTER INSERT ON grain_plan_payments FOR EACH ROW EXECUTE FUNCTION mirror_savings_ledger()`);
@@ -189,6 +192,9 @@ const completePlanIfReady = async (client, plan, newAmount) => {
 /* =========================
    CREATE PLAN
 ========================= */
+router.get("/terms", async (req,res)=>{try{await ensurePlanColumns();const result=await pool.query("SELECT terms_version,cancellation_fee_percent,food_only,wallet_held,updated_at FROM food_savings_terms WHERE id=1");res.json({...result.rows[0],summary:"Food Savings are held in your Elohim wallet and can only be used toward eligible food purchases. They are not cash-withdrawable."});}catch(err){res.status(500).json({error:"Failed to load Food Savings terms"});}});
+router.put("/admin/terms", verifyToken, isAdmin, async(req,res)=>{try{await ensurePlanColumns();const fee=Number(req.body.cancellation_fee_percent);if(!Number.isFinite(fee)||fee<0||fee>100)return res.status(400).json({error:"Enter a fee from 0 to 100"});const result=await pool.query("UPDATE food_savings_terms SET terms_version=$1,cancellation_fee_percent=$2,updated_by=$3,updated_at=CURRENT_TIMESTAMP WHERE id=1 RETURNING *",[req.body.terms_version||"1.0",fee,req.user.id]);res.json(result.rows[0]);}catch(err){res.status(500).json({error:"Failed to update Food Savings terms"});}});
+
 router.post("/", async (req, res) => {
   const {
     user_id,

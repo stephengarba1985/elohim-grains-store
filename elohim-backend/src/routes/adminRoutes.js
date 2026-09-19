@@ -3,7 +3,11 @@ const pool = require("../config/db");
 const { ensureWalletTables, getWalletBalance } = require("./walletRoutes");
 const { verifyToken, isAdmin, requirePermission } = require("../middleware/auth");
 
-const ensureAdminAudit = () => pool.query(`CREATE TABLE IF NOT EXISTS admin_audit_log (id SERIAL PRIMARY KEY, administrator_id INTEGER REFERENCES users(id) ON DELETE SET NULL, action VARCHAR(120) NOT NULL, target_type VARCHAR(80), target_id VARCHAR(80), details JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+const ensureAdminAudit = async () => {
+  await pool.query(`CREATE TABLE IF NOT EXISTS admin_audit_log (id SERIAL PRIMARY KEY, administrator_id INTEGER REFERENCES users(id) ON DELETE SET NULL, action VARCHAR(120) NOT NULL, target_type VARCHAR(80), target_id VARCHAR(80), details JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+  await pool.query(`CREATE OR REPLACE FUNCTION prevent_admin_audit_mutation() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'Admin audit records are immutable'; END; $$ LANGUAGE plpgsql`);
+  await pool.query(`DROP TRIGGER IF EXISTS admin_audit_immutable ON admin_audit_log; CREATE TRIGGER admin_audit_immutable BEFORE UPDATE OR DELETE ON admin_audit_log FOR EACH ROW EXECUTE FUNCTION prevent_admin_audit_mutation()`);
+};
 
 const router = express.Router();
 
@@ -197,6 +201,11 @@ router.get("/transaction-ledger", verifyToken, requirePermission("ledger"), asyn
     ].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     res.json({ transactions: ledger });
   } catch (err) { console.error("LEDGER ERROR:", err); res.status(500).json({ error: "Failed to load transaction ledger" }); }
+});
+
+router.get("/audit-log", verifyToken, isAdmin, async (req,res) => {
+  try { await ensureAdminAudit(); const result=await pool.query("SELECT a.*,u.name AS administrator_name FROM admin_audit_log a LEFT JOIN users u ON u.id=a.administrator_id ORDER BY a.created_at DESC LIMIT 300"); res.json(result.rows); }
+  catch(err){console.error("ADMIN AUDIT LOG ERROR:",err);res.status(500).json({error:"Failed to load audit log"});}
 });
 
 router.get("/analytics", verifyToken, requirePermission("reports"), async (req, res) => {

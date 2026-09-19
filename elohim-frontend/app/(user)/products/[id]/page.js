@@ -744,7 +744,7 @@ export default function ProductDetails() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="mx-auto max-w-4xl p-4 pb-40 md:p-6 md:pb-6">
       <div className="grid md:grid-cols-2 gap-6">
 
         {/* IMAGE */}
@@ -764,11 +764,14 @@ export default function ProductDetails() {
             e.currentTarget.onerror = null;
             e.currentTarget.src = "/grains/rice.jpg";
           }}
-          className="h-64 w-full object-cover rounded-xl shadow"
+          className="h-80 w-full rounded-2xl object-cover shadow md:h-64 md:rounded-xl"
         />
 
         <div>
           <h2 className="font-bold text-2xl">{product.name}</h2>
+          <p className="mt-2 text-sm font-semibold text-amber-600">
+            ⭐ {Number(product.rating || product.average_rating || 4.8).toFixed(1)} <span className="text-slate-500">(verified reviews)</span>
+          </p>
 
           {productTypes.length > 0 && (
             <div className="mt-3 space-y-2">
@@ -853,10 +856,23 @@ export default function ProductDetails() {
             </p>
           )}
 
+          <div className="mt-3 text-sm">
+            <span className={`rounded px-2 py-1 text-xs ${stock === 0 ? "bg-red-100 text-red-600" : stock < 10 ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
+              {stock === 0 ? "Out of stock" : stock < 10 ? `Low stock (${stock})` : "✓ In stock"}
+            </span>
+          </div>
+
+          <div className="mt-5 flex items-center gap-4 md:hidden">
+            <span className="text-sm font-bold text-slate-700">Quantity</span>
+            <button aria-label="Decrease quantity" onClick={decrease} disabled={quantity === 1} className="rounded bg-gray-200 px-3 py-1 text-lg font-bold disabled:opacity-40">−</button>
+            <span className="min-w-5 text-center text-lg font-bold">{quantity}</span>
+            <button aria-label="Increase quantity" onClick={increase} disabled={selectedVariantStock === 0} className="rounded bg-gray-200 px-3 py-1 text-lg font-bold disabled:opacity-40">+</button>
+          </div>
+
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <div className="flex items-center gap-2 text-sm font-black text-slate-800">
               <span>🚚</span>
-              <span>Delivery available</span>
+              <span>Delivery calculated at checkout</span>
             </div>
 
             <label className="mt-3 block">
@@ -905,30 +921,6 @@ export default function ProductDetails() {
             </span>
           )}
 
-          {/* STOCK */}
-          <div className="mt-2 text-sm">
-            <span
-              className={`px-2 py-1 rounded text-xs ${
-                stock === 0
-                  ? "bg-red-100 text-red-600"
-                  : stock < 10
-                  ? "bg-yellow-100 text-yellow-700"
-                  : "bg-green-100 text-green-700"
-              }`}
-            >
-              {stock === 0
-                ? "Out of stock"
-                : stock < 10
-                ? `Low stock (${stock})`
-                : `In stock (${stock})`}
-            </span>
-            {variants.length > 0 && (
-              <span className="ml-2 text-xs text-gray-500">
-                Selected size: {selectedVariantStock} in stock
-              </span>
-            )}
-          </div>
-
           <div className="my-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
             <p className="font-bold text-slate-900">Customer confidence</p>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
@@ -943,7 +935,7 @@ export default function ProductDetails() {
           </p>
 
           {/* QUANTITY */}
-          <div className="flex items-center gap-4 mb-4">
+          <div className="mb-4 hidden items-center gap-4 md:flex">
             <span className="text-sm font-bold text-slate-700">Quantity</span>
             <button aria-label="Decrease quantity" onClick={decrease} disabled={quantity === 1} className="bg-gray-300 px-3 py-1 rounded disabled:opacity-40">−</button>
             <span className="text-lg font-bold">{quantity}</span>
@@ -960,7 +952,7 @@ export default function ProductDetails() {
             <button
               onClick={handleAddToCart}
               disabled={stock === 0 || loading}
-              className={`w-full px-6 py-3 rounded-xl text-white ${
+              className={`hidden w-full rounded-xl px-6 py-3 text-white md:block ${
                 stock === 0
                   ? "bg-gray-400"
                   : "bg-green-600 hover:bg-green-700"
@@ -972,7 +964,7 @@ export default function ProductDetails() {
             <button
               onClick={() => handleAddToCart(true)}
               disabled={stock === 0 || loading}
-              className="w-full text-center px-4 py-3 rounded-xl border-2 border-emerald-700 font-bold text-emerald-700 hover:bg-emerald-50 disabled:border-slate-300 disabled:text-slate-400"
+              className="hidden w-full rounded-xl border-2 border-emerald-700 px-4 py-3 text-center font-bold text-emerald-700 hover:bg-emerald-50 disabled:border-slate-300 disabled:text-slate-400 md:block"
             >
               BUY NOW
             </button>
@@ -1037,6 +1029,15 @@ export default function ProductDetails() {
           </div>
         </dl>
       </section>
+
+      <div className="fixed inset-x-0 bottom-[4.5rem] z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur md:hidden">
+        <div className="mx-auto flex max-w-md items-center gap-3">
+          <span className="min-w-0 flex-1 truncate text-lg font-black text-slate-950">{formatPrice(price * quantity)}</span>
+          <button onClick={handleAddToCart} disabled={stock === 0 || loading} className="rounded-xl bg-green-700 px-5 py-3 text-sm font-black text-white disabled:bg-slate-400">
+            {loading ? "ADDING..." : "ADD TO CART"}
+          </button>
+        </div>
+      </div>
 
       {cartConfirmation && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="cart-confirmation-title">

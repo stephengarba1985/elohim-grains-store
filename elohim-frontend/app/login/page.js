@@ -222,19 +222,19 @@ export default function AuthPage() {
           <button className="bg-green-600 hover:bg-green-700 text-white w-full py-2 rounded">
             {isLogin ? "Login" : "Register"}
           </button>
+          </>}
         </form>
 
         <p className="text-center mt-4 text-sm">
           {isLogin ? (
             <>
               Don't have an account?{" "}
-          <button
+              <button
                 onClick={() => setIsLogin(false)}
                 className="text-green-600 font-semibold"
               >
                 Register
-          </button>
-          </>}
+              </button>
             </>
           ) : (
             <>

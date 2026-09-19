@@ -1,6 +1,27 @@
 const express = require('express')
 const router = express.Router()
 const pool = require('../config/db')
+const { verifyToken } = require('../middleware/auth')
+
+const ensureCartRecovery = () => pool.query(`CREATE TABLE IF NOT EXISTS cart_recovery_preferences (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  reminder_consent BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`)
+
+router.get('/recovery/:user_id', verifyToken, async (req,res) => {
+  try {
+    if (Number(req.params.user_id) !== Number(req.user.id) && !req.user.is_admin) return res.status(403).json({ error: 'Not authorised' })
+    await ensureCartRecovery()
+    const consent = await pool.query('SELECT reminder_consent FROM cart_recovery_preferences WHERE user_id=$1',[req.params.user_id])
+    const items = await pool.query(`SELECT c.product_id,c.quantity,p.name,p.price,p.image_url FROM cart c JOIN products p ON p.id=c.product_id WHERE c.user_id=$1 ORDER BY c.created_at DESC`,[req.params.user_id])
+    res.json({ consent: consent.rows[0]?.reminder_consent === true, has_cart: items.rows.length > 0, items: items.rows })
+  } catch(err) { console.error('CART RECOVERY ERROR:',err);res.status(500).json({error:'Failed to load saved cart'}) }
+})
+router.patch('/recovery-preferences', verifyToken, async (req,res) => {
+  try { await ensureCartRecovery(); const consent=req.body.reminder_consent===true; const result=await pool.query(`INSERT INTO cart_recovery_preferences (user_id,reminder_consent) VALUES ($1,$2) ON CONFLICT (user_id) DO UPDATE SET reminder_consent=EXCLUDED.reminder_consent,updated_at=CURRENT_TIMESTAMP RETURNING *`,[req.user.id,consent]);res.json(result.rows[0]) }
+  catch(err) { console.error('CART RECOVERY PREFERENCE ERROR:',err);res.status(500).json({error:'Failed to save preference'}) }
+})
 
 /* =========================
    ADD TO CART (CLEAN + SAFE)

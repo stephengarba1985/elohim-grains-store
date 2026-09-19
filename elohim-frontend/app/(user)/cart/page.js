@@ -33,6 +33,7 @@ export default function CartPage() {
   const [bnplChecked, setBnplChecked] = useState(false);
   const [bnplChecking, setBnplChecking] = useState(false);
   const [showOrderReview, setShowOrderReview] = useState(false);
+  const [cartReminderConsent, setCartReminderConsent] = useState(false);
 
   /* =========================
      INIT USER + LOAD CART
@@ -61,6 +62,7 @@ export default function CartPage() {
         deliveryPhone: savedDetails.deliveryPhone || parsedUser.phone || "",
       }));
       fetchCart();
+      API.get(`/cart/recovery/${parsedUser.id}`).then((res) => setCartReminderConsent(res.data?.consent === true)).catch(() => {});
       Promise.allSettled([
         API.get(`/wallet/${parsedUser.id}`),
         API.get(`/bnpl/user/${parsedUser.id}`),
@@ -681,6 +683,8 @@ export default function CartPage() {
           </div>
         </>
       )}
+
+      {cart.length > 0 && <label className="mb-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600"><input type="checkbox" checked={cartReminderConsent} onChange={async (event) => { const consent = event.target.checked; setCartReminderConsent(consent); try { await API.patch("/cart/recovery-preferences", { reminder_consent: consent }); toast.success(consent ? "Cart reminders enabled" : "Cart reminders disabled"); } catch { setCartReminderConsent(!consent); toast.error("Could not save reminder preference"); } }} /><span>Send me a reminder about items I leave in my cart. You can turn this off anytime.</span></label>}
 
       {showOrderReview && (
         <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="order-review-title">

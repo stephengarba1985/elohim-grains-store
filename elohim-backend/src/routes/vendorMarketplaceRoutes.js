@@ -34,6 +34,7 @@ const ensureVendorTables = async () => {
         ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP,
         ADD COLUMN IF NOT EXISTS reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL
     `);
+    await pool.query("UPDATE vendor_profiles SET verification_status='approved' WHERE verification_status='verified'");
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS vendor_products (
@@ -119,7 +120,7 @@ router.get("/", async (req, res) => {
   try {
     const vendorsRes = await pool.query(`
       ${vendorSelect}
-      WHERE v.verification_status = 'verified'
+      WHERE v.verification_status = 'approved'
       GROUP BY v.id, u.name, u.email
       ORDER BY v.rating_avg DESC, v.created_at DESC
     `);
@@ -135,7 +136,7 @@ router.get("/", async (req, res) => {
         v.rating_count
       FROM vendor_products p
       JOIN vendor_profiles v ON v.id = p.vendor_id
-      WHERE p.status = 'active'
+      WHERE p.status = 'active' AND v.verification_status = 'approved'
       ORDER BY p.created_at DESC
     `);
 
@@ -249,7 +250,7 @@ router.post("/products", verifyToken, async (req, res) => {
 
     const vendor = vendorRes.rows[0];
 
-    if (vendor.verification_status !== "verified") {
+    if (vendor.verification_status !== "approved") {
       return res.status(403).json({ error: "Your vendor application must be approved before products can be published" });
     }
 
@@ -288,7 +289,7 @@ router.post("/orders", verifyToken, async (req, res) => {
       `SELECT p.*, v.commission_rate
        FROM vendor_products p
        JOIN vendor_profiles v ON v.id = p.vendor_id
-       WHERE p.id = $1 AND p.status = 'active'`,
+       WHERE p.id = $1 AND p.status = 'active' AND v.verification_status = 'approved'`,
       [vendor_product_id]
     );
 
@@ -418,7 +419,7 @@ router.get("/admin/overview", verifyToken, isAdmin, async (req, res) => {
 router.patch("/admin/vendors/:id/verification", verifyToken, isAdmin, async (req, res) => {
   try {
     const { status, commission_rate } = req.body;
-    const allowedStatuses = ["pending", "verified", "rejected"];
+    const allowedStatuses = ["pending", "under_review", "approved", "suspended", "rejected"];
 
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({ error: "Invalid verification status" });

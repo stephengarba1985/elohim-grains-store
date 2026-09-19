@@ -158,7 +158,7 @@ export default function VendorMarketplacePage() {
   }, []);
 
   const verifiedVendors = useMemo(
-    () => vendors.filter((vendor) => vendor.verification_status === "verified"),
+    () => vendors.filter((vendor) => vendor.verification_status === "approved"),
     [vendors]
   );
 
@@ -340,7 +340,7 @@ export default function VendorMarketplacePage() {
                           </p>
                         </div>
                         <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-bold text-green-700">
-                          Verified
+                          Verified Vendor
                         </span>
                       </div>
                       <div className="mt-4 flex items-center justify-between gap-3">

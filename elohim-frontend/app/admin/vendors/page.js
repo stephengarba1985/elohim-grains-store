@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 
 const statusClass = (status) => {
-  if (status === "verified" || status === "paid" || status === "delivered") {
+  if (status === "approved" || status === "paid" || status === "delivered") {
     return "bg-green-100 text-green-700";
   }
   if (status === "rejected" || status === "cancelled" || status === "failed") {
@@ -152,11 +152,18 @@ export default function AdminVendorsPage() {
                   <td className="p-3">
                     <div className="flex gap-2">
                       <button
-                        onClick={() => updateVerification(vendor, "verified")}
+                        onClick={() => updateVerification(vendor, "under_review")}
+                        className="rounded bg-amber-600 px-3 py-1 text-xs font-bold text-white"
+                      >
+                        Review
+                      </button>
+                      <button
+                        onClick={() => updateVerification(vendor, "approved")}
                         className="rounded bg-green-700 px-3 py-1 text-xs font-bold text-white"
                       >
-                        Verify
+                        Approve
                       </button>
+                      <button onClick={() => updateVerification(vendor, "suspended")} className="rounded bg-slate-700 px-3 py-1 text-xs font-bold text-white">Suspend</button>
                       <button
                         onClick={() => updateVerification(vendor, "rejected")}
                         className="rounded bg-red-600 px-3 py-1 text-xs font-bold text-white"

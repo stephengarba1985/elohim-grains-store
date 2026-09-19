@@ -113,6 +113,13 @@ const ensureVendorTables = async () => {
       status VARCHAR(30) NOT NULL DEFAULT 'pending', paid_at TIMESTAMP, paid_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS vendor_disputes (
+      id SERIAL PRIMARY KEY, vendor_order_id INTEGER REFERENCES vendor_orders(id) ON DELETE SET NULL, vendor_id INTEGER REFERENCES vendor_profiles(id) ON DELETE SET NULL,
+      subject VARCHAR(255) NOT NULL, status VARCHAR(30) NOT NULL DEFAULT 'open', notes TEXT, opened_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, resolved_at TIMESTAMP
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS vendor_admin_audit (
+      id SERIAL PRIMARY KEY, administrator_id INTEGER REFERENCES users(id) ON DELETE SET NULL, action VARCHAR(120) NOT NULL, target_type VARCHAR(60), target_id VARCHAR(80), details JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
   })();
 
   try {
@@ -127,6 +134,10 @@ const parsePositiveNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : null;
 };
+const auditVendorAction = (administratorId, action, targetType, targetId, details = {}) => pool.query(
+  "INSERT INTO vendor_admin_audit (administrator_id,action,target_type,target_id,details) VALUES ($1,$2,$3,$4,$5)",
+  [administratorId, action, targetType, String(targetId), JSON.stringify(details)]
+);
 
 const vendorSelect = `
   SELECT
@@ -349,6 +360,7 @@ router.patch("/admin/products/:id/review", verifyToken, isAdmin, async (req,res)
     if (status === "active" && (!product.category || !product.description || !product.weight || !product.packaging || !product.image_url)) return res.status(400).json({error:"Category, description, unit/weight, packaging and image are required before publishing"});
     const result = await pool.query("UPDATE vendor_products SET status=$1,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=$2,catalog_name=COALESCE(catalog_name,$4) WHERE id=$3 RETURNING *",[status,req.user.id,req.params.id,canonicalProductName(product.name)]);
     if(!result.rows[0]) return res.status(404).json({error:"Product submission not found"});
+    await auditVendorAction(req.user.id, "vendor_product_reviewed", "vendor_product", result.rows[0].id, { status });
     res.json(result.rows[0]);
   } catch(err){console.error("VENDOR PRODUCT REVIEW ERROR:",err);res.status(500).json({error:"Failed to review product"});}
 });
@@ -518,17 +530,17 @@ router.get("/admin/overview", verifyToken, isAdmin, async (req, res) => {
       ORDER BY o.created_at DESC
     `);
 
-    const totalsRes = await pool.query(`
-      SELECT
-        COUNT(DISTINCT v.id)::int AS vendors,
-        COUNT(DISTINCT p.id)::int AS products,
-        COUNT(DISTINCT o.id)::int AS orders,
-        COALESCE(SUM(o.total_amount), 0) AS gross_sales,
-        COALESCE(SUM(o.commission_amount), 0) AS commission_earned
-      FROM vendor_profiles v
-      LEFT JOIN vendor_products p ON p.vendor_id = v.id
-      LEFT JOIN vendor_orders o ON o.vendor_id = v.id
-    `);
+    const totalsRes = await pool.query(`SELECT
+      (SELECT COUNT(*)::int FROM vendor_profiles) AS vendors,
+      (SELECT COUNT(*)::int FROM vendor_profiles WHERE verification_status IN ('pending','under_review')) AS vendor_applications,
+      (SELECT COUNT(*)::int FROM vendor_profiles WHERE verification_status='approved') AS approved_vendors,
+      (SELECT COUNT(*)::int FROM vendor_products) AS products,
+      (SELECT COUNT(*)::int FROM vendor_products WHERE status='pending_review') AS products_awaiting_approval,
+      (SELECT COUNT(*)::int FROM vendor_orders) AS orders,
+      (SELECT COALESCE(SUM(total_amount),0) FROM vendor_orders) AS gross_sales,
+      (SELECT COALESCE(SUM(commission_amount),0) FROM vendor_orders) AS commission_earned,
+      (SELECT COALESCE(SUM(settlement_amount),0) FROM vendor_payouts WHERE status IN ('pending','available')) AS pending_settlements,
+      (SELECT COUNT(*)::int FROM vendor_disputes WHERE status IN ('open','under_review')) AS disputes`);
 
     res.json({
       totals: totalsRes.rows[0] || {},
@@ -566,6 +578,7 @@ router.patch("/admin/vendors/:id/verification", verifyToken, isAdmin, async (req
         req.user.id,
       ]
     );
+    if (result.rows[0]) await auditVendorAction(req.user.id, "vendor_verification_updated", "vendor", result.rows[0].id, { status });
 
     res.json(result.rows[0]);
   } catch (err) {

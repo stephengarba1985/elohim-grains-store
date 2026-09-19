@@ -113,29 +113,33 @@ export default function AdminVendorsPage() {
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <div className="rounded bg-white p-4 shadow">
-          <p className="text-sm text-gray-500">Vendors</p>
-          <h2 className="text-xl font-bold text-slate-950">{totals.vendors || 0}</h2>
+          <p className="text-sm text-gray-500">Vendor Applications</p>
+          <h2 className="text-xl font-bold text-slate-950">{totals.vendor_applications || 0}</h2>
         </div>
         <div className="rounded bg-white p-4 shadow">
-          <p className="text-sm text-gray-500">Products</p>
-          <h2 className="text-xl font-bold text-slate-950">{totals.products || 0}</h2>
+          <p className="text-sm text-gray-500">Approved Vendors</p>
+          <h2 className="text-xl font-bold text-slate-950">{totals.approved_vendors || 0}</h2>
         </div>
         <div className="rounded bg-white p-4 shadow">
-          <p className="text-sm text-gray-500">Orders</p>
+          <p className="text-sm text-gray-500">Products Awaiting Approval</p>
+          <h2 className="text-xl font-bold text-slate-950">{totals.products_awaiting_approval || 0}</h2>
+        </div>
+        <div className="rounded bg-white p-4 shadow">
+          <p className="text-sm text-gray-500">Vendor Orders</p>
           <h2 className="text-xl font-bold text-slate-950">{totals.orders || 0}</h2>
         </div>
         <div className="rounded bg-white p-4 shadow">
-          <p className="text-sm text-gray-500">Gross Sales</p>
-          <h2 className="text-xl font-bold text-green-700">
-            {formatPrice(totals.gross_sales)}
+          <p className="text-sm text-gray-500">Pending Settlements</p>
+          <h2 className="text-xl font-bold text-amber-600">
+            {formatPrice(totals.pending_settlements)}
           </h2>
         </div>
         <div className="rounded bg-white p-4 shadow">
-          <p className="text-sm text-gray-500">Commission</p>
-          <h2 className="text-xl font-bold text-amber-600">
-            {formatPrice(totals.commission_earned)}
+          <p className="text-sm text-gray-500">Open Disputes</p>
+          <h2 className="text-xl font-bold text-red-600">
+            {totals.disputes || 0}
           </h2>
         </div>
       </div>

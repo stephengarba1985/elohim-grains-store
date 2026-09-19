@@ -38,7 +38,7 @@ const marketSignals = [
 const bulkOrderBenefits = [
   "Wholesale pricing for recurring buyers",
   "Shared delivery for groups and cooperatives",
-  "Escrow option for large supply orders",
+  "Payment-hold review for qualifying large supply orders",
 ];
 
 const quickActions = [

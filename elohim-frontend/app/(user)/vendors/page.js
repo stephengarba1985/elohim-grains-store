@@ -122,6 +122,7 @@ export default function VendorMarketplacePage() {
   const [myVendor, setMyVendor] = useState(null);
   const [myProducts, setMyProducts] = useState([]);
   const [myOrders, setMyOrders] = useState([]);
+  const [reviewableOrders, setReviewableOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [vendorForm, setVendorForm] = useState({
     business_name: "",
@@ -161,6 +162,7 @@ export default function VendorMarketplacePage() {
 
     fetchMarketplace();
     fetchMyVendor();
+    fetchReviewableOrders();
   }, []);
 
   const verifiedVendors = useMemo(
@@ -194,6 +196,14 @@ export default function VendorMarketplacePage() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const fetchReviewableOrders = async () => {
+    if (!localStorage.getItem("token")) return;
+    try {
+      const res = await API.get("/vendors/ratings/eligible");
+      setReviewableOrders(Array.isArray(res.data) ? res.data : []);
+    } catch (err) { console.error(err); }
   };
 
   const registerVendor = async (event) => {
@@ -247,19 +257,22 @@ export default function VendorMarketplacePage() {
     }
   };
 
-  const rateVendor = async (vendorId, rating) => {
+  const rateVendor = async (orderId, rating) => {
     if (!user) {
       return toast.error("Please login to rate a vendor");
     }
 
     try {
       await API.post("/vendors/ratings", {
-        vendor_id: vendorId,
-        rating,
-        comment: "Customer marketplace rating",
+        vendor_order_id: orderId,
+        product_quality_rating: rating,
+        packaging_rating: rating,
+        delivery_rating: rating,
+        comment: "Verified marketplace purchase review",
       });
-      toast.success("Vendor rated");
+      toast.success("Verified review submitted");
       fetchMarketplace();
+      fetchReviewableOrders();
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.error || "Rating failed");
@@ -296,6 +309,8 @@ export default function VendorMarketplacePage() {
           </div>
         </div>
       </section>
+
+      {reviewableOrders.length > 0 && <section className="mx-auto max-w-7xl px-4 py-6 md:px-6"><div className="rounded-xl border border-amber-200 bg-amber-50 p-5"><h2 className="font-black text-slate-950">Rate your delivered order</h2><p className="mt-1 text-sm text-slate-600">Verified reviews only — rate product quality, packaging and delivery together.</p>{reviewableOrders.map((order) => <div key={order.vendor_order_id} className="mt-3 flex flex-wrap items-center justify-between gap-3"><span className="text-sm font-semibold">{order.product_name} from {order.business_name}</span><div className="flex gap-1">{[1,2,3,4,5].map((rating) => <button key={rating} onClick={() => rateVendor(order.vendor_order_id, rating)} className="rounded bg-white px-3 py-1 text-xs font-bold text-amber-700">{rating}★</button>)}</div></div>)}</div></section>}
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 md:px-6">
         <section className="grid gap-4 lg:grid-cols-[1fr_380px]">
@@ -452,17 +467,7 @@ export default function VendorMarketplacePage() {
                         {Number(vendor.rating_avg || 0).toFixed(1)}
                       </p>
                     </div>
-                    <div className="mt-3 grid grid-cols-5 gap-1">
-                      {[1, 2, 3, 4, 5].map((rating) => (
-                        <button
-                          key={rating}
-                          onClick={() => rateVendor(vendor.id, rating)}
-                          className="rounded bg-amber-50 py-1 text-xs font-bold text-amber-700 hover:bg-amber-100"
-                        >
-                          {rating}
-                        </button>
-                      ))}
-                    </div>
+                    <p className="mt-3 text-xs font-semibold text-emerald-700">Verified reviews: {vendor.rating_count || 0} · Completed orders: {vendor.completed_order_count || 0}</p>
                   </div>
                 ))}
                 {verifiedVendors.length === 0 && (

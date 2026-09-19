@@ -68,7 +68,12 @@ const ensureVendorTables = async () => {
         id SERIAL PRIMARY KEY,
         vendor_id INTEGER REFERENCES vendor_profiles(id) ON DELETE CASCADE,
         user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        vendor_order_id INTEGER UNIQUE,
         rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+        product_quality_rating INTEGER CHECK (product_quality_rating BETWEEN 1 AND 5),
+        packaging_rating INTEGER CHECK (packaging_rating BETWEEN 1 AND 5),
+        delivery_rating INTEGER CHECK (delivery_rating BETWEEN 1 AND 5),
+        verified_purchase BOOLEAN NOT NULL DEFAULT FALSE,
         comment TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -89,6 +94,7 @@ const ensureVendorTables = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await pool.query("ALTER TABLE vendor_ratings ADD COLUMN IF NOT EXISTS vendor_order_id INTEGER UNIQUE, ADD COLUMN IF NOT EXISTS product_quality_rating INTEGER, ADD COLUMN IF NOT EXISTS packaging_rating INTEGER, ADD COLUMN IF NOT EXISTS delivery_rating INTEGER, ADD COLUMN IF NOT EXISTS verified_purchase BOOLEAN NOT NULL DEFAULT FALSE");
     await pool.query(`CREATE TABLE IF NOT EXISTS vendor_commission_rules (
       id SERIAL PRIMARY KEY, scope VARCHAR(30) NOT NULL, vendor_id INTEGER REFERENCES vendor_profiles(id) ON DELETE CASCADE,
       category VARCHAR(120), contract_name VARCHAR(255), rate DECIMAL(5,2) NOT NULL, active BOOLEAN DEFAULT TRUE,
@@ -129,6 +135,7 @@ const vendorSelect = `
     u.email AS owner_email,
     COUNT(DISTINCT p.id)::int AS product_count,
     COUNT(DISTINCT o.id)::int AS order_count,
+    COUNT(DISTINCT o.id) FILTER (WHERE o.delivery_status = 'delivered')::int AS completed_order_count,
     COALESCE(SUM(o.total_amount), 0) AS gross_sales,
     COALESCE(SUM(o.commission_amount), 0) AS commission_earned
   FROM vendor_profiles v
@@ -430,24 +437,37 @@ router.post("/admin/commission-rules", verifyToken, isAdmin, async (req,res) => 
   const result=await pool.query("INSERT INTO vendor_commission_rules (scope,vendor_id,category,contract_name,rate) VALUES ($1,$2,$3,$4,$5) RETURNING *",[scope,vendor_id||null,category||null,contract_name||null,rate]);res.json(result.rows[0]);
 });
 
+router.get("/ratings/eligible", verifyToken, async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT o.id AS vendor_order_id,o.order_reference,p.name AS product_name,v.business_name
+      FROM vendor_orders o JOIN vendor_products p ON p.id=o.vendor_product_id JOIN vendor_profiles v ON v.id=o.vendor_id
+      LEFT JOIN vendor_ratings r ON r.vendor_order_id=o.id
+      WHERE o.buyer_user_id=$1 AND o.delivery_status='delivered' AND r.id IS NULL ORDER BY o.created_at DESC`, [req.user.id]);
+    res.json(result.rows);
+  } catch (err) { console.error("ELIGIBLE RATINGS ERROR:", err); res.status(500).json({ error: "Failed to load reviewable orders" }); }
+});
+
 router.post("/ratings", verifyToken, async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { vendor_id, rating, comment } = req.body;
-    const parsedRating = Number(rating);
+    const { vendor_order_id, product_quality_rating, packaging_rating, delivery_rating, comment } = req.body;
+    const scores = [product_quality_rating, packaging_rating, delivery_rating].map(Number);
+    const parsedRating = Math.round((scores[0] + scores[1] + scores[2]) / 3);
 
-    if (!vendor_id || !Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
-      return res.status(400).json({ error: "Valid vendor and rating are required" });
+    if (!vendor_order_id || scores.some((score) => !Number.isInteger(score) || score < 1 || score > 5)) {
+      return res.status(400).json({ error: "A delivered order and all three rating scores are required" });
     }
 
     await client.query("BEGIN");
     const ratingRes = await client.query(
-      `INSERT INTO vendor_ratings (vendor_id, user_id, rating, comment)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO vendor_ratings (vendor_id, user_id, vendor_order_id, rating, product_quality_rating, packaging_rating, delivery_rating, verified_purchase, comment)
+       SELECT vendor_id, $1, id, $2, $3, $4, $5, TRUE, $6 FROM vendor_orders
+       WHERE id=$7 AND buyer_user_id=$1 AND delivery_status='delivered'
        RETURNING *`,
-      [vendor_id, req.user.id, parsedRating, comment || ""]
+      [req.user.id, parsedRating, scores[0], scores[1], scores[2], comment || "", vendor_order_id]
     );
+    if (!ratingRes.rows[0]) { await client.query("ROLLBACK"); return res.status(403).json({ error: "Only the customer of a delivered order can review it" }); }
 
     await client.query(
       `UPDATE vendor_profiles v
@@ -456,11 +476,11 @@ router.post("/ratings", verifyToken, async (req, res) => {
        FROM (
          SELECT vendor_id, ROUND(AVG(rating)::numeric, 2) AS rating_avg, COUNT(*)::int AS rating_count
          FROM vendor_ratings
-         WHERE vendor_id = $1
+         WHERE vendor_id = $1 AND verified_purchase = TRUE
          GROUP BY vendor_id
        ) stats
        WHERE v.id = stats.vendor_id`,
-      [vendor_id]
+      [ratingRes.rows[0].vendor_id]
     );
 
     await client.query("COMMIT");

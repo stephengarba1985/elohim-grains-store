@@ -162,15 +162,16 @@ router.get("/money-overview", verifyToken, requirePermission("wallet"), async (r
   try {
     await ensureWalletTables();
     const tableExists = async (name) => Boolean((await pool.query("SELECT to_regclass($1) AS value", [name])).rows[0].value);
-    const [hasPlans, hasBnpl, hasPayments] = await Promise.all([tableExists("public.grain_plans"), tableExists("public.bnpl_agreements"), tableExists("public.payment_transactions")]);
-    const [sales, wallet, savings, bnpl, refunds] = await Promise.all([
+    const [hasPlans, hasBnpl, hasPayments, hasVendorPayouts] = await Promise.all([tableExists("public.grain_plans"), tableExists("public.bnpl_agreements"), tableExists("public.payment_transactions"), tableExists("public.vendor_payouts")]);
+    const [sales, wallet, savings, bnpl, refunds, vendorFunds] = await Promise.all([
       pool.query(`SELECT COALESCE(SUM(total_amount),0) AS value FROM orders WHERE DATE(created_at)=CURRENT_DATE AND (payment_status='verified' OR status IN ('paid','delivered','processing'))`),
       pool.query(`SELECT COALESCE(SUM(CASE WHEN direction='credit' THEN amount ELSE -amount END),0) AS value FROM wallet_transactions`),
       hasPlans ? pool.query("SELECT COALESCE(SUM(amount_paid),0) AS value FROM grain_plans WHERE status='active'") : { rows: [{ value: 0 }] },
       hasBnpl ? pool.query("SELECT COALESCE(SUM(total_amount-amount_paid),0) AS value FROM bnpl_agreements WHERE status='active'") : { rows: [{ value: 0 }] },
       hasPayments ? pool.query("SELECT COALESCE(SUM(amount),0) AS value FROM payment_transactions WHERE status='pending' AND channel='refund'") : { rows: [{ value: 0 }] },
+      hasVendorPayouts ? pool.query("SELECT COALESCE(SUM(settlement_amount),0) AS value FROM vendor_payouts WHERE status IN ('pending','available')") : { rows: [{ value: 0 }] },
     ]);
-    res.json({ sales_today: sales.rows[0].value, wallet_funds_held: wallet.rows[0].value, savings_funds_held: savings.rows[0].value, outstanding_bnpl: bnpl.rows[0].value, pending_refunds: refunds.rows[0].value });
+    res.json({ sales_today: sales.rows[0].value, wallet_funds_held: wallet.rows[0].value, savings_funds_held: savings.rows[0].value, pending_vendor_funds: vendorFunds.rows[0].value, outstanding_bnpl: bnpl.rows[0].value, pending_refunds: refunds.rows[0].value, accounting_rule: "Sales revenue, customer liabilities, vendor settlements and BNPL receivables are calculated separately and must not be netted together." });
   } catch (err) { console.error("MONEY OVERVIEW ERROR:", err); res.status(500).json({ error: "Failed to load money overview" }); }
 });
 

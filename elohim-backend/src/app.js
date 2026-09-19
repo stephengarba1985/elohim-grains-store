@@ -199,6 +199,14 @@ const paymentLimiter = rateLimit({
   },
 });
 
+const walletSecurityLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many sensitive wallet attempts. Please try again later." },
+});
+
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 120,
@@ -612,6 +620,10 @@ app.use(
   "/api/vendors",
   vendorMarketplaceRoutes
 );
+
+app.use("/api/wallet/set-pin", walletSecurityLimiter);
+app.use("/api/wallet/change-pin", walletSecurityLimiter);
+app.use("/api/wallet/fund/verify", walletSecurityLimiter);
 
 app.use(
   "/api/suppliers",

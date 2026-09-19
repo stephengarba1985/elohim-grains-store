@@ -95,6 +95,15 @@ const ensureVendorTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`);
     await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS commission_rate_applied DECIMAL(5,2)");
+    await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS settlement_status VARCHAR(30) NOT NULL DEFAULT 'pending', ADD COLUMN IF NOT EXISTS settled_at TIMESTAMP");
+    await pool.query(`CREATE TABLE IF NOT EXISTS vendor_payouts (
+      id SERIAL PRIMARY KEY, vendor_id INTEGER REFERENCES vendor_profiles(id) ON DELETE SET NULL,
+      vendor_order_id INTEGER UNIQUE REFERENCES vendor_orders(id) ON DELETE CASCADE,
+      gross_amount DECIMAL(10,2) NOT NULL, commission_amount DECIMAL(10,2) NOT NULL,
+      other_charges DECIMAL(10,2) NOT NULL DEFAULT 0, settlement_amount DECIMAL(10,2) NOT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'pending', paid_at TIMESTAMP, paid_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
   })();
 
   try {
@@ -211,14 +220,15 @@ router.get("/dashboard", verifyToken, async (req, res) => {
     const vendorRes = await pool.query("SELECT * FROM vendor_profiles WHERE user_id=$1", [req.user.id]);
     const vendor = vendorRes.rows[0];
     if (!vendor || vendor.verification_status !== "approved") return res.status(403).json({ error: "An approved vendor account is required" });
-    const [today, totals, products, orders, reviews] = await Promise.all([
+    const [today, totals, products, orders, reviews, payouts] = await Promise.all([
       pool.query(`SELECT COALESCE(SUM(total_amount),0) AS sales,COUNT(*)::int AS orders FROM vendor_orders WHERE vendor_id=$1 AND DATE(created_at)=CURRENT_DATE AND payment_status IN ('paid','escrow')`,[vendor.id]),
-      pool.query(`SELECT COUNT(*) FILTER (WHERE delivery_status IN ('pending','processing','assigned'))::int AS pending_fulfilment, COALESCE(SUM(total_amount-commission_amount) FILTER (WHERE payment_status IN ('paid','escrow') AND delivery_status='delivered'),0) AS available_payout FROM vendor_orders WHERE vendor_id=$1`,[vendor.id]),
+      pool.query(`SELECT COUNT(*) FILTER (WHERE delivery_status IN ('pending','processing','assigned'))::int AS pending_fulfilment, COALESCE(SUM(settlement_amount) FILTER (WHERE status='available'),0) AS available_payout FROM vendor_payouts WHERE vendor_id=$1`,[vendor.id]),
       pool.query("SELECT * FROM vendor_products WHERE vendor_id=$1 ORDER BY created_at DESC",[vendor.id]),
       pool.query(`SELECT o.*,p.name AS product_name,u.name AS buyer_name FROM vendor_orders o LEFT JOIN vendor_products p ON p.id=o.vendor_product_id LEFT JOIN users u ON u.id=o.buyer_user_id WHERE o.vendor_id=$1 ORDER BY o.created_at DESC LIMIT 50`,[vendor.id]),
       pool.query("SELECT * FROM vendor_ratings WHERE vendor_id=$1 ORDER BY created_at DESC LIMIT 20",[vendor.id]),
+      pool.query("SELECT * FROM vendor_payouts WHERE vendor_id=$1 ORDER BY created_at DESC LIMIT 30",[vendor.id]),
     ]);
-    res.json({ vendor, stats:{sales:today.rows[0].sales,orders:today.rows[0].orders,products:products.rows.length,pending_fulfilment:totals.rows[0].pending_fulfilment,available_payout:totals.rows[0].available_payout}, products:products.rows, orders:orders.rows, reviews:reviews.rows });
+    res.json({ vendor, stats:{sales:today.rows[0].sales,orders:today.rows[0].orders,products:products.rows.length,pending_fulfilment:totals.rows[0].pending_fulfilment,available_payout:totals.rows[0].available_payout}, products:products.rows, orders:orders.rows, reviews:reviews.rows, payouts:payouts.rows });
   } catch(err){ console.error("VENDOR DASHBOARD ERROR:",err);res.status(500).json({error:"Failed to load vendor dashboard"}); }
 });
 
@@ -542,10 +552,38 @@ router.patch("/admin/orders/:id/delivery", verifyToken, isAdmin, async (req, res
       [delivery_status || null, payment_status || null, req.params.id]
     );
 
-    res.json(result.rows[0]);
+    const order = result.rows[0];
+    if (["paid", "escrow"].includes(order.payment_status) && order.delivery_status === "delivered") {
+      const settlementAmount = Number(order.total_amount) - Number(order.commission_amount || 0);
+      await pool.query(`INSERT INTO vendor_payouts (vendor_id,vendor_order_id,gross_amount,commission_amount,settlement_amount,status)
+        VALUES ($1,$2,$3,$4,$5,'available') ON CONFLICT (vendor_order_id) DO UPDATE SET status='available',settlement_amount=EXCLUDED.settlement_amount`,[order.vendor_id,order.id,order.total_amount,order.commission_amount,settlementAmount]);
+      await pool.query("UPDATE vendor_orders SET settlement_status='available' WHERE id=$1",[order.id]);
+    }
+    res.json(order);
   } catch (err) {
     console.error("UPDATE VENDOR ORDER DELIVERY ERROR:", err);
     res.status(500).json({ error: "Failed to update delivery status" });
+  }
+});
+
+router.get("/admin/payouts", verifyToken, isAdmin, async (req,res) => {
+  try {
+    const result=await pool.query(`SELECT p.*,v.business_name,o.delivery_status,o.payment_status FROM vendor_payouts p JOIN vendor_profiles v ON v.id=p.vendor_id JOIN vendor_orders o ON o.id=p.vendor_order_id ORDER BY p.created_at DESC`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("VENDOR PAYOUTS ERROR:", err);
+    res.status(500).json({ error: "Failed to load vendor payouts" });
+  }
+});
+router.post("/admin/payouts/:id/pay", verifyToken, isAdmin, async (req,res) => {
+  try {
+    const result=await pool.query("UPDATE vendor_payouts SET status='paid',paid_at=CURRENT_TIMESTAMP,paid_by=$1 WHERE id=$2 AND status='available' RETURNING *",[req.user.id,req.params.id]);
+    if(!result.rows[0])return res.status(400).json({error:"Only available settlements can be paid"});
+    await pool.query("UPDATE vendor_orders SET settlement_status='paid',settled_at=CURRENT_TIMESTAMP WHERE id=$1",[result.rows[0].vendor_order_id]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("VENDOR PAYOUT ERROR:", err);
+    res.status(500).json({ error: "Failed to complete vendor payout" });
   }
 });
 

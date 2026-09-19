@@ -24,6 +24,7 @@ export default function AdminVendorsPage() {
   const [loading, setLoading] = useState(false);
   const [rules, setRules] = useState([]);
   const [rule, setRule] = useState({ scope: "default", vendor_id: "", category: "", contract_name: "", rate: "" });
+  const [payouts, setPayouts] = useState([]);
 
   useEffect(() => {
     fetchOverview();
@@ -39,6 +40,8 @@ export default function AdminVendorsPage() {
       setOrders(Array.isArray(res.data?.orders) ? res.data.orders : []);
       const ruleRes = await API.get("/vendors/admin/commission-rules");
       setRules(Array.isArray(ruleRes.data) ? ruleRes.data : []);
+      const payoutRes = await API.get("/vendors/admin/payouts");
+      setPayouts(Array.isArray(payoutRes.data) ? payoutRes.data : []);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load vendors");
@@ -46,6 +49,8 @@ export default function AdminVendorsPage() {
       setLoading(false);
     }
   };
+
+  const payPayout = async (id) => { try { await API.post(`/vendors/admin/payouts/${id}/pay`); toast.success("Vendor payout marked paid"); fetchOverview(); } catch (err) { toast.error(err.response?.data?.error || "Payout failed"); } };
 
   const saveRule = async (event) => {
     event.preventDefault();
@@ -217,6 +222,12 @@ export default function AdminVendorsPage() {
           <button className="rounded bg-slate-900 px-3 py-2 font-bold text-white">Save rule</button>
         </form>
         <div className="mt-3 space-y-1 text-sm">{rules.map(r=><p key={r.id}><b>{r.rate}%</b> · {r.scope}{r.business_name?` · ${r.business_name}`:""}{r.category?` · ${r.category}`:""}{r.contract_name?` · ${r.contract_name}`:""}</p>)}</div>
+      </section>
+
+      <section className="rounded bg-white p-4 shadow">
+        <h2 className="text-lg font-bold text-slate-950">Vendor settlements</h2>
+        <p className="mt-1 text-sm text-slate-500">Pending → Available after paid delivery → Paid.</p>
+        <div className="mt-3 space-y-2">{payouts.map(p => <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><span><b>{p.business_name}</b> · Order #{p.vendor_order_id} · {p.status}</span><span>Gross {formatPrice(p.gross_amount)} · Commission {formatPrice(p.commission_amount)} · Charges {formatPrice(p.other_charges)} · <b>{formatPrice(p.settlement_amount)}</b></span>{p.status === "available" && <button onClick={() => payPayout(p.id)} className="rounded bg-emerald-700 px-3 py-1 text-xs font-bold text-white">Mark paid</button>}</div>)}</div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">

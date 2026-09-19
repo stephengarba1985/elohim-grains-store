@@ -150,7 +150,7 @@ export default function OrderDetails() {
             <p className="mt-2">We hope you enjoyed your purchase.</p>
             <div className="mt-5 flex flex-wrap justify-center gap-3">
               <button onClick={() => toast("Order ratings are coming next—thank you for your feedback!")} className="rounded-xl border border-emerald-300 bg-white px-4 py-3 font-bold">⭐ RATE YOUR ORDER</button>
-              <button onClick={buyAgain} disabled={reordering} className="rounded-xl bg-emerald-600 px-4 py-3 font-black text-white disabled:bg-slate-300">{reordering ? "ADDING..." : "BUY AGAIN"}</button>
+              <button onClick={buyAgain} disabled={reordering} className="rounded-xl bg-emerald-600 px-4 py-3 font-black text-white disabled:bg-slate-300">{reordering ? "ADDING..." : `BUY AGAIN — ${formatPrice(productsTotal)}`}</button>
             </div>
             <div className="mt-6 border-t border-emerald-200 pt-5">
               <p className="font-black">You buy these items regularly.</p><p className="mt-1 text-sm">Save time by scheduling your next delivery.</p>

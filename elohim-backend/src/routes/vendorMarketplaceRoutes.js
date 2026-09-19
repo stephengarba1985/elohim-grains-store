@@ -97,6 +97,7 @@ const ensureVendorTables = async () => {
     await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS commission_rate_applied DECIMAL(5,2)");
     await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS settlement_status VARCHAR(30) NOT NULL DEFAULT 'pending', ADD COLUMN IF NOT EXISTS settled_at TIMESTAMP");
     await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS escrow_status VARCHAR(30) NOT NULL DEFAULT 'not_applicable', ADD COLUMN IF NOT EXISTS escrow_note TEXT");
+    await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS order_reference VARCHAR(60), ADD COLUMN IF NOT EXISTS vendor_fulfilment_status VARCHAR(30) NOT NULL DEFAULT 'new', ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP, ADD COLUMN IF NOT EXISTS fulfilment_deadline TIMESTAMP");
     await pool.query(`CREATE TABLE IF NOT EXISTS vendor_payouts (
       id SERIAL PRIMARY KEY, vendor_id INTEGER REFERENCES vendor_profiles(id) ON DELETE SET NULL,
       vendor_order_id INTEGER UNIQUE REFERENCES vendor_orders(id) ON DELETE CASCADE,
@@ -221,15 +222,16 @@ router.get("/dashboard", verifyToken, async (req, res) => {
     const vendorRes = await pool.query("SELECT * FROM vendor_profiles WHERE user_id=$1", [req.user.id]);
     const vendor = vendorRes.rows[0];
     if (!vendor || vendor.verification_status !== "approved") return res.status(403).json({ error: "An approved vendor account is required" });
-    const [today, totals, products, orders, reviews, payouts] = await Promise.all([
+    const [today, totals, products, orders, reviews, payouts, sla] = await Promise.all([
       pool.query(`SELECT COALESCE(SUM(total_amount),0) AS sales,COUNT(*)::int AS orders FROM vendor_orders WHERE vendor_id=$1 AND DATE(created_at)=CURRENT_DATE AND payment_status IN ('paid','escrow')`,[vendor.id]),
       pool.query(`SELECT COUNT(*) FILTER (WHERE delivery_status IN ('pending','processing','assigned'))::int AS pending_fulfilment, COALESCE(SUM(settlement_amount) FILTER (WHERE status='available'),0) AS available_payout FROM vendor_payouts WHERE vendor_id=$1`,[vendor.id]),
       pool.query("SELECT * FROM vendor_products WHERE vendor_id=$1 ORDER BY created_at DESC",[vendor.id]),
       pool.query(`SELECT o.*,p.name AS product_name,u.name AS buyer_name FROM vendor_orders o LEFT JOIN vendor_products p ON p.id=o.vendor_product_id LEFT JOIN users u ON u.id=o.buyer_user_id WHERE o.vendor_id=$1 ORDER BY o.created_at DESC LIMIT 50`,[vendor.id]),
       pool.query("SELECT * FROM vendor_ratings WHERE vendor_id=$1 ORDER BY created_at DESC LIMIT 20",[vendor.id]),
       pool.query("SELECT * FROM vendor_payouts WHERE vendor_id=$1 ORDER BY created_at DESC LIMIT 30",[vendor.id]),
+      pool.query("SELECT COUNT(*)::int AS overdue FROM vendor_orders WHERE vendor_id=$1 AND fulfilment_deadline < CURRENT_TIMESTAMP AND vendor_fulfilment_status NOT IN ('ready','cancelled')", [vendor.id]),
     ]);
-    res.json({ vendor, stats:{sales:today.rows[0].sales,orders:today.rows[0].orders,products:products.rows.length,pending_fulfilment:totals.rows[0].pending_fulfilment,available_payout:totals.rows[0].available_payout}, products:products.rows, orders:orders.rows, reviews:reviews.rows, payouts:payouts.rows });
+    res.json({ vendor, stats:{sales:today.rows[0].sales,orders:today.rows[0].orders,products:products.rows.length,pending_fulfilment:totals.rows[0].pending_fulfilment,available_payout:totals.rows[0].available_payout,overdue_orders:sla.rows[0].overdue}, products:products.rows, orders:orders.rows, reviews:reviews.rows, payouts:payouts.rows });
   } catch(err){ console.error("VENDOR DASHBOARD ERROR:",err);res.status(500).json({error:"Failed to load vendor dashboard"}); }
 });
 
@@ -374,8 +376,8 @@ router.post("/orders", verifyToken, async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO vendor_orders
-       (vendor_product_id, vendor_id, buyer_user_id, quantity, total_amount, commission_amount, commission_rate_applied, delivery_address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (vendor_product_id, vendor_id, buyer_user_id, quantity, total_amount, commission_amount, commission_rate_applied, delivery_address, fulfilment_deadline)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP + INTERVAL '48 hours')
        RETURNING *`,
       [
         product.id,
@@ -389,11 +391,32 @@ router.post("/orders", verifyToken, async (req, res) => {
       ]
     );
 
-    res.json(result.rows[0]);
+    const order = result.rows[0];
+    const reference = `EG-${new Date().getFullYear()}-${String(order.id).padStart(6, "0")}-V${order.vendor_id}`;
+    const referenced = await pool.query("UPDATE vendor_orders SET order_reference=$1 WHERE id=$2 RETURNING *", [reference, order.id]);
+    res.json(referenced.rows[0]);
   } catch (err) {
     console.error("CREATE VENDOR ORDER ERROR:", err);
     res.status(500).json({ error: "Failed to create vendor order" });
   }
+});
+
+router.patch("/orders/:id/fulfilment", verifyToken, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowed = ["accepted", "preparing", "ready"];
+    if (!allowed.includes(status)) return res.status(400).json({ error: "Invalid fulfilment status" });
+    const vendorRes = await pool.query("SELECT * FROM vendor_profiles WHERE user_id=$1 AND verification_status='approved'", [req.user.id]);
+    if (!vendorRes.rows[0]) return res.status(403).json({ error: "An approved vendor account is required" });
+    const vendor = vendorRes.rows[0];
+    const transitions = { new: "accepted", accepted: "preparing", preparing: "ready" };
+    const orderRes = await pool.query("SELECT * FROM vendor_orders WHERE id=$1 AND vendor_id=$2", [req.params.id, vendor.id]);
+    const order = orderRes.rows[0];
+    if (!order) return res.status(404).json({ error: "Vendor order not found" });
+    if (transitions[order.vendor_fulfilment_status] !== status) return res.status(400).json({ error: "Complete the fulfilment steps in order" });
+    const result = await pool.query("UPDATE vendor_orders SET vendor_fulfilment_status=$1, accepted_at=CASE WHEN $1='accepted' THEN CURRENT_TIMESTAMP ELSE accepted_at END WHERE id=$2 RETURNING *", [status, order.id]);
+    res.json(result.rows[0]);
+  } catch (err) { console.error("VENDOR FULFILMENT ERROR:", err); res.status(500).json({ error: "Failed to update fulfilment" }); }
 });
 
 router.get("/admin/commission-rules", verifyToken, isAdmin, async (req,res) => {

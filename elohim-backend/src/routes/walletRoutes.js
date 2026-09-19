@@ -4,7 +4,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const pool = require("../config/db");
 const { createWalletAlert } = require("./mobileRoutes");
-const { verifyToken, isAdmin } = require("../middleware/auth");
+const { verifyToken, isAdmin, requireRecentAuth } = require("../middleware/auth");
 const { normalizePhone, canonicalPhone } = require("../utils/phone");
 const { sendEmail } = require("../utils/mail");
 
@@ -557,7 +557,7 @@ router.post("/set-pin", verifyToken, async (req, res) => {
   }
 });
 
-router.post("/change-pin", verifyToken, async (req, res) => {
+router.post("/change-pin", verifyToken, requireRecentAuth(15), async (req, res) => {
   try {
     const { oldPin, newPin, confirmPin } = req.body;
 

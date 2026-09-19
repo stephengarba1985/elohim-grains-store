@@ -498,10 +498,11 @@ router.post("/login", async (req, res) => {
         role: user.role,
         is_admin: user.is_admin,
         staff_role: user.staff_role,
+        auth_time: Math.floor(Date.now() / 1000),
       },
       process.env.JWT_SECRET || "elohim_123456",
       {
-        expiresIn: "24h",
+        expiresIn: user.is_admin ? "4h" : "24h",
       }
     );
 

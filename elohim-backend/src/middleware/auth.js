@@ -51,6 +51,7 @@ const verifyToken = async (req, res, next) => {
     }
 
     req.user = result.rows[0];
+    req.auth = decoded;
     next();
 
   } catch (err) {
@@ -77,4 +78,10 @@ const requirePermission = (permission) => (req, res, next) => {
   next();
 };
 
-module.exports = { verifyToken, isAdmin, requirePermission, ROLE_PERMISSIONS, ensureStaffRoles };
+const requireRecentAuth = (maxAgeMinutes = 30) => (req, res, next) => {
+  const authTime = Number(req.auth?.auth_time || 0);
+  if (!authTime || Date.now() / 1000 - authTime > maxAgeMinutes * 60) return res.status(401).json({ error: "Please sign in again to complete this sensitive action." });
+  next();
+};
+
+module.exports = { verifyToken, isAdmin, requirePermission, requireRecentAuth, ROLE_PERMISSIONS, ensureStaffRoles };

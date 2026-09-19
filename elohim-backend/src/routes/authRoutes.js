@@ -413,8 +413,6 @@ router.post("/reset-password", async (req,res) => {
 
 router.post("/login", async (req, res) => {
   try {
-    await ensureAuthColumns();
-
     const { email, password } = req.body;
 
     if (!email || !password) {

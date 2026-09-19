@@ -34,6 +34,7 @@ export default function CartPage() {
   const [bnplChecking, setBnplChecking] = useState(false);
   const [showOrderReview, setShowOrderReview] = useState(false);
   const [cartReminderConsent, setCartReminderConsent] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState(1);
 
   /* =========================
      INIT USER + LOAD CART
@@ -124,7 +125,11 @@ export default function CartPage() {
   };
 
   const updateCheckoutDetail = (field, value) => {
-    setCheckoutDetails((current) => ({ ...current, [field]: value }));
+    setCheckoutDetails((current) => {
+      const next = { ...current, [field]: value };
+      localStorage.setItem("checkoutDetails", JSON.stringify(next));
+      return next;
+    });
   };
 
   const startCheckout = () => {
@@ -569,7 +574,11 @@ export default function CartPage() {
             </section>
           )}
 
-          <section id="checkout-details" className="mt-5 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <nav aria-label="Checkout steps" className="mt-6 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1 md:hidden">
+            {["Contact", "Delivery", "Payment", "Review"].map((label, index) => <button key={label} type="button" onClick={() => index === 3 ? beginCheckout() : setCheckoutStep(index + 1)} className={`rounded-lg px-1 py-2 text-[10px] font-black ${checkoutStep === index + 1 ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>{index + 1}<span className="ml-0.5 hidden xs:inline"> — </span>{label}</button>)}
+          </nav>
+
+          <section id="checkout-details" className={`${checkoutStep === 1 ? "block" : "hidden md:block"} mt-5 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm`}>
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Step 1</p>
               <h2 className="mt-1 text-xl font-black text-slate-900">Contact information</h2>
@@ -580,9 +589,10 @@ export default function CartPage() {
               <label><span className="mb-1 block text-sm font-bold text-slate-700">Phone number</span><input value={checkoutDetails.phone} onChange={(event) => updateCheckoutDetail("phone", event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="tel" inputMode="tel" /></label>
               <label><span className="mb-1 block text-sm font-bold text-slate-700">Email</span><input type="email" value={checkoutDetails.email} onChange={(event) => updateCheckoutDetail("email", event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="email" /></label>
             </div>
+            <button type="button" onClick={() => setCheckoutStep(2)} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-black text-white md:hidden">CONTINUE TO DELIVERY</button>
           </section>
 
-          <section className="mt-5 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className={`${checkoutStep === 2 ? "block" : "hidden md:block"} mt-5 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm`}>
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Step 2</p>
               <h2 className="mt-1 text-xl font-black text-slate-900">Delivery address</h2>
@@ -597,9 +607,10 @@ export default function CartPage() {
               <label><span className="mb-1 block text-sm font-bold text-slate-700">Landmark <span className="font-normal text-slate-400">(optional)</span></span><input value={checkoutDetails.landmark} onChange={(event) => updateCheckoutDetail("landmark", event.target.value)} placeholder="Closest landmark" className="w-full rounded-xl border border-slate-300 px-3 py-3" /></label>
               <label><span className="mb-1 block text-sm font-bold text-slate-700">Delivery phone</span><input value={checkoutDetails.deliveryPhone} onChange={(event) => updateCheckoutDetail("deliveryPhone", event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="tel" inputMode="tel" /></label>
             </div>
+            <button type="button" onClick={() => setCheckoutStep(3)} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-black text-white md:hidden">CONTINUE TO PAYMENT</button>
           </section>
 
-          <div className="mt-5 border rounded-2xl p-5 bg-white">
+          <div className={`${checkoutStep === 3 ? "block" : "hidden md:block"} mt-5 rounded-2xl border bg-white p-5`}>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Step 3</p>
             <h3 className="mt-1 text-xl font-black text-slate-900">Choose payment method</h3>
             <div className="mt-4 grid gap-3">
@@ -663,6 +674,7 @@ export default function CartPage() {
                 )}
               </div>
             )}
+            <button type="button" onClick={beginCheckout} className="mt-5 w-full rounded-xl bg-emerald-600 px-4 py-3 font-black text-white md:hidden">REVIEW ORDER</button>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">

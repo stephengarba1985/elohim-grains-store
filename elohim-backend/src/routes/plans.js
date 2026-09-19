@@ -28,6 +28,9 @@ const planSelect = `
 `;
 
 const ensurePlanColumns = async () => {
+  await ensureWalletTables();
+  await pool.query(`CREATE OR REPLACE FUNCTION mirror_savings_ledger() RETURNS trigger AS $$ BEGIN INSERT INTO financial_ledger (user_id,source,source_id,direction,amount,reference,note) SELECT user_id,'savings',NEW.id,'credit',NEW.amount,'PLAN-' || NEW.plan_id,'Food savings contribution' FROM grain_plans WHERE id=NEW.plan_id; RETURN NEW; END; $$ LANGUAGE plpgsql`);
+  await pool.query(`DROP TRIGGER IF EXISTS savings_ledger_mirror ON grain_plan_payments; CREATE TRIGGER savings_ledger_mirror AFTER INSERT ON grain_plan_payments FOR EACH ROW EXECUTE FUNCTION mirror_savings_ledger()`);
   await pool.query(`
     ALTER TABLE grain_plans
       ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

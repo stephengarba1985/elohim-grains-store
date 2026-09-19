@@ -49,6 +49,15 @@ const ensureWalletTables = async () => {
       ADD COLUMN IF NOT EXISTS administrator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       ADD COLUMN IF NOT EXISTS reason TEXT
   `);
+  await pool.query(`CREATE TABLE IF NOT EXISTS financial_ledger (
+    id BIGSERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, source VARCHAR(30) NOT NULL,
+    source_id BIGINT, direction VARCHAR(10) NOT NULL, amount DECIMAL(12,2) NOT NULL, reference VARCHAR(100), note TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await pool.query(`CREATE OR REPLACE FUNCTION prevent_financial_ledger_mutation() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'Financial ledger entries are immutable'; END; $$ LANGUAGE plpgsql`);
+  await pool.query(`DROP TRIGGER IF EXISTS financial_ledger_immutable ON financial_ledger; CREATE TRIGGER financial_ledger_immutable BEFORE UPDATE OR DELETE ON financial_ledger FOR EACH ROW EXECUTE FUNCTION prevent_financial_ledger_mutation()`);
+  await pool.query(`CREATE OR REPLACE FUNCTION mirror_wallet_ledger() RETURNS trigger AS $$ BEGIN INSERT INTO financial_ledger (user_id,source,source_id,direction,amount,reference,note) VALUES (NEW.user_id,'wallet',NEW.id,NEW.direction,NEW.amount,NEW.reference,NEW.note); RETURN NEW; END; $$ LANGUAGE plpgsql`);
+  await pool.query(`DROP TRIGGER IF EXISTS wallet_ledger_mirror ON wallet_transactions; CREATE TRIGGER wallet_ledger_mirror AFTER INSERT ON wallet_transactions FOR EACH ROW EXECUTE FUNCTION mirror_wallet_ledger()`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS wallet_virtual_accounts (

@@ -8,8 +8,9 @@ keys, or private certificates to Git.
 
 - Set `NODE_ENV=production` and a production-only `DATABASE_URL`.
 - Production database connections use TLS by default. Configure `DB_SSL_CA` with
-  the database provider's CA certificate if its certificate chain is not already
-  trusted by the runtime. Do not disable certificate verification in production.
+  the database provider's CA certificate to enable strict certificate verification.
+  Some private managed-database networks use a provider chain not trusted by the
+  Node runtime; TLS remains encrypted while the provider CA is being configured.
 - Use separate database users and credentials for production, staging, and local
   development. Grant the application user only the privileges it needs.
 - Rotate database credentials and application secrets after staff changes or any

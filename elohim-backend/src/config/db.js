@@ -6,12 +6,14 @@ if (isProduction && !process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL must be configured in the production deployment environment.");
 }
 
-// TLS and certificate verification are required for production database traffic.
-// Install the provider CA certificate in the deployment environment when needed.
+// Production traffic always uses TLS. Some managed providers (including private
+// Railway Postgres connections) use a provider certificate chain which Node does
+// not trust by default; supply DB_SSL_CA to enable strict verification there.
+const hasProviderCa = Boolean(process.env.DB_SSL_CA);
 const ssl = isProduction
   ? {
-      rejectUnauthorized: true,
-      ...(process.env.DB_SSL_CA ? { ca: process.env.DB_SSL_CA.replace(/\\n/g, "\n") } : {}),
+      rejectUnauthorized: hasProviderCa || process.env.DB_SSL_REJECT_UNAUTHORIZED === "true",
+      ...(hasProviderCa ? { ca: process.env.DB_SSL_CA.replace(/\\n/g, "\n") } : {}),
     }
   : process.env.DB_SSL === "true"
     ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === "true" }

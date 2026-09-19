@@ -405,6 +405,40 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
 /* =========================
    GET USER ORDERS
 ========================= */
+const ensureRestockPreferences = () => pool.query(`CREATE TABLE IF NOT EXISTS customer_marketing_preferences (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  restock_reminders_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`);
+
+router.get("/restock-suggestions/:user_id", verifyToken, async (req, res) => {
+  try {
+    if (Number(req.params.user_id) !== Number(req.user.id) && !req.user.is_admin) return res.status(403).json({ error: "Not authorised" });
+    await ensureRestockPreferences();
+    const preference = await pool.query("SELECT restock_reminders_enabled FROM customer_marketing_preferences WHERE user_id=$1", [req.params.user_id]);
+    const enabled = preference.rows[0]?.restock_reminders_enabled !== false;
+    if (!enabled) return res.json({ enabled: false, suggestions: [] });
+    const suggestions = await pool.query(`SELECT oi.product_id,p.name,p.weight,MAX(o.created_at) AS last_purchased_at,COUNT(DISTINCT o.id)::int AS purchase_count,
+      SUM(oi.quantity)::int AS total_quantity,EXTRACT(DAY FROM CURRENT_TIMESTAMP-MAX(o.created_at))::int AS days_since_purchase
+      FROM orders o JOIN order_items oi ON oi.order_id=o.id JOIN products p ON p.id=oi.product_id
+      WHERE o.user_id=$1 AND o.status='delivered'
+      GROUP BY oi.product_id,p.name,p.weight
+      HAVING COUNT(DISTINCT o.id)>=2 AND MAX(o.created_at) <= CURRENT_TIMESTAMP-INTERVAL '21 days'
+      ORDER BY MAX(o.created_at) ASC LIMIT 4`, [req.params.user_id]);
+    res.json({ enabled: true, suggestions: suggestions.rows });
+  } catch (err) { console.error("RESTOCK SUGGESTIONS ERROR:", err); res.status(500).json({ error: "Failed to load restock suggestions" }); }
+});
+
+router.patch("/restock-preferences", verifyToken, async (req, res) => {
+  try {
+    await ensureRestockPreferences();
+    const enabled = req.body.restock_reminders_enabled !== false;
+    const result = await pool.query(`INSERT INTO customer_marketing_preferences (user_id,restock_reminders_enabled) VALUES ($1,$2)
+      ON CONFLICT (user_id) DO UPDATE SET restock_reminders_enabled=EXCLUDED.restock_reminders_enabled,updated_at=CURRENT_TIMESTAMP RETURNING *`, [req.user.id,enabled]);
+    res.json(result.rows[0]);
+  } catch (err) { console.error("RESTOCK PREFERENCES ERROR:", err); res.status(500).json({ error: "Failed to save restock preference" }); }
+});
+
 router.get("/user/:user_id", verifyToken, async (req, res) => {
   try {
     await ensureEscrowTables();

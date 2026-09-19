@@ -306,6 +306,14 @@ export default function AdminVendorsPage() {
                     <option value="released">Funds-hold released</option>
                     <option value="cancelled">Funds-hold cancelled</option>
                   </select>
+                  <select
+                    value={order.fulfilment_model || "vendor_prepared_elohim_delivery"}
+                    onChange={(event) => updateOrder(order, "fulfilment_model", event.target.value)}
+                    className="rounded border border-slate-300 p-2"
+                  >
+                    <option value="fulfilled_by_elohim">Fulfilled by Elohim</option>
+                    <option value="vendor_prepared_elohim_delivery">Vendor prepared, Elohim delivery</option>
+                  </select>
                 </div>
                 {(order.payment_status === "escrow" || order.escrow_status === "held_for_review") && <p className="mt-2 text-xs text-amber-700">Operational funds hold only. Do not describe this as legally protected escrow until payment-provider and legal terms are in place.</p>}
               </div>

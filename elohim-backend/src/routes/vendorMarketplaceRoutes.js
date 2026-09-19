@@ -98,6 +98,7 @@ const ensureVendorTables = async () => {
     await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS settlement_status VARCHAR(30) NOT NULL DEFAULT 'pending', ADD COLUMN IF NOT EXISTS settled_at TIMESTAMP");
     await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS escrow_status VARCHAR(30) NOT NULL DEFAULT 'not_applicable', ADD COLUMN IF NOT EXISTS escrow_note TEXT");
     await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS order_reference VARCHAR(60), ADD COLUMN IF NOT EXISTS vendor_fulfilment_status VARCHAR(30) NOT NULL DEFAULT 'new', ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP, ADD COLUMN IF NOT EXISTS fulfilment_deadline TIMESTAMP");
+    await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS fulfilment_model VARCHAR(50) NOT NULL DEFAULT 'vendor_prepared_elohim_delivery'");
     await pool.query(`CREATE TABLE IF NOT EXISTS vendor_payouts (
       id SERIAL PRIMARY KEY, vendor_id INTEGER REFERENCES vendor_profiles(id) ON DELETE SET NULL,
       vendor_order_id INTEGER UNIQUE REFERENCES vendor_orders(id) ON DELETE CASCADE,
@@ -555,10 +556,11 @@ router.patch("/admin/vendors/:id/verification", verifyToken, isAdmin, async (req
 
 router.patch("/admin/orders/:id/delivery", verifyToken, isAdmin, async (req, res) => {
   try {
-    const { delivery_status, payment_status, escrow_status, escrow_note } = req.body;
+    const { delivery_status, payment_status, escrow_status, escrow_note, fulfilment_model } = req.body;
     const allowedDelivery = ["pending", "processing", "assigned", "in_transit", "delivered", "cancelled"];
     const allowedPayment = ["pending", "paid", "escrow", "failed", "refunded"];
     const allowedEscrow = ["not_applicable", "held_for_review", "released", "cancelled"];
+    const allowedFulfilmentModels = ["fulfilled_by_elohim", "vendor_prepared_elohim_delivery"];
 
     if (delivery_status && !allowedDelivery.includes(delivery_status)) {
       return res.status(400).json({ error: "Invalid delivery status" });
@@ -570,16 +572,20 @@ router.patch("/admin/orders/:id/delivery", verifyToken, isAdmin, async (req, res
     if (escrow_status && !allowedEscrow.includes(escrow_status)) {
       return res.status(400).json({ error: "Invalid funds-hold status" });
     }
+    if (fulfilment_model && !allowedFulfilmentModels.includes(fulfilment_model)) {
+      return res.status(400).json({ error: "This delivery model is not available for launch operations" });
+    }
 
     const result = await pool.query(
       `UPDATE vendor_orders
        SET delivery_status = COALESCE($1, delivery_status),
            payment_status = COALESCE($2, payment_status),
            escrow_status = COALESCE($3, escrow_status),
-           escrow_note = COALESCE($4, escrow_note)
-       WHERE id = $5
+           escrow_note = COALESCE($4, escrow_note),
+           fulfilment_model = COALESCE($5, fulfilment_model)
+       WHERE id = $6
        RETURNING *`,
-      [delivery_status || null, payment_status || null, escrow_status || null, escrow_note || null, req.params.id]
+      [delivery_status || null, payment_status || null, escrow_status || null, escrow_note || null, fulfilment_model || null, req.params.id]
     );
 
     const order = result.rows[0];

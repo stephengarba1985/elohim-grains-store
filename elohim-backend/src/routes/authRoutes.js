@@ -30,37 +30,9 @@ const resolveFrontendBaseUrl = (req) => {
   return "http://localhost:3000";
 };
 
-const ensureUserEmailUniqueness = async () => {
-  await pool.query(`
-    WITH ranked_users AS (
-      SELECT
-        id,
-        ROW_NUMBER() OVER (
-          PARTITION BY LOWER(email)
-          ORDER BY
-            CASE WHEN is_admin = TRUE THEN 0 ELSE 1 END DESC,
-            email_verified DESC,
-            created_at DESC,
-            id DESC
-        ) AS row_num
-      FROM users
-      WHERE email IS NOT NULL
-    )
-    DELETE FROM users
-    WHERE id IN (
-      SELECT id
-      FROM ranked_users
-      WHERE row_num > 1
-    );
-  `);
-
-  await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique_idx
-    ON users (LOWER(email));
-  `);
-};
-
+let authColumnsReady = false;
 const ensureAuthColumns = async () => {
+  if (authColumnsReady) return;
   await pool.query(`
     ALTER TABLE users
       ADD COLUMN IF NOT EXISTS email_verified BOOLEAN,
@@ -82,7 +54,10 @@ const ensureAuthColumns = async () => {
     WHERE email_verified IS NULL
   `);
 
-  await ensureUserEmailUniqueness();
+  // Do not alter indexes or delete duplicate legacy users during a login.
+  // Those are controlled maintenance tasks; running them here can block every
+  // customer from signing in when historic orders reference an old account.
+  authColumnsReady = true;
 };
 
 const sendVerificationEmailSafely = async (email, verifyLink) => {
@@ -497,7 +472,12 @@ router.post("/login", async (req, res) => {
       const code = String(crypto.randomInt(100000, 1000000));
       const codeHash = crypto.createHash("sha256").update(code).digest("hex");
       await pool.query("UPDATE users SET admin_mfa_code_hash=$1,admin_mfa_expires_at=NOW()+INTERVAL '10 minutes' WHERE id=$2", [codeHash,user.id]);
-      await sendEmail({ to:user.email, subject:"Your Elohim Admin verification code", htmlContent:`<p>Your admin verification code is <strong>${code}</strong>.</p><p>It expires in 10 minutes. Do not share it.</p>` });
+      try {
+        await sendEmail({ to:user.email, subject:"Your Elohim Admin verification code", htmlContent:`<p>Your admin verification code is <strong>${code}</strong>.</p><p>It expires in 10 minutes. Do not share it.</p>` });
+      } catch (emailError) {
+        console.error("ADMIN MFA DELIVERY ERROR:", emailError.message);
+        return res.status(503).json({ error: "Admin verification email is unavailable. Please contact support." });
+      }
       return res.json({ success:true, mfa_required:true, message:"Enter the verification code sent to your admin email." });
     }
 

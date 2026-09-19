@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 const rolePaths = {
   super_admin: ["*"], operations_manager: ["/admin/dashboard","/admin/orders","/admin/products","/admin/inventory","/admin/customers","/admin/logistics","/admin/bulk","/admin/subscriptions"],
   finance: ["/admin/dashboard","/admin/payments","/admin/money","/admin/ledger","/admin/bnpl","/admin/analytics","/admin/profit"],
-  warehouse: ["/admin/orders","/admin/products","/admin/inventory"], delivery_manager: ["/admin/orders","/admin/logistics"], customer_support: ["/admin/orders","/admin/customers"], vendor_manager: ["/admin/products","/admin/vendors"],
+  warehouse: ["/admin/orders","/admin/products","/admin/inventory","/admin/suppliers"], delivery_manager: ["/admin/orders","/admin/logistics"], customer_support: ["/admin/orders","/admin/customers"], vendor_manager: ["/admin/products","/admin/vendors"],
 };
 
 export default function AdminLayout({ children }) {
@@ -60,6 +60,7 @@ export default function AdminLayout({ children }) {
 
           <p className="text-xs text-gray-400 mt-4">BUSINESS NETWORK</p>
           {navItem("Vendors", "/admin/vendors")}
+          {navItem("Suppliers", "/admin/suppliers")}
           {navItem("Cooperatives", "/admin/cooperatives")}
           {navItem("Price Intelligence", "/admin/price-insights")}
           {navItem("Reports", "/admin/analytics")}

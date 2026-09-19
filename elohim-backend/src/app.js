@@ -31,6 +31,7 @@ const {
   router: paymentGatewayRoutes,
 } = require("./routes/paymentGatewayRoutes");
 const vendorMarketplaceRoutes = require("./routes/vendorMarketplaceRoutes");
+const supplierRoutes = require("./routes/supplierRoutes");
 const inventoryFinanceRoutes = require("./routes/inventoryFinanceRoutes");
 const warehouseRoutes = require("./routes/warehouseRoutes");
 const kycRoutes = require("./routes/kycRoutes");
@@ -610,6 +611,11 @@ app.use(
 app.use(
   "/api/vendors",
   vendorMarketplaceRoutes
+);
+
+app.use(
+  "/api/suppliers",
+  supplierRoutes
 );
 
 app.use(

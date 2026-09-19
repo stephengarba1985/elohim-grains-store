@@ -75,7 +75,7 @@ const getPeriods = (durationMonths, frequency) => {
   return Math.max(1, frequency === "monthly" ? months : Math.ceil(months * 4));
 };
 
-const calculateCreditScore = async (userId) => {
+const calculateEligibility = async (userId) => {
   const [orders, plans, bnpl] = await Promise.all([
     pool.query("SELECT COUNT(*)::int AS count FROM orders WHERE user_id=$1", [userId]),
     pool.query(
@@ -104,7 +104,8 @@ const calculateCreditScore = async (userId) => {
     Math.min(bnplCompleted * 40, 120) -
     Math.min(bnplOverdue * 80, 240);
 
-  return Math.max(300, Math.min(850, score));
+  const normalized = Math.max(300, Math.min(850, score));
+  return { score: normalized, eligible: normalized >= 620 && bnplOverdue === 0, approved_limit: normalized >= 720 ? 250000 : normalized >= 620 ? 100000 : 0, rules: ["Completed order and savings-plan history", "No overdue BNPL agreement", "Approved limit based on recorded repayment behaviour", "Guarantor and terms acceptance required before purchase"] };
 };
 
 const getProductPrice = async (productId, variantId) => {
@@ -151,7 +152,7 @@ router.get("/user/:userId", async (req, res) => {
     await ensureBnplTables();
 
     const userId = req.params.userId;
-    const score = await calculateCreditScore(userId);
+    const eligibility = await calculateEligibility(userId);
     const agreements = await pool.query(
       `SELECT
         b.*,
@@ -174,7 +175,7 @@ router.get("/user/:userId", async (req, res) => {
         overdue: new Date(item.next_due_date) < new Date(),
       }));
 
-    res.json({ credit_score: score, agreements: agreements.rows, reminders });
+    res.json({ eligibility, agreements: agreements.rows, reminders });
   } catch (err) {
     console.error("BNPL FETCH ERROR:", err);
     res.status(500).json({ error: "Failed to load BNPL agreements" });
@@ -207,7 +208,9 @@ router.get("/admin/overview", async (req, res) => {
         COUNT(*) FILTER (WHERE status='completed')::int AS completed,
         COALESCE(SUM(total_amount), 0) AS total_credit,
         COALESCE(SUM(amount_paid), 0) AS total_paid,
-        COALESCE(SUM(total_amount - amount_paid), 0) AS outstanding
+        COALESCE(SUM(total_amount - amount_paid), 0) AS outstanding,
+        COALESCE(SUM(installment_amount) FILTER (WHERE status='active' AND next_due_date >= CURRENT_DATE AND next_due_date < CURRENT_DATE + INTERVAL '7 days'),0) AS due_this_week,
+        COALESCE(SUM(total_amount-amount_paid) FILTER (WHERE status='active' AND next_due_date < CURRENT_DATE),0) AS overdue
       FROM bnpl_agreements
     `);
 
@@ -278,16 +281,17 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Not enough stock available" });
     }
 
-    const creditScore = await calculateCreditScore(user_id);
+    const eligibility = await calculateEligibility(user_id);
 
-    if (creditScore < 520) {
+    if (!eligibility.eligible) {
       return res.status(400).json({
-        error: "Credit score is too low for BNPL approval",
-        credit_score: creditScore,
+        error: "Customer does not meet the published BNPL eligibility rules",
+        eligibility,
       });
     }
 
     const totalAmount = priceInfo.price * parsedQuantity;
+    if (totalAmount > eligibility.approved_limit) return res.status(400).json({ error: "Order exceeds the approved BNPL limit", eligibility });
     const periods = getPeriods(parsedDuration, normalizedFrequency);
     const installmentAmount = Math.ceil(totalAmount / periods);
     const nextDueDate = addPeriod(new Date(), normalizedFrequency);

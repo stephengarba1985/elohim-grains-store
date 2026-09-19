@@ -13,7 +13,7 @@ const ensureStaffRoles = async () => {
 const ROLE_PERMISSIONS = {
   super_admin: ["*"],
   operations_manager: ["dashboard", "orders", "products", "inventory", "deliveries", "customers", "bulk", "subscriptions"],
-  finance: ["dashboard", "payments", "wallet", "savings", "bnpl", "reports", "ledger", "profit"],
+  finance: ["dashboard", "payments", "wallet", "savings", "bnpl", "reports", "ledger", "profit", "kyc"],
   warehouse: ["orders", "inventory", "products"],
   delivery_manager: ["deliveries", "riders", "orders"],
   customer_support: ["customers", "orders"],

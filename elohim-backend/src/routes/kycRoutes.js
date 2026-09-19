@@ -1,6 +1,6 @@
 const express = require("express");
 const pool = require("../config/db");
-const { verifyToken, isAdmin } = require("../middleware/auth");
+const { verifyToken, isAdmin, requirePermission } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -115,7 +115,7 @@ router.get("/:userId", verifyToken, async (req, res) => {
   try {
     const requestedUserId = Number(req.params.userId);
 
-    if (requestedUserId !== Number(req.user.id) && !req.user.is_admin) {
+    if (requestedUserId !== Number(req.user.id) && (!req.user.is_admin || !["super_admin","finance"].includes(req.user.staff_role))) {
       return res.status(403).json({ error: "Access denied" });
     }
 
@@ -268,7 +268,7 @@ router.post("/confirm-code", verifyToken, async (req, res) => {
   }
 });
 
-router.get("/admin/overview/all", verifyToken, isAdmin, async (req, res) => {
+router.get("/admin/overview/all", verifyToken, isAdmin, requirePermission("kyc"), async (req, res) => {
   try {
     const records = await pool.query(`
       ${kycSelect}
@@ -296,7 +296,7 @@ router.get("/admin/overview/all", verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-router.patch("/admin/:userId", verifyToken, isAdmin, async (req, res) => {
+router.patch("/admin/:userId", verifyToken, isAdmin, requirePermission("kyc"), async (req, res) => {
   try {
     const allowed = ["not_submitted", "not_verified", "pending", "verified", "rejected"];
     const { bvn_status, nin_status, phone_status, email_status, risk_level, admin_note } = req.body;

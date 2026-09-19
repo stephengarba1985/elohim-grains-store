@@ -4,6 +4,18 @@ const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
+const ensurePriceAlerts = () => pool.query(`CREATE TABLE IF NOT EXISTS product_price_follows (
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+  baseline_price DECIMAL(12,2) NOT NULL, threshold_percent DECIMAL(5,2) NOT NULL DEFAULT 3, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,product_id)
+)`);
+
+router.post("/follow", verifyToken, async (req,res) => {
+  try { await ensurePriceAlerts(); const { product_id, threshold_percent }=req.body; const product=await pool.query("SELECT id,price FROM products WHERE id=$1",[product_id]); if(!product.rows[0])return res.status(404).json({error:"Product not found"}); const threshold=Math.max(1,Number(threshold_percent)||3); const result=await pool.query(`INSERT INTO product_price_follows (user_id,product_id,baseline_price,threshold_percent) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id,product_id) DO UPDATE SET baseline_price=EXCLUDED.baseline_price,threshold_percent=EXCLUDED.threshold_percent,created_at=CURRENT_TIMESTAMP RETURNING *`,[req.user.id,product_id,product.rows[0].price,threshold]);res.status(201).json(result.rows[0]); }
+  catch(err){console.error("FOLLOW PRICE ERROR:",err);res.status(500).json({error:"Failed to follow product price"});}
+});
+router.delete("/follow/:productId", verifyToken, async (req,res) => { try { await ensurePriceAlerts();await pool.query("DELETE FROM product_price_follows WHERE user_id=$1 AND product_id=$2",[req.user.id,req.params.productId]);res.status(204).end(); } catch(err){res.status(500).json({error:"Failed to unfollow product price"});} });
+router.get("/alerts/me", verifyToken, async (req,res) => { try { await ensurePriceAlerts();const result=await pool.query(`SELECT f.*,p.name,p.price,ROUND(((p.price-f.baseline_price)/NULLIF(f.baseline_price,0))*100,2) AS change_percent FROM product_price_follows f JOIN products p ON p.id=f.product_id WHERE f.user_id=$1 AND ABS((p.price-f.baseline_price)/NULLIF(f.baseline_price,0)*100)>=f.threshold_percent ORDER BY f.created_at DESC`,[req.user.id]);res.json({methodology:"Alerts compare the current Elohim product price with the price recorded when you followed it. An alert appears only when the selected percentage threshold is reached.",alerts:result.rows});}catch(err){console.error("PRICE ALERTS ERROR:",err);res.status(500).json({error:"Failed to load price alerts"});} });
+
 const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const formatProductKey = (name) => String(name || "").trim().toLowerCase();

@@ -27,6 +27,15 @@ const ensureVendorTables = async () => {
     `);
 
     await pool.query(`
+      ALTER TABLE vendor_profiles
+        ADD COLUMN IF NOT EXISTS business_type VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS product_categories TEXT,
+        ADD COLUMN IF NOT EXISTS payout_information TEXT,
+        ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    `);
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS vendor_products (
         id SERIAL PRIMARY KEY,
         vendor_id INTEGER REFERENCES vendor_profiles(id) ON DELETE CASCADE,
@@ -179,7 +188,7 @@ router.get("/me", verifyToken, async (req, res) => {
 
 router.post("/register", verifyToken, async (req, res) => {
   try {
-    const { business_name, phone, location, description } = req.body;
+    const { business_name, phone, location, description, business_type, product_categories, payout_information } = req.body;
 
     if (!business_name) {
       return res.status(400).json({ error: "Business name is required" });
@@ -187,14 +196,17 @@ router.post("/register", verifyToken, async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO vendor_profiles
-       (user_id, business_name, phone, location, description)
-       VALUES ($1, $2, $3, $4, $5)
+       (user_id, business_name, phone, location, description, business_type, product_categories, payout_information)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (user_id)
        DO UPDATE SET
          business_name = EXCLUDED.business_name,
          phone = EXCLUDED.phone,
          location = EXCLUDED.location,
          description = EXCLUDED.description,
+         business_type = EXCLUDED.business_type,
+         product_categories = EXCLUDED.product_categories,
+         payout_information = EXCLUDED.payout_information,
          verification_status = 'pending'
        RETURNING *`,
       [
@@ -203,6 +215,9 @@ router.post("/register", verifyToken, async (req, res) => {
         phone || req.user.phone || "",
         location || "",
         description || "",
+        business_type || "",
+        product_categories || "",
+        payout_information || "",
       ]
     );
 
@@ -233,6 +248,10 @@ router.post("/products", verifyToken, async (req, res) => {
     }
 
     const vendor = vendorRes.rows[0];
+
+    if (vendor.verification_status !== "verified") {
+      return res.status(403).json({ error: "Your vendor application must be approved before products can be published" });
+    }
 
     const result = await pool.query(
       `INSERT INTO vendor_products
@@ -408,13 +427,16 @@ router.patch("/admin/vendors/:id/verification", verifyToken, isAdmin, async (req
     const result = await pool.query(
       `UPDATE vendor_profiles
        SET verification_status = $1,
-           commission_rate = COALESCE($2, commission_rate)
+           commission_rate = COALESCE($2, commission_rate),
+           reviewed_at = CURRENT_TIMESTAMP,
+           reviewed_by = $4
        WHERE id = $3
        RETURNING *`,
       [
         status,
         commission_rate == null ? null : Number(commission_rate),
         req.params.id,
+        req.user.id,
       ]
     );
 

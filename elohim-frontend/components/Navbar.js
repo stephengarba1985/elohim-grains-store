@@ -162,6 +162,9 @@ export default function Navbar({ user: initialUser }) {
           <Link href="/vendors" className={navClass("/vendors")}>
             Vendors
           </Link>
+          <Link href="/sell-on-elohim" className={navClass("/sell-on-elohim")}>
+            Sell on Elohim
+          </Link>
           <Link href="/user/wallet" className={navClass("/user/wallet")}>
             Wallet
           </Link>

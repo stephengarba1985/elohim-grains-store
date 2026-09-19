@@ -7,6 +7,7 @@ const { sendOrderConfirmationEmail } = require("../utils/mail");
 const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
+const ensureRiskFlags = () => pool.query(`CREATE TABLE IF NOT EXISTS risk_flags (id SERIAL PRIMARY KEY,user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,flag_type VARCHAR(80) NOT NULL,severity VARCHAR(20) NOT NULL DEFAULT 'review',details JSONB, status VARCHAR(20) NOT NULL DEFAULT 'open',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,reviewed_at TIMESTAMP,reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL)`);
 const ensureRefunds = () => pool.query(`CREATE TABLE IF NOT EXISTS refund_requests (
  id SERIAL PRIMARY KEY,order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,payment_transaction_id INTEGER REFERENCES payment_transactions(id) ON DELETE SET NULL,user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
  original_amount DECIMAL(12,2) NOT NULL,requested_amount DECIMAL(12,2) NOT NULL,reason TEXT NOT NULL,refund_method VARCHAR(40) NOT NULL DEFAULT 'original_payment_method',status VARCHAR(30) NOT NULL DEFAULT 'pending',reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,reviewed_at TIMESTAMP,processed_at TIMESTAMP,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -16,6 +17,7 @@ router.post("/refunds", verifyToken, async (req,res) => {
  try { await ensureRefunds(); const {order_id,amount,reason,refund_method}=req.body; const order=await pool.query("SELECT o.*,pt.id AS payment_transaction_id FROM orders o LEFT JOIN payment_transactions pt ON pt.order_id=o.id AND pt.status='verified' WHERE o.id=$1 AND o.user_id=$2 LIMIT 1",[order_id,req.user.id]); if(!order.rows[0])return res.status(404).json({error:"Verified order not found"}); const requested=Number(amount||order.rows[0].total_amount); if(requested<=0||requested>Number(order.rows[0].total_amount)||!reason)return res.status(400).json({error:"Valid refund amount and reason are required"}); const result=await pool.query("INSERT INTO refund_requests (order_id,payment_transaction_id,user_id,original_amount,requested_amount,reason,refund_method) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",[order_id,order.rows[0].payment_transaction_id,req.user.id,order.rows[0].total_amount,requested,reason,refund_method||"original_payment_method"]);res.status(201).json(result.rows[0]); }catch(err){console.error("REFUND REQUEST ERROR:",err);res.status(500).json({error:"Failed to request refund"});}
 });
 router.get("/refunds", verifyToken, isAdmin, async(req,res)=>{try{await ensureRefunds();const result=await pool.query("SELECT r.*,u.name AS customer_name,o.order_number,pt.reference AS payment_reference FROM refund_requests r LEFT JOIN users u ON u.id=r.user_id LEFT JOIN orders o ON o.id=r.order_id LEFT JOIN payment_transactions pt ON pt.id=r.payment_transaction_id ORDER BY r.created_at DESC");res.json(result.rows);}catch(err){res.status(500).json({error:"Failed to load refunds"});}});
+router.get("/risk-flags", verifyToken, isAdmin, async(req,res)=>{try{await ensureRiskFlags();const result=await pool.query("SELECT f.*,u.name AS customer_name,o.order_number FROM risk_flags f LEFT JOIN users u ON u.id=f.user_id LEFT JOIN orders o ON o.id=f.order_id ORDER BY f.created_at DESC");res.json(result.rows);}catch(err){res.status(500).json({error:"Failed to load risk flags"});}});
 router.patch("/refunds/:id", verifyToken, isAdmin, async(req,res)=>{try{await ensureRefunds();const {status}=req.body;if(!['approved','rejected','processed'].includes(status))return res.status(400).json({error:"Invalid refund status"});const result=await pool.query("UPDATE refund_requests SET status=$1,reviewed_by=$2,reviewed_at=COALESCE(reviewed_at,NOW()),processed_at=CASE WHEN $1='processed' THEN NOW() ELSE processed_at END WHERE id=$3 AND status IN ('pending','approved') RETURNING *",[status,req.user.id,req.params.id]);if(!result.rows[0])return res.status(400).json({error:"Refund cannot be updated"});res.json(result.rows[0]);}catch(err){res.status(500).json({error:"Failed to update refund"});}});
 
 router.post("/webhook", express.raw({ type: "application/json" }), async (req, res) => {
@@ -87,6 +89,8 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
     const paidAmount = Number(payment.amount);
 
     if (expectedAmount !== paidAmount) {
+      await ensureRiskFlags();
+      await pool.query("INSERT INTO risk_flags (user_id,order_id,flag_type,severity,details) VALUES ($1,$2,'payment_amount_mismatch','review',$3)",[existing.rows[0].user_id,existing.rows[0].order_id,JSON.stringify({reference,expected_amount:expectedAmount,received_amount:paidAmount,currency:payment.currency})]);
       return res.sendStatus(400);
     }
 

@@ -279,8 +279,8 @@ export default function VendorMarketplacePage() {
                 The Jumia of grains for verified sellers.
               </h1>
               <p className="mt-4 max-w-3xl text-slate-300">
-                Grain sellers can register, list products, receive ratings, and
-                manage delivery while Elohim tracks commission and verification.
+                Shop through Elohim with verified supply, clear prices and delivery oversight.
+                Elohim remains your trusted storefront from cart to delivery.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -306,7 +306,7 @@ export default function VendorMarketplacePage() {
                   Vendor products
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Buy grains from marketplace sellers with platform delivery oversight.
+                  Buy through Elohim. Approved suppliers fulfil under Elohim catalogue and delivery standards.
                 </p>
               </div>
               <button
@@ -342,11 +342,11 @@ export default function VendorMarketplacePage() {
                         <div>
                           <h3 className="font-black text-slate-950">{product.name}</h3>
                           <p className="mt-1 text-sm text-slate-500">
-                            {product.weight || "Standard"} by {product.business_name}
+                            {product.weight || "Standard"} &middot; Sold by <b>{product.business_name}</b>
                           </p>
                         </div>
                         <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-bold text-green-700">
-                          Verified Vendor
+                          &#10003; Verified Vendor
                         </span>
                       </div>
                       <div className="mt-4 flex items-center justify-between gap-3">
@@ -366,7 +366,7 @@ export default function VendorMarketplacePage() {
                         }
                         className="mt-4 w-full rounded-lg bg-green-700 px-4 py-3 text-sm font-bold text-white hover:bg-green-800"
                       >
-                        Select for order
+                        Add to Elohim cart
                       </button>
                     </div>
                   </div>
@@ -380,9 +380,9 @@ export default function VendorMarketplacePage() {
               onSubmit={createVendorOrder}
               className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
             >
-              <h2 className="text-lg font-black text-slate-950">Order from vendor</h2>
+              <h2 className="text-lg font-black text-slate-950">Complete your Elohim order</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Create a marketplace order for delivery management.
+                Elohim handles payment, delivery support and order tracking.
               </p>
               <div className="mt-4 space-y-3">
                 <select
@@ -424,7 +424,7 @@ export default function VendorMarketplacePage() {
                   rows={3}
                 />
                 <button className="w-full rounded-lg bg-slate-950 px-4 py-3 font-bold text-white hover:bg-slate-800">
-                  Create Vendor Order
+                  Continue with Elohim order
                 </button>
               </div>
             </form>

@@ -137,6 +137,16 @@ export default function CartPage() {
     setShowOrderReview(true);
   };
 
+  const beginCheckout = () => {
+    const requiredFields = ["fullName", "phone", "email", "state", "city", "address", "deliveryPhone"];
+    if (requiredFields.some((field) => !String(checkoutDetails[field] || "").trim())) {
+      document.getElementById("checkout-details")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      toast("Add your delivery details to continue");
+      return;
+    }
+    startCheckout();
+  };
+
   const placeOrderAndPay = async () => {
     if (paymentMethod === "bnpl") {
       window.location.href = "/bnpl";
@@ -489,7 +499,7 @@ export default function CartPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl p-4 sm:p-6">
+    <div className="mx-auto max-w-4xl p-4 pb-40 sm:p-6 sm:pb-6">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Elohim Grains</p>
@@ -518,18 +528,18 @@ export default function CartPage() {
         const isUpdating = Number(updatingItemId) === Number(item.id);
 
         return (
-          <div key={item.id} className="mb-3 grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[1fr_auto_auto] sm:items-center">
+          <div key={item.id} className="mb-3 grid gap-4 border-b border-slate-200 bg-white py-5 last:border-b-0 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:rounded-2xl sm:border sm:p-4 sm:shadow-sm">
             <div>
               <h2 className="text-lg font-black text-slate-900">{itemName} <span className="font-semibold text-slate-500">{weight}</span></h2>
-              <p className="mt-1 text-sm text-slate-500">{formatPrice(price)} each</p>
-              <button onClick={() => handleRemove(item.id)} className="mt-2 text-sm font-semibold text-red-600 hover:underline">Remove</button>
+              <p className="mt-1 text-lg font-black text-slate-950 sm:text-sm sm:font-normal sm:text-slate-500">{formatPrice(price)}<span className="hidden sm:inline"> each</span></p>
             </div>
-            <div className="inline-flex items-center justify-self-start rounded-xl border border-slate-300 bg-white">
+            <div className="order-2 mt-1 flex items-center justify-between sm:order-none sm:mt-0 sm:inline-flex sm:justify-self-start sm:rounded-xl sm:border sm:border-slate-300 sm:bg-white">
               <button type="button" aria-label={`Decrease ${itemName} quantity`} onClick={() => handleQuantityChange(item, -1)} disabled={isUpdating || item.quantity <= 1} className="px-3 py-2 text-lg font-black text-slate-700 disabled:opacity-30">−</button>
               <span className="min-w-10 text-center font-black text-slate-900">{item.quantity}</span>
               <button type="button" aria-label={`Increase ${itemName} quantity`} onClick={() => handleQuantityChange(item, 1)} disabled={isUpdating || (Number(item.stock || 0) > 0 && item.quantity >= Number(item.stock || 0))} className="px-3 py-2 text-lg font-black text-slate-700 disabled:opacity-30">+</button>
+              <button onClick={() => handleRemove(item.id)} className="ml-4 text-sm font-semibold text-red-600 hover:underline sm:hidden">Remove</button>
             </div>
-            <p className="text-xl font-black text-slate-950 sm:text-right">{formatPrice(price * item.quantity)}</p>
+            <p className="order-1 hidden text-xl font-black text-slate-950 sm:order-none sm:block sm:text-right">{formatPrice(price * item.quantity)}</p>
           </div>
         );
       })}
@@ -559,7 +569,7 @@ export default function CartPage() {
             </section>
           )}
 
-          <section className="mt-5 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section id="checkout-details" className="mt-5 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Step 1</p>
               <h2 className="mt-1 text-xl font-black text-slate-900">Contact information</h2>
@@ -664,9 +674,9 @@ export default function CartPage() {
             </button>
 
             <button
-              onClick={startCheckout}
+              onClick={beginCheckout}
               disabled={paymentLoading || (paymentMethod === "wallet" && (walletBalance === null || walletBalance < payableTotal))}
-              className="order-1 rounded-xl bg-emerald-600 px-4 py-3 font-black tracking-wide text-white hover:bg-emerald-700 disabled:bg-gray-400 sm:order-2"
+              className="order-1 hidden rounded-xl bg-emerald-600 px-4 py-3 font-black tracking-wide text-white hover:bg-emerald-700 disabled:bg-gray-400 md:order-2 md:block"
             >
               {paymentLoading ? "PROCESSING..." : paymentMethod === "wallet" ? `PAY ${formatPrice(payableTotal)} FROM WALLET` : paymentMethod === "bnpl" ? "CONTINUE TO BNPL" : "CHECKOUT"}
             </button>
@@ -685,6 +695,15 @@ export default function CartPage() {
       )}
 
       {cart.length > 0 && <label className="mb-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600"><input type="checkbox" checked={cartReminderConsent} onChange={async (event) => { const consent = event.target.checked; setCartReminderConsent(consent); try { await API.patch("/cart/recovery-preferences", { reminder_consent: consent }); toast.success(consent ? "Cart reminders enabled" : "Cart reminders disabled"); } catch { setCartReminderConsent(!consent); toast.error("Could not save reminder preference"); } }} /><span>Send me a reminder about items I leave in my cart. You can turn this off anytime.</span></label>}
+
+      {cart.length > 0 && (
+        <div className="fixed inset-x-0 bottom-[4.5rem] z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur md:hidden">
+          <div className="mx-auto flex max-w-md items-center gap-3">
+            <div className="min-w-0 flex-1"><p className="text-xs font-bold text-slate-500">Subtotal</p><p className="text-lg font-black text-slate-950">{formatPrice(total)}</p></div>
+            <button onClick={beginCheckout} disabled={paymentLoading} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white disabled:bg-slate-400">CHECKOUT</button>
+          </div>
+        </div>
+      )}
 
       {showOrderReview && (
         <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="order-review-title">

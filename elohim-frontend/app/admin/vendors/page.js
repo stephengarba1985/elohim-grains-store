@@ -22,6 +22,8 @@ export default function AdminVendorsPage() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [rules, setRules] = useState([]);
+  const [rule, setRule] = useState({ scope: "default", vendor_id: "", category: "", contract_name: "", rate: "" });
 
   useEffect(() => {
     fetchOverview();
@@ -35,12 +37,20 @@ export default function AdminVendorsPage() {
       setVendors(Array.isArray(res.data?.vendors) ? res.data.vendors : []);
       setProducts(Array.isArray(res.data?.products) ? res.data.products : []);
       setOrders(Array.isArray(res.data?.orders) ? res.data.orders : []);
+      const ruleRes = await API.get("/vendors/admin/commission-rules");
+      setRules(Array.isArray(ruleRes.data) ? ruleRes.data : []);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load vendors");
     } finally {
       setLoading(false);
     }
+  };
+
+  const saveRule = async (event) => {
+    event.preventDefault();
+    try { await API.post("/vendors/admin/commission-rules", { ...rule, rate: Number(rule.rate), vendor_id: rule.vendor_id || null }); toast.success("Commission rule saved"); setRule({ scope:"default",vendor_id:"",category:"",contract_name:"",rate:"" }); fetchOverview(); }
+    catch (err) { toast.error(err.response?.data?.error || "Could not save commission rule"); }
   };
 
   const updateVerification = async (vendor, status) => {
@@ -194,6 +204,19 @@ export default function AdminVendorsPage() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="rounded bg-white p-4 shadow">
+        <h2 className="text-lg font-bold text-slate-950">Commission rules</h2>
+        <p className="mt-1 text-sm text-slate-500">Contract rules take priority, then vendor, category and default rules.</p>
+        <form onSubmit={saveRule} className="mt-3 grid gap-2 md:grid-cols-5">
+          <select value={rule.scope} onChange={(e)=>setRule({...rule,scope:e.target.value})} className="rounded border p-2"><option value="default">Default</option><option value="category">Category</option><option value="vendor">Vendor</option><option value="contract">Contract</option></select>
+          <select value={rule.vendor_id} onChange={(e)=>setRule({...rule,vendor_id:e.target.value})} className="rounded border p-2"><option value="">Any vendor</option>{vendors.map(v=><option key={v.id} value={v.id}>{v.business_name}</option>)}</select>
+          <input value={rule.category} onChange={(e)=>setRule({...rule,category:e.target.value})} className="rounded border p-2" placeholder="Category" />
+          <input type="number" min="0" max="100" required value={rule.rate} onChange={(e)=>setRule({...rule,rate:e.target.value})} className="rounded border p-2" placeholder="Rate %" />
+          <button className="rounded bg-slate-900 px-3 py-2 font-bold text-white">Save rule</button>
+        </form>
+        <div className="mt-3 space-y-1 text-sm">{rules.map(r=><p key={r.id}><b>{r.rate}%</b> · {r.scope}{r.business_name?` · ${r.business_name}`:""}{r.category?` · ${r.category}`:""}{r.contract_name?` · ${r.contract_name}`:""}</p>)}</div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">

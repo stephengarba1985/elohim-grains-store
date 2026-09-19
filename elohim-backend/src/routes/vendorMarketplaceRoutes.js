@@ -89,6 +89,12 @@ const ensureVendorTables = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await pool.query(`CREATE TABLE IF NOT EXISTS vendor_commission_rules (
+      id SERIAL PRIMARY KEY, scope VARCHAR(30) NOT NULL, vendor_id INTEGER REFERENCES vendor_profiles(id) ON DELETE CASCADE,
+      category VARCHAR(120), contract_name VARCHAR(255), rate DECIMAL(5,2) NOT NULL, active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await pool.query("ALTER TABLE vendor_orders ADD COLUMN IF NOT EXISTS commission_rate_applied DECIMAL(5,2)");
   })();
 
   try {
@@ -351,12 +357,14 @@ router.post("/orders", verifyToken, async (req, res) => {
 
     const product = productRes.rows[0];
     const totalAmount = Number(product.price) * parsedQuantity;
-    const commissionAmount = totalAmount * (Number(product.commission_rate || 0) / 100);
+    const rule = await pool.query(`SELECT rate FROM vendor_commission_rules WHERE active=TRUE AND ((scope='contract' AND vendor_id=$1) OR (scope='vendor' AND vendor_id=$1) OR (scope='category' AND category=$2) OR scope='default') ORDER BY CASE scope WHEN 'contract' THEN 3 WHEN 'vendor' THEN 2 WHEN 'category' THEN 1 ELSE 0 END DESC LIMIT 1`,[product.vendor_id,product.category]);
+    const commissionRate = Number(rule.rows[0]?.rate ?? product.commission_rate ?? 0);
+    const commissionAmount = totalAmount * (commissionRate / 100);
 
     const result = await pool.query(
       `INSERT INTO vendor_orders
-       (vendor_product_id, vendor_id, buyer_user_id, quantity, total_amount, commission_amount, delivery_address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (vendor_product_id, vendor_id, buyer_user_id, quantity, total_amount, commission_amount, commission_rate_applied, delivery_address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         product.id,
@@ -365,6 +373,7 @@ router.post("/orders", verifyToken, async (req, res) => {
         parsedQuantity,
         totalAmount,
         commissionAmount,
+        commissionRate,
         delivery_address || "",
       ]
     );
@@ -374,6 +383,16 @@ router.post("/orders", verifyToken, async (req, res) => {
     console.error("CREATE VENDOR ORDER ERROR:", err);
     res.status(500).json({ error: "Failed to create vendor order" });
   }
+});
+
+router.get("/admin/commission-rules", verifyToken, isAdmin, async (req,res) => {
+  const rules = await pool.query("SELECT r.*,v.business_name FROM vendor_commission_rules r LEFT JOIN vendor_profiles v ON v.id=r.vendor_id ORDER BY r.scope,r.id DESC");
+  res.json(rules.rows);
+});
+router.post("/admin/commission-rules", verifyToken, isAdmin, async (req,res) => {
+  const { scope,vendor_id,category,contract_name,rate }=req.body;
+  if(!["default","category","vendor","contract"].includes(scope)||!Number.isFinite(Number(rate))||Number(rate)<0||Number(rate)>100) return res.status(400).json({error:"Valid commission rule required"});
+  const result=await pool.query("INSERT INTO vendor_commission_rules (scope,vendor_id,category,contract_name,rate) VALUES ($1,$2,$3,$4,$5) RETURNING *",[scope,vendor_id||null,category||null,contract_name||null,rate]);res.json(result.rows[0]);
 });
 
 router.post("/ratings", verifyToken, async (req, res) => {

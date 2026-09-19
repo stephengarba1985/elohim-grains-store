@@ -178,6 +178,10 @@ router.get("/money-overview", verifyToken, requirePermission("wallet"), async (r
 router.get("/transaction-ledger", verifyToken, requirePermission("ledger"), async (req, res) => {
   try {
     await ensureWalletTables();
+    const immutable = await pool.query(`SELECT l.*,u.name AS customer_name,
+      SUM(CASE WHEN l.direction='credit' THEN l.amount ELSE -l.amount END) OVER (PARTITION BY l.user_id ORDER BY l.created_at,l.id) AS reconstructed_balance
+      FROM financial_ledger l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.created_at DESC,l.id DESC LIMIT 300`);
+    if (immutable.rows.length) return res.json({ transactions: immutable.rows.map((row) => ({ ...row, type: row.source, status: 'posted' })), immutable: true });
     const tableExists = async (name) => Boolean((await pool.query("SELECT to_regclass($1) AS value", [name])).rows[0].value);
     const [hasPayments, hasPlanPayments] = await Promise.all([tableExists("public.payment_transactions"), tableExists("public.grain_plan_payments")]);
     const [wallet, payments, savings] = await Promise.all([

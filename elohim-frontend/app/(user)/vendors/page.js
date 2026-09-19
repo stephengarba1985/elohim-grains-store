@@ -587,6 +587,7 @@ export default function VendorMarketplacePage() {
         {myVendor && (
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-xl font-black text-slate-950">My vendor dashboard</h2>
+            {myVendor.verification_status === "approved" && <a href="/vendor" className="mt-2 inline-block font-bold text-emerald-700">Open vendor workspace &rarr;</a>}
             <div className="mt-4 grid gap-4 md:grid-cols-3">
               <div className="rounded-lg bg-green-50 p-4">
                 <p className="text-sm text-green-700">Verification</p>

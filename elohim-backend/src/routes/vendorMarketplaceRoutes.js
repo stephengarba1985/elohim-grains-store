@@ -187,6 +187,22 @@ router.get("/me", verifyToken, async (req, res) => {
   }
 });
 
+router.get("/dashboard", verifyToken, async (req, res) => {
+  try {
+    const vendorRes = await pool.query("SELECT * FROM vendor_profiles WHERE user_id=$1", [req.user.id]);
+    const vendor = vendorRes.rows[0];
+    if (!vendor || vendor.verification_status !== "approved") return res.status(403).json({ error: "An approved vendor account is required" });
+    const [today, totals, products, orders, reviews] = await Promise.all([
+      pool.query(`SELECT COALESCE(SUM(total_amount),0) AS sales,COUNT(*)::int AS orders FROM vendor_orders WHERE vendor_id=$1 AND DATE(created_at)=CURRENT_DATE AND payment_status IN ('paid','escrow')`,[vendor.id]),
+      pool.query(`SELECT COUNT(*) FILTER (WHERE delivery_status IN ('pending','processing','assigned'))::int AS pending_fulfilment, COALESCE(SUM(total_amount-commission_amount) FILTER (WHERE payment_status IN ('paid','escrow') AND delivery_status='delivered'),0) AS available_payout FROM vendor_orders WHERE vendor_id=$1`,[vendor.id]),
+      pool.query("SELECT * FROM vendor_products WHERE vendor_id=$1 ORDER BY created_at DESC",[vendor.id]),
+      pool.query(`SELECT o.*,p.name AS product_name,u.name AS buyer_name FROM vendor_orders o LEFT JOIN vendor_products p ON p.id=o.vendor_product_id LEFT JOIN users u ON u.id=o.buyer_user_id WHERE o.vendor_id=$1 ORDER BY o.created_at DESC LIMIT 50`,[vendor.id]),
+      pool.query("SELECT * FROM vendor_ratings WHERE vendor_id=$1 ORDER BY created_at DESC LIMIT 20",[vendor.id]),
+    ]);
+    res.json({ vendor, stats:{sales:today.rows[0].sales,orders:today.rows[0].orders,products:products.rows.length,pending_fulfilment:totals.rows[0].pending_fulfilment,available_payout:totals.rows[0].available_payout}, products:products.rows, orders:orders.rows, reviews:reviews.rows });
+  } catch(err){ console.error("VENDOR DASHBOARD ERROR:",err);res.status(500).json({error:"Failed to load vendor dashboard"}); }
+});
+
 router.post("/register", verifyToken, async (req, res) => {
   try {
     const { business_name, phone, location, description, business_type, product_categories, payout_information } = req.body;

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#15803d"/>
+  <path fill="#fef3c7" d="M259 90c-49 50-57 111-22 157-50-22-104-3-126 43 57 24 111 13 145-29-13 58 14 108 66 126 13-55-10-105-57-126 49 14 96-1 120-42-46-25-92-14-126 27 20-50 6-105 0-156Z"/>
+  <path fill="none" stroke="#bbf7d0" stroke-linecap="round" stroke-width="16" d="M256 170v207M256 256l-53-53M256 295l58-58M256 333l-45 45"/>
+  <text x="256" y="455" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="white">ELOHIM</text>
+</svg>

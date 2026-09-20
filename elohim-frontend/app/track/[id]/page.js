@@ -94,6 +94,14 @@ export default function TrackOrder() {
             >
               {loading ? "Refreshing..." : "Refresh"}
             </button>
+            <a
+              href={`https://wa.me/2348039688939?text=${encodeURIComponent(`Hello Elohim Grains, I need delivery support for order #${data.order?.id || data.id}. Delivery status: ${statusLabel(currentStatus)}.`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-white/40 px-4 py-3 text-center text-sm font-bold text-white hover:bg-white/10"
+            >
+              DELIVERY SUPPORT
+            </a>
           </div>
         </div>
       </section>

@@ -374,6 +374,14 @@ export default function BulkDashboard() {
                 >
                   Clear
                 </button>
+                <a
+                  href={`https://wa.me/2348039688939?text=${encodeURIComponent(`Hello Elohim Grains, I want to discuss a bulk order${selectedProduct ? ` for ${selectedProduct.name}` : ""}${quantity ? `, quantity: ${quantity}` : ""}${requestedPrice ? `, target price: ${formatPrice(requestedPrice)} per unit` : ""}.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-emerald-700 px-5 py-3 text-center font-semibold text-emerald-700 hover:bg-emerald-50"
+                >
+                  Discuss Bulk Order
+                </a>
               </div>
             </div>
           </form>

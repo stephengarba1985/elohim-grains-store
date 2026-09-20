@@ -188,12 +188,12 @@ export default function OrderDetails() {
           </button>
 
           <a
-            href={`https://wa.me/2348039688939?text=${encodeURIComponent(`Hello Elohim Grains, I need help with order ${orderReference}.`)}`}
+            href={`https://wa.me/2348039688939?text=${encodeURIComponent(`Hello Elohim Grains, I need help with order ${orderReference}. Current status: ${order.status || "Order received"}.`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-xl shadow font-bold"
           >
-            CHAT ON WHATSAPP
+            GET HELP WITH THIS ORDER
           </a>
 
           <button

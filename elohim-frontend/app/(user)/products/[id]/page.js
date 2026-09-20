@@ -978,6 +978,15 @@ export default function ProductDetails() {
               💬 BUY ON WHATSAPP
             </a>
 
+            <a
+              href={`https://wa.me/2348039688939?text=${encodeURIComponent(`Hello Elohim Grains, I have a question about ${product.name}${selectedVariant?.weight || selectedType?.name || product.weight ? ` (${selectedVariant?.weight || selectedType?.name || product.weight})` : ""} — ${formatPrice(price)}.`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-center text-sm font-semibold text-slate-700 hover:text-emerald-700 hover:underline"
+            >
+              ASK ABOUT THIS PRODUCT
+            </a>
+
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => subscribe("weekly")} className="bg-blue-600 text-white px-4 py-2 rounded-xl">
                 Subscribe Weekly

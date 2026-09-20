@@ -6,7 +6,7 @@ import Link from "next/link";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
 
-const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
+const formatPrice = (value) => `\u20A6${Number(value || 0).toLocaleString()}`;
 
 const formatDate = (date) => {
   if (!date) return "Not available";
@@ -47,6 +47,7 @@ function WalletPageContent() {
   const [transactions, setTransactions] = useState([]);
   const [activeAction, setActiveAction] = useState("fund");
   const [loading, setLoading] = useState(false);
+  const [walletLoaded, setWalletLoaded] = useState(false);
   const [recipient, setRecipient] = useState(null);
   const [recipientLoading, setRecipientLoading] = useState(false);
   const [form, setForm] = useState({
@@ -145,6 +146,7 @@ function WalletPageContent() {
       toast.error("Failed to load wallet");
     } finally {
       setLoading(false);
+      setWalletLoaded(true);
     }
   };
 
@@ -201,7 +203,7 @@ function WalletPageContent() {
     }
   };
 
-  const submitAction = async () => {
+  const submitAction = async (action = activeAction) => {
     if (!user?.id) {
       return toast.error("Please log in first");
     }
@@ -215,13 +217,13 @@ function WalletPageContent() {
     try {
       setLoading(true);
 
-      if (activeAction === "fund") {
+      if (action === "fund") {
         const res = await API.post("/wallet/fund/initialize", { amount });
         window.location.href = res.data.authorization_url;
         return;
       }
 
-      if (activeAction === "withdraw") {
+      if (action === "withdraw") {
         await API.post(`/wallet/${user.id}/withdraw`, {
           amount,
           pin: form.pin,
@@ -230,7 +232,7 @@ function WalletPageContent() {
         toast.success("Withdrawal recorded");
       }
 
-      if (activeAction === "transfer") {
+      if (action === "transfer") {
         await API.post(`/wallet/${user.id}/transfer`, {
           amount,
           recipient_phone: form.recipient_phone,
@@ -253,7 +255,29 @@ function WalletPageContent() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <section className="space-y-5 md:hidden">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-emerald-700">Elohim Wallet</p>
+            <p className="mt-5 text-sm font-bold text-slate-500">Available balance</p>
+            <p className="mt-1 text-4xl font-black text-slate-950">{walletLoaded ? formatPrice(balance) : "—"}</p>
+          </div>
+          <button onClick={() => document.getElementById("mobile-wallet-funding")?.scrollIntoView({ behavior: "smooth", block: "center" })} className="w-full rounded-xl bg-emerald-700 px-5 py-4 text-sm font-black text-white">FUND WALLET</button>
+          <section id="mobile-wallet-funding" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="font-black text-slate-950">Fund your wallet</p>
+            <p className="mt-1 text-sm text-slate-500">You will complete payment securely through Paystack.</p>
+            <label className="mt-4 block"><span className="text-sm font-bold text-slate-700">Amount</span><input type="number" min="1" value={form.amount} onChange={(event) => updateForm({ amount: event.target.value })} placeholder="Enter amount" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3" /></label>
+          <button onClick={() => submitAction("fund")} disabled={loading} className="mt-3 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white disabled:bg-slate-300">{loading ? "PROCESSING..." : "FUND WALLET"}</button>
+          </section>
+          <section>
+            <div className="flex items-center justify-between"><h2 className="text-xl font-black text-slate-950">Recent activity</h2><button onClick={() => fetchWallet(user?.id)} className="text-sm font-bold text-emerald-700">Refresh</button></div>
+            <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              {transactions.slice(0, 5).map((transaction) => { const isCredit = transaction.direction === "credit"; return <div key={transaction.id} className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 last:border-b-0"><div><p className="font-bold text-slate-900">{typeLabels[transaction.type] || transaction.type}</p><p className="mt-1 text-xs text-slate-500">{formatDate(transaction.created_at)}</p></div><p className={isCredit ? "font-black text-emerald-700" : "font-black text-red-600"}>{isCredit ? "+" : "−"}{formatPrice(transaction.amount)}</p></div>; })}
+              {transactions.length === 0 && <p className="p-5 text-sm text-slate-500">No wallet activity yet.</p>}
+            </div>
+          </section>
+        </section>
+
+        <div className="hidden flex-col gap-4 md:flex lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-semibold text-green-700 uppercase tracking-wide">
               Elohim Wallet
@@ -290,7 +314,7 @@ function WalletPageContent() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="hidden grid-cols-2 gap-3 md:grid lg:grid-cols-4">
           <div className="bg-slate-950 text-white rounded-lg px-4 py-4 shadow-sm col-span-2">
             <p className="text-xs text-slate-300">Available Balance</p>
             <p className="text-3xl font-bold mt-1">{formatPrice(balance)}</p>
@@ -312,7 +336,7 @@ function WalletPageContent() {
         </div>
 
         <div className="grid lg:grid-cols-[420px_1fr] gap-6 items-start">
-          <section className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden lg:col-span-2">
+          <section className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:block lg:col-span-2">
             <div className="bg-slate-950 px-5 py-4 text-white">
               <h2 className="text-lg font-bold">Elohim Wallet Account</h2>
               <p className="text-sm text-slate-300 mt-1">
@@ -395,7 +419,7 @@ function WalletPageContent() {
             </div>
           </section>
 
-          <section className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+          <section className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:block">
             <div className="bg-green-700 px-5 py-4 text-white">
               <h2 className="text-lg font-bold">{actionLabels[activeAction]}</h2>
               <p className="text-sm text-green-50 mt-1">
@@ -505,7 +529,7 @@ function WalletPageContent() {
             </div>
           </section>
 
-          <section>
+          <section className="hidden md:block">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xl font-bold text-slate-950">Transactions</h2>
               <span className="text-sm text-slate-500">{transactions.length} recent</span>

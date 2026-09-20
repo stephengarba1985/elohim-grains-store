@@ -18,7 +18,7 @@ const DURATIONS = [
   { value: "12", label: "12 Months" },
 ];
 
-const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
+const formatPrice = (value) => `\u20A6${Number(value || 0).toLocaleString()}`;
 
 const formatDate = (date) => {
   if (!date) return "After plan duration";
@@ -406,7 +406,19 @@ export default function GrainPlansPage() {
         <div className="flex items-center justify-start">
         </div>
 
-        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <section className="space-y-4 md:hidden">
+          <div><p className="text-sm font-black uppercase tracking-[0.18em] text-emerald-700">Food Savings</p><h1 className="mt-1 text-3xl font-black text-slate-950">Your food goals</h1></div>
+          {plans.map((plan) => {
+            const total = Number(plan.total_amount || 0);
+            const paid = Number(plan.amount_paid || 0);
+            const progress = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+            const maturity = plan.maturity_date ? new Date(plan.maturity_date) : getMaturityDate(plan.duration);
+            return <article key={plan.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">{formatFrequency(plan.plan_type || plan.payment_frequency || "monthly")}</p><h2 className="mt-2 text-xl font-black text-slate-950">{plan.product_name || "Family Food Goal"}</h2><p className="mt-4 text-2xl font-black text-slate-950">{formatPrice(paid)} <span className="text-base font-bold text-slate-400">/ {formatPrice(total)}</span></p><div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-700" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-sm font-black text-emerald-700">{progress}% complete</p><p className="mt-4 text-sm text-slate-600">Target: <b className="text-slate-900">{formatDate(maturity)}</b></p><button onClick={() => pay(plan, "wallet")} disabled={progress >= 100} className="mt-5 w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black text-white disabled:bg-slate-300">{progress >= 100 ? "GOAL COMPLETE" : "ADD MONEY"}</button><div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-bold text-emerald-700"><Link href="/user/wallet" className="rounded-lg bg-emerald-50 px-2 py-2">Transactions</Link><button onClick={() => editPlan(plan)} className="rounded-lg bg-emerald-50 px-2 py-2">Goal details</button><Link href="/policies/savings" className="rounded-lg bg-emerald-50 px-2 py-2">Terms</Link></div></article>;
+          })}
+          {plans.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center"><p className="font-bold text-slate-950">No food goal yet</p><p className="mt-2 text-sm text-slate-500">Create a plan below to start saving toward your next food purchase.</p></div>}
+        </section>
+
+        <div className="hidden flex-col gap-4 md:flex lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-semibold text-green-700 uppercase tracking-wide">
               Grain Savings
@@ -603,7 +615,7 @@ export default function GrainPlansPage() {
           </div>
         </div>
 
-        <div>
+        <div className="hidden md:block">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xl font-bold text-slate-950">Your Plans</h2>
             <button

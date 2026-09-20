@@ -58,7 +58,7 @@ export default function OrderDetails() {
   }[String(order?.status || "").toLowerCase()];
   const customerStatuses = ["Order Received", "Confirmed", "Preparing", "Ready for Delivery", "Out for Delivery", "Delivered"];
 
-  if (!order) return <p className="p-6">Loading...</p>;
+  if (!order) return <main className="mx-auto max-w-4xl space-y-5 p-4 md:p-6" aria-label="Loading order"><div className="h-28 animate-pulse rounded-2xl bg-slate-200" /><div className="grid gap-4 sm:grid-cols-2"><div className="h-44 animate-pulse rounded-2xl bg-slate-100" /><div className="h-44 animate-pulse rounded-2xl bg-slate-100" /></div><div className="h-64 animate-pulse rounded-2xl bg-slate-100" /></main>;
 
   const buyAgain = async () => {
     if (!user) return toast.error("Please login first");

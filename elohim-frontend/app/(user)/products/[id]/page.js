@@ -740,7 +740,7 @@ export default function ProductDetails() {
   };
 
   if (!product) {
-    return <div className="p-6">Loading product...</div>;
+    return <main className="mx-auto max-w-4xl p-4 md:p-6" aria-label="Loading product"><div className="grid gap-6 md:grid-cols-2"><div className="h-80 animate-pulse rounded-2xl bg-slate-200 md:h-64" /><div className="space-y-4"><div className="h-8 w-3/4 animate-pulse rounded bg-slate-200" /><div className="h-5 w-1/3 animate-pulse rounded bg-slate-100" /><div className="h-9 w-1/2 animate-pulse rounded bg-slate-200" /><div className="h-14 animate-pulse rounded-xl bg-slate-100" /><div className="h-12 animate-pulse rounded-xl bg-slate-200" /></div></div><div className="mt-8 h-48 animate-pulse rounded-2xl bg-slate-100" /></main>;
   }
 
   return (

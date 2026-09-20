@@ -1,6 +1,7 @@
 import "./globals.css";
 import ClientLayout from "./ClientLayout";
 import PwaRegistration from "../components/PwaRegistration";
+import PwaInstallPrompt from "../components/PwaInstallPrompt";
 
 export const metadata = {
   title: "Elohim Grains",
@@ -18,6 +19,7 @@ export default function RootLayout({ children }) {
       <body suppressHydrationWarning>
         <PwaRegistration />
         <ClientLayout>{children}</ClientLayout>
+        <PwaInstallPrompt />
       </body>
     </html>
   );

@@ -27,6 +27,12 @@ export default function OrderDetails() {
     fetchOrder();
   }, []);
 
+  useEffect(() => {
+    if (!order) return;
+    localStorage.setItem("elohim_pwa_order_completed", "1");
+    window.dispatchEvent(new Event("pwa:order-completed"));
+  }, [order]);
+
   const fetchOrder = async () => {
     try {
       const res = await API.get(`/orders/${id}`);

@@ -1205,6 +1205,8 @@ export default function ShopPage() {
                         <img
                           src={getProductImage(product)}
                           alt={product.name}
+                          width="640"
+                          height="480"
                           loading="lazy"
                           decoding="async"
                           className="h-full w-full object-cover transition duration-500 group-hover:scale-110"

@@ -751,6 +751,9 @@ export default function ProductDetails() {
         <img
           src={getProductImage(product)}
           alt={product.name}
+          width="960"
+          height="720"
+          fetchPriority="high"
           onError={(e) => {
             const current = e.currentTarget.getAttribute("src");
             const next = getNextImageCandidate(product?.name, current);

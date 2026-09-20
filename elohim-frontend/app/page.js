@@ -683,13 +683,7 @@ function ProductTile({ product }) {
       className="group block overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
     >
       <div className="relative h-44 bg-slate-100">
-        <img
-          src={getProductImage(product)}
-          alt={product.name}
-          loading="lazy"
-          decoding="async"
-          className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
-        />
+        <Image src={getProductImage(product)} alt={product.name} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover transition duration-500 group-hover:scale-110" />
         <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm">
           {stock > 0 ? `${stock} in stock` : "Check stock"}
         </div>
@@ -730,11 +724,7 @@ export default async function Home() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#f0fdf4_0%,#f8fafc_40%,#f8fafc_100%)] text-slate-950">
       <section className="relative overflow-hidden bg-slate-950">
         <div className="absolute inset-0">
-          <img
-            src={heroImage}
-            alt="Bags of rice and grains"
-            className="h-full w-full object-cover opacity-35"
-          />
+          <Image src={heroImage} alt="Bags of rice and grains" fill priority sizes="100vw" className="object-cover opacity-35" />
           <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(2,6,23,0.98),rgba(15,23,42,0.88),rgba(20,83,45,0.62))]" />
           <div className="absolute -left-10 top-10 h-44 w-44 rounded-full bg-green-400/20 blur-3xl" />
           <div className="absolute -right-10 bottom-10 h-52 w-52 rounded-full bg-amber-300/20 blur-3xl" />
@@ -851,6 +841,8 @@ export default async function Home() {
                 <img
                   src={normalizeImagePath(category.image)}
                   alt={category.title}
+                  width="480"
+                  height="320"
                   loading="lazy"
                   decoding="async"
                   className="h-full w-full object-cover transition duration-500 group-hover:scale-110"

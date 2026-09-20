@@ -43,8 +43,8 @@ export default function AdminLayout({ children }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      <div className="w-64 bg-white shadow-lg p-4">
+    <div className="flex h-screen overflow-hidden bg-gray-100">
+      <aside className="h-screen w-64 shrink-0 overflow-y-auto bg-white p-4 shadow-lg overscroll-contain">
         <h1 className="text-xl font-bold text-green-700 mb-6">
           Elohim Admin
         </h1>
@@ -84,9 +84,11 @@ export default function AdminLayout({ children }) {
             Logout
           </button>
         </div>
-      </div>
+      </aside>
 
-      <div className="flex-1 p-6">{children}</div>
+      <div className="min-w-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="p-4 md:p-6">{children}</div>
+      </div>
     </div>
   );
 }

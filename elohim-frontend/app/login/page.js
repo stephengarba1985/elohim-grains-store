@@ -83,7 +83,25 @@ export default function AuthPage() {
     }
   };
 
-  const verifyAdminMfa = async (event) => { event.preventDefault(); try { const res=await API.post("/auth/verify-admin-mfa",{email:form.email,code:mfaCode}); localStorage.setItem("token",res.data.token);localStorage.setItem("user",JSON.stringify(res.data.user));window.dispatchEvent(new Event("auth:changed"));toast.success("Admin login verified");router.push("/admin"); } catch(err){toast.error(err.response?.data?.error||"Verification failed");} };
+  const verifyAdminMfa = async (event) => {
+    event.preventDefault();
+    try {
+      const res = await API.post("/auth/verify-admin-mfa", { email: form.email, code: mfaCode });
+      if (!res.data?.token || !res.data?.user?.is_admin) {
+        throw new Error("Admin login response was incomplete");
+      }
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(res.data.user));
+      window.dispatchEvent(new Event("auth:changed"));
+      toast.success("Admin login verified");
+      router.push("/admin");
+    } catch (err) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.dispatchEvent(new Event("auth:changed"));
+      toast.error(err.response?.data?.error || err.message || "Verification failed");
+    }
+  };
 
   // Success screen after registration
   if (registrationComplete) {

@@ -11,7 +11,15 @@ const rolePaths = {
 export default function AdminLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
-  const staffRole = typeof window === "undefined" ? "" : JSON.parse(localStorage.getItem("user") || "{}").staff_role;
+  let staffRole = "";
+  if (typeof window !== "undefined") {
+    try {
+      staffRole = JSON.parse(localStorage.getItem("user") || "{}").staff_role || "";
+    } catch {
+      localStorage.removeItem("user");
+      localStorage.removeItem("token");
+    }
+  }
 
   const logout = () => {
     localStorage.clear();

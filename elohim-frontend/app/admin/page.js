@@ -46,10 +46,19 @@ export default function AdminDashboard() {
       return;
     }
 
-    const parsedUser = JSON.parse(storedUser);
+    let parsedUser;
+    try {
+      parsedUser = JSON.parse(storedUser);
+    } catch {
+      localStorage.removeItem("user");
+      localStorage.removeItem("token");
+      toast.error("Your login session is invalid. Please sign in again.");
+      router.push("/login");
+      return;
+    }
     setUser(parsedUser);
 
-    if (!parsedUser.is_admin) {
+    if (!parsedUser?.is_admin) {
       toast.error("Access denied");
       router.push("/");
       return;

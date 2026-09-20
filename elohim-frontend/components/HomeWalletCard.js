@@ -17,7 +17,13 @@ export default function HomeWalletCard({ marketSignals }) {
     if (!storedUser) return;
 
     try {
-      const parsedUser = JSON.parse(storedUser);
+      let parsedUser;
+      try {
+        parsedUser = JSON.parse(storedUser);
+      } catch {
+        localStorage.removeItem("user");
+        return;
+      }
       setUser(parsedUser);
       fetchWallet(parsedUser.id);
     } catch (err) {

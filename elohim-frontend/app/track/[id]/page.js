@@ -42,6 +42,8 @@ export default function TrackOrder() {
     ["Delivered", ["delivered"]],
   ];
   const rawStatus = String(data?.order?.status || currentStatus || "pending").toLowerCase();
+  const orderReference = data?.order?.order_number || `EG-${String(data?.order?.id || data?.id || id).padStart(6, "0")}`;
+  const activeMilestoneIndex = ({ pending: 0, payment_pending: 0, paid: 1, confirmed: 1, processing: 2, assigned: 3, picked_up: 3, ready_for_delivery: 3, in_transit: 4, near_customer: 4, delivered: 5 })[rawStatus] ?? 0;
 
   const etaText = useMemo(() => {
     const eta = data?.delivery?.eta || data?.order?.eta;
@@ -77,7 +79,7 @@ export default function TrackOrder() {
           <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <h1 className="text-3xl font-black md:text-5xl">
-                Order #{data.order?.id || data.id}
+                Order {orderReference}
               </h1>
               <p className="mt-3 text-slate-300">
                 Live rider status, ETA updates, and delivery OTP confirmation.
@@ -103,7 +105,20 @@ export default function TrackOrder() {
       </section>
 
       <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 md:px-6">
-        <div className="grid gap-4 md:grid-cols-4">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:hidden">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Order {orderReference}</p>
+          <div className="mt-5 space-y-3 text-sm">
+            {milestoneDefinitions.map(([label], index) => {
+              const complete = index < activeMilestoneIndex || rawStatus === "delivered";
+              const current = index === activeMilestoneIndex && rawStatus !== "delivered";
+              return <p key={label} className={complete ? "font-bold text-emerald-700" : current ? "font-bold text-slate-900" : "font-medium text-slate-400"}>{complete ? "✓" : current ? "●" : "○"} {label}</p>;
+            })}
+          </div>
+          <div className="mt-5 rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Expected delivery</p><p className="mt-1 text-lg font-black text-slate-950">{etaText === "Waiting for rider assignment" ? "To be confirmed" : etaText}</p></div>
+          <a href={`https://wa.me/2348039688939?text=${encodeURIComponent(`Hello Elohim Grains, I need help with delivery for order ${orderReference}. Current status: ${statusLabel(currentStatus)}.`)}`} target="_blank" rel="noopener noreferrer" className="mt-5 block rounded-xl bg-emerald-700 px-4 py-3 text-center text-sm font-black text-white">CONTACT SUPPORT</a>
+        </section>
+
+        <div className="hidden gap-4 md:grid md:grid-cols-4">
           <div className="rounded-lg bg-white p-4 shadow-sm">
             <p className="text-sm text-slate-500">Delivery Status</p>
             <p className="mt-1 text-xl font-black text-slate-950">
@@ -128,7 +143,7 @@ export default function TrackOrder() {
           </div>
         </div>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:block">
           <h2 className="text-xl font-black text-slate-950">Order milestones</h2>
           <div className="mt-5 space-y-4">
             {milestoneDefinitions.map(([label, statuses], index) => {
@@ -140,7 +155,7 @@ export default function TrackOrder() {
           </div>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[1fr_340px]">
+        <section className="hidden gap-4 lg:grid lg:grid-cols-[1fr_340px]">
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-xl font-black text-slate-950">Rider tracking</h2>
             {data.rider ? (
@@ -186,7 +201,7 @@ export default function TrackOrder() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:block">
           <h2 className="text-xl font-black text-slate-950">Status history</h2>
           <div className="mt-4 space-y-3">
             {(data.events || []).map((event, index) => (

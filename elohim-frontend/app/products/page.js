@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { useCartStore } from "@/lib/cartStore";
 
 const formatPrice = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
+const CATALOGUE_PAGE_SIZE = 36;
 
 const buildWhatsAppOrderMessage = (product, quantity = 1, priceOverride = null, weight = "") => {
   const productName = String(product?.name || "this product");
@@ -663,7 +664,7 @@ export default function ShopPage() {
           process.env.NEXT_PUBLIC_BACKEND_URL ||
           "https://api.elohimgrains.com/api";
 
-        const res = await fetch(`${baseUrl}/products?page=${page}&limit=24`, {
+        const res = await fetch(`${baseUrl}/products?page=${page}&limit=${CATALOGUE_PAGE_SIZE}`, {
           cache: "no-store",
         });
 

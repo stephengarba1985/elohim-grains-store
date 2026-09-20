@@ -1,15 +1,169 @@
 const express = require("express");
 const router = express.Router();
+const jwt = require("jsonwebtoken");
 const pool = require("../config/db");
+const sendWhatsApp = require("../utils/sendWhatsApp");
+const { verifyToken, isAdmin, requirePermission, requireRiderSession } = require("../middleware/auth");
 const {
   ensureDeliveryTrackingTables,
   addDeliveryEvent,
 } = require("./trackingRoutes");
 
+const jwtSecret = process.env.JWT_SECRET || "elohim_123456";
+const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
+const adminRiders = [verifyToken, isAdmin, requirePermission("riders")];
+
+/* =========================
+   RIDER PORTAL AUTHENTICATION
+========================= */
+router.post("/portal/login", async (req, res) => {
+  try {
+    const riderId = Number(req.body.rider_id);
+    const phone = normalizePhone(req.body.phone);
+
+    if (!Number.isInteger(riderId) || !phone) {
+      return res.status(400).json({ error: "Rider ID and phone number are required" });
+    }
+
+    const result = await pool.query("SELECT * FROM riders WHERE id = $1", [riderId]);
+    const rider = result.rows[0];
+    if (!rider || normalizePhone(rider.phone) !== phone) {
+      return res.status(401).json({ error: "Rider ID or phone number is incorrect" });
+    }
+
+    const token = jwt.sign(
+      { type: "rider_portal", rider_id: rider.id },
+      jwtSecret,
+      { expiresIn: "8h" }
+    );
+
+    res.json({
+      token,
+      rider: { id: rider.id, name: rider.name, phone: rider.phone, vehicle_type: rider.vehicle_type },
+    });
+  } catch (err) {
+    console.error("RIDER PORTAL LOGIN ERROR:", err);
+    res.status(500).json({ error: "Rider sign-in failed" });
+  }
+});
+
+router.get("/portal/deliveries", verifyToken, requireRiderSession, async (req, res) => {
+  try {
+    await ensureDeliveryTrackingTables();
+    const result = await pool.query(
+      `SELECT d.id AS delivery_id, d.status AS delivery_status, d.eta_minutes, d.created_at,
+              o.id AS order_id, o.order_number, o.delivery_address, o.total_amount,
+              u.name AS customer_name, u.phone AS customer_phone,
+              COALESCE(json_agg(json_build_object('name', p.name, 'quantity', oi.quantity))
+                FILTER (WHERE oi.id IS NOT NULL), '[]') AS items
+       FROM deliveries d
+       JOIN orders o ON o.id = d.order_id
+       JOIN users u ON u.id = o.user_id
+       LEFT JOIN order_items oi ON oi.order_id = o.id
+       LEFT JOIN products p ON p.id = oi.product_id
+       WHERE d.rider_id = $1
+         AND COALESCE(d.status, o.status) NOT IN ('delivered', 'cancelled', 'delivery_failed', 'failed')
+       GROUP BY d.id, o.id, u.id
+       ORDER BY CASE WHEN d.status = 'in_transit' THEN 0 ELSE 1 END, d.created_at ASC`,
+      [req.rider.id]
+    );
+    res.json({ rider: { id: req.rider.id, name: req.rider.name }, deliveries: result.rows });
+  } catch (err) {
+    console.error("RIDER DELIVERIES ERROR:", err);
+    res.status(500).json({ error: "Could not load deliveries" });
+  }
+});
+
+router.put("/portal/deliveries/:deliveryId/start", verifyToken, requireRiderSession, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE deliveries
+       SET status = 'in_transit', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND rider_id = $2
+         AND status IN ('assigned', 'ready_for_delivery', 'pending')
+       RETURNING *`,
+      [req.params.deliveryId, req.rider.id]
+    );
+    const delivery = result.rows[0];
+    if (!delivery) return res.status(404).json({ error: "Assigned delivery not found" });
+
+    await pool.query("UPDATE orders SET status = 'in_transit' WHERE id = $1", [delivery.order_id]);
+    await addDeliveryEvent(delivery.order_id, delivery.id, "in_transit", "Rider started delivery");
+    res.json({ message: "Delivery started", delivery });
+  } catch (err) {
+    console.error("START DELIVERY ERROR:", err);
+    res.status(500).json({ error: "Could not start delivery" });
+  }
+});
+
+router.post("/portal/deliveries/:deliveryId/confirm", verifyToken, requireRiderSession, async (req, res) => {
+  try {
+    const otp = String(req.body.otp || "").trim();
+    const deliveryRes = await pool.query(
+      "SELECT * FROM deliveries WHERE id = $1 AND rider_id = $2",
+      [req.params.deliveryId, req.rider.id]
+    );
+    const delivery = deliveryRes.rows[0];
+    if (!delivery) return res.status(404).json({ error: "Assigned delivery not found" });
+    if (!otp || String(delivery.delivery_otp) !== otp) {
+      return res.status(400).json({ error: "The delivery PIN does not match" });
+    }
+
+    await pool.query(
+      `UPDATE deliveries SET status = 'delivered', otp_confirmed = TRUE,
+       confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [delivery.id]
+    );
+    await pool.query("UPDATE orders SET status = 'delivered' WHERE id = $1", [delivery.order_id]);
+    await pool.query(
+      "UPDATE riders SET status = 'available', current_orders = GREATEST(COALESCE(current_orders, 0) - 1, 0) WHERE id = $1",
+      [req.rider.id]
+    );
+    await addDeliveryEvent(delivery.order_id, delivery.id, "delivered", "Delivery PIN confirmed by rider");
+
+    const customerRes = await pool.query(
+      "SELECT u.name, u.phone, o.order_number FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = $1",
+      [delivery.order_id]
+    );
+    const customer = customerRes.rows[0];
+    if (customer?.phone) {
+      sendWhatsApp(customer.phone, `Hello ${customer.name || "Customer"}, your Elohim Grains order ${customer.order_number || `#${delivery.order_id}`} has been delivered and verified. Thank you for shopping with us.`);
+    }
+    res.json({ message: "Delivery confirmed" });
+  } catch (err) {
+    console.error("RIDER DELIVERY CONFIRMATION ERROR:", err);
+    res.status(500).json({ error: "Could not confirm delivery" });
+  }
+});
+
+router.put("/portal/location", verifyToken, requireRiderSession, async (req, res) => {
+  try {
+    await ensureDeliveryTrackingTables();
+    const latitude = Number(req.body.latitude);
+    const longitude = Number(req.body.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return res.status(400).json({ error: "Valid location coordinates are required" });
+    }
+    await pool.query(
+      `UPDATE riders SET latitude = $1, longitude = $2, last_seen = NOW() WHERE id = $3`,
+      [latitude, longitude, req.rider.id]
+    );
+    await pool.query(
+      `UPDATE deliveries SET current_lat = $1, current_lng = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE rider_id = $3 AND status IN ('assigned', 'ready_for_delivery', 'in_transit')`,
+      [latitude, longitude, req.rider.id]
+    );
+    res.json({ message: "Location updated" });
+  } catch (err) {
+    console.error("RIDER LOCATION ERROR:", err);
+    res.status(500).json({ error: "Could not update location" });
+  }
+});
+
 /* =========================
    CREATE RIDER
 ========================= */
-router.post("/", async (req, res) => {
+router.post("/", ...adminRiders, async (req, res) => {
   try {
     const {
       name,
@@ -72,7 +226,7 @@ router.post("/", async (req, res) => {
 /* =========================
    DELETE RIDER
 ========================= */
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", ...adminRiders, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -119,7 +273,7 @@ router.delete("/:id", async (req, res) => {
 /* =========================
    UPDATE RIDER
 ========================= */
-router.put("/:id", async (req, res) => {
+router.put("/:id", ...adminRiders, async (req, res) => {
   try {
     const {
       name,
@@ -189,7 +343,7 @@ router.put("/:id", async (req, res) => {
 /* =========================
    UPDATE RIDER STATUS
 ========================= */
-router.put("/:id/status", async (req, res) => {
+router.put("/:id/status", ...adminRiders, async (req, res) => {
   try {
     const { id } = req.params;
     const { status, online } = req.body;
@@ -224,7 +378,7 @@ router.put("/:id/status", async (req, res) => {
 /* =========================
    GET ALL RIDERS
 ========================= */
-router.get("/", async (req, res) => {
+router.get("/", ...adminRiders, async (req, res) => {
   try {
     await ensureDeliveryTrackingTables();
 
@@ -265,7 +419,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.get("/stats/summary", async (req, res) => {
+router.get("/stats/summary", ...adminRiders, async (req, res) => {
   try {
     const columnsRes = await pool.query(
       `SELECT column_name
@@ -303,7 +457,7 @@ router.get("/stats/summary", async (req, res) => {
 /* =========================
    ASSIGN RIDER
 ========================= */
-router.put("/assign/:delivery_id", async (req, res) => {
+router.put("/assign/:delivery_id", ...adminRiders, async (req, res) => {
   try {
     await ensureDeliveryTrackingTables();
 
@@ -346,7 +500,7 @@ router.put("/assign/:delivery_id", async (req, res) => {
 /* =========================
    UPDATE DELIVERY STATUS
 ========================= */
-router.put("/status/:delivery_id", async (req, res) => {
+router.put("/status/:delivery_id", ...adminRiders, async (req, res) => {
   try {
     await ensureDeliveryTrackingTables();
 
@@ -398,7 +552,7 @@ router.put("/status/:delivery_id", async (req, res) => {
 /* =========================
    UPDATE RIDER LOCATION
 ========================= */
-router.put("/location/:id", async (req, res) => {
+router.put("/location/:id", ...adminRiders, async (req, res) => {
   try {
     await ensureDeliveryTrackingTables();
 

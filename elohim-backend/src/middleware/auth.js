@@ -41,6 +41,21 @@ const verifyToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, jwtSecret);
 
+    if (decoded.type === "rider_portal" && decoded.rider_id) {
+      const riderResult = await pool.query(
+        "SELECT * FROM riders WHERE id = $1",
+        [decoded.rider_id]
+      );
+
+      if (riderResult.rows.length === 0) {
+        return res.status(401).json({ error: "Rider account not found" });
+      }
+
+      req.rider = riderResult.rows[0];
+      req.auth = decoded;
+      return next();
+    }
+
     const result = await pool.query(
       "SELECT * FROM users WHERE id = $1",
       [decoded.id]
@@ -78,10 +93,17 @@ const requirePermission = (permission) => (req, res, next) => {
   next();
 };
 
+const requireRiderSession = (req, res, next) => {
+  if (!req.rider || req.auth?.type !== "rider_portal") {
+    return res.status(403).json({ error: "Rider portal access only" });
+  }
+  next();
+};
+
 const requireRecentAuth = (maxAgeMinutes = 30) => (req, res, next) => {
   const authTime = Number(req.auth?.auth_time || 0);
   if (!authTime || Date.now() / 1000 - authTime > maxAgeMinutes * 60) return res.status(401).json({ error: "Please sign in again to complete this sensitive action." });
   next();
 };
 
-module.exports = { verifyToken, isAdmin, requirePermission, requireRecentAuth, ROLE_PERMISSIONS, ensureStaffRoles };
+module.exports = { verifyToken, isAdmin, requirePermission, requireRiderSession, requireRecentAuth, ROLE_PERMISSIONS, ensureStaffRoles };

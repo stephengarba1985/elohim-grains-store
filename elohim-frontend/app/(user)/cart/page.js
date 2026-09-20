@@ -133,7 +133,7 @@ export default function CartPage() {
   };
 
   const startCheckout = () => {
-    const requiredFields = ["fullName", "phone", "email", "state", "city", "address", "deliveryPhone"];
+    const requiredFields = ["fullName", "phone", "email", "city", "address", "deliveryPhone"];
     if (requiredFields.some((field) => !String(checkoutDetails[field] || "").trim())) {
       toast.error("Please complete your contact and delivery details");
       return;
@@ -143,7 +143,7 @@ export default function CartPage() {
   };
 
   const beginCheckout = () => {
-    const requiredFields = ["fullName", "phone", "email", "state", "city", "address", "deliveryPhone"];
+    const requiredFields = ["fullName", "phone", "email", "city", "address", "deliveryPhone"];
     if (requiredFields.some((field) => !String(checkoutDetails[field] || "").trim())) {
       document.getElementById("checkout-details")?.scrollIntoView({ behavior: "smooth", block: "start" });
       toast("Add your delivery details to continue");
@@ -233,7 +233,7 @@ export default function CartPage() {
         reference,
         user_id: user.id,
         delivery_fee: deliveryFee || 0,
-        delivery_address: `${checkoutDetails.address}, ${checkoutDetails.city}, ${checkoutDetails.state}${checkoutDetails.landmark ? ` — Landmark: ${checkoutDetails.landmark}` : ""}`,
+        delivery_address: [checkoutDetails.address, checkoutDetails.landmark && `Landmark: ${checkoutDetails.landmark}`, checkoutDetails.city, checkoutDetails.state].filter(Boolean).join(", "),
       });
 
       toast.success("Payment successful");
@@ -598,14 +598,14 @@ export default function CartPage() {
               <h2 className="mt-1 text-xl font-black text-slate-900">Delivery address</h2>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label><span className="mb-1 block text-sm font-bold text-slate-700">State</span><input value={checkoutDetails.state} onChange={(event) => updateCheckoutDetail("state", event.target.value)} placeholder="e.g. FCT" className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="address-level1" /></label>
-              <label><span className="mb-1 block text-sm font-bold text-slate-700">City</span><input value={checkoutDetails.city} onChange={(event) => updateCheckoutDetail("city", event.target.value)} placeholder="e.g. Abuja" className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="address-level2" /></label>
+              <label className="sm:col-span-2"><span className="mb-1 block text-sm font-bold text-slate-700">Delivery address</span><input value={checkoutDetails.address} onChange={(event) => updateCheckoutDetail("address", event.target.value)} placeholder="e.g. Games Village" className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="street-address" /></label>
+              <label><span className="mb-1 block text-sm font-bold text-slate-700">Landmark <span className="font-normal text-slate-400">(optional)</span></span><input value={checkoutDetails.landmark} onChange={(event) => updateCheckoutDetail("landmark", event.target.value)} placeholder="e.g. Near Apo Junction" className="w-full rounded-xl border border-slate-300 px-3 py-3" /></label>
+              <label><span className="mb-1 block text-sm font-bold text-slate-700">Area / city</span><input value={checkoutDetails.city} onChange={(event) => updateCheckoutDetail("city", event.target.value)} placeholder="e.g. Abuja" className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="address-level2" /></label>
               {/(^fct$|abuja)/i.test(checkoutDetails.state) && (
                 <label className="sm:col-span-2"><span className="mb-1 block text-sm font-bold text-slate-700">Abuja delivery zone</span><select value={checkoutDetails.abujaZone} onChange={(event) => updateCheckoutDetail("abujaZone", event.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3"><option value="">Choose a zone</option><option>Central</option><option>Gwarinpa</option><option>Kubwa</option><option>Lugbe</option><option>Airport area</option><option>Other Abuja area</option></select></label>
               )}
-              <label className="sm:col-span-2"><span className="mb-1 block text-sm font-bold text-slate-700">Address</span><input value={checkoutDetails.address} onChange={(event) => updateCheckoutDetail("address", event.target.value)} placeholder="House number, street and area" className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="street-address" /></label>
-              <label><span className="mb-1 block text-sm font-bold text-slate-700">Landmark <span className="font-normal text-slate-400">(optional)</span></span><input value={checkoutDetails.landmark} onChange={(event) => updateCheckoutDetail("landmark", event.target.value)} placeholder="Closest landmark" className="w-full rounded-xl border border-slate-300 px-3 py-3" /></label>
-              <label><span className="mb-1 block text-sm font-bold text-slate-700">Delivery phone</span><input value={checkoutDetails.deliveryPhone} onChange={(event) => updateCheckoutDetail("deliveryPhone", event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="tel" inputMode="tel" /></label>
+              <label><span className="mb-1 block text-sm font-bold text-slate-700">Delivery phone</span><input value={checkoutDetails.deliveryPhone} onChange={(event) => updateCheckoutDetail("deliveryPhone", event.target.value)} placeholder="e.g. 080..." className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="tel" inputMode="tel" /></label>
+              <label><span className="mb-1 block text-sm font-bold text-slate-700">State <span className="font-normal text-slate-400">(optional)</span></span><input value={checkoutDetails.state} onChange={(event) => updateCheckoutDetail("state", event.target.value)} placeholder="e.g. FCT" className="w-full rounded-xl border border-slate-300 px-3 py-3" autoComplete="address-level1" /></label>
             </div>
             <button type="button" onClick={() => setCheckoutStep(3)} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-black text-white md:hidden">CONTINUE TO PAYMENT</button>
           </section>

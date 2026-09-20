@@ -654,7 +654,7 @@ async function getProducts() {
       process.env.NEXT_PUBLIC_BACKEND_URL ||
       "https://api.elohimgrains.com/api";
 
-    const res = await fetch(`${baseUrl}/products`, {
+    const res = await fetch(`${baseUrl}/products?page=1&limit=4`, {
       cache: "no-store",
     });
 
@@ -667,7 +667,7 @@ async function getProducts() {
 
     const data = await res.json();
 
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data) ? data : (data.items || []);
   } catch (err) {
     console.error("Failed to fetch products on server:", err);
     return [];
@@ -686,6 +686,8 @@ function ProductTile({ product }) {
         <img
           src={getProductImage(product)}
           alt={product.name}
+          loading="lazy"
+          decoding="async"
           className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
         />
         <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm">
@@ -849,6 +851,8 @@ export default async function Home() {
                 <img
                   src={normalizeImagePath(category.image)}
                   alt={category.title}
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/10 to-transparent" />

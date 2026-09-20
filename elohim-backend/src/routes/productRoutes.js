@@ -455,6 +455,10 @@ router.post("/", verifyToken, isAdmin, async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     await ensureCatalogColumns();
+    const usePagination = req.query.page !== undefined || req.query.limit !== undefined;
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(48, Math.max(1, Number.parseInt(req.query.limit, 10) || 24));
+    const offset = (page - 1) * limit;
 
     const variantsResult = await pool.query(`
       SELECT
@@ -559,8 +563,8 @@ router.get("/", async (req, res) => {
       FROM products p
       LEFT JOIN categories c
         ON c.id = p.category_id
-      ORDER BY p.id ASC
-    `);
+      ORDER BY p.id ASC${usePagination ? " LIMIT $1 OFFSET $2" : ""}
+    `, usePagination ? [limit, offset] : []);
 
     const products = result.rows.map((row) => {
       const types = Array.isArray(row.types)
@@ -611,7 +615,10 @@ router.get("/", async (req, res) => {
       };
     });
 
-    res.json(products);
+    if (!usePagination) return res.json(products);
+    const totalResult = await pool.query("SELECT COUNT(*)::int AS total FROM products");
+    const total = Number(totalResult.rows[0]?.total || 0);
+    res.json({ items: products, pagination: { page, limit, total, has_more: offset + products.length < total } });
   } catch (err) {
     console.error("FETCH PRODUCTS ERROR:", err);
 

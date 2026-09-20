@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useCartStore } from "@/lib/cartStore";
 
@@ -647,13 +647,15 @@ export default function ShopPage() {
   const [selectedTypes, setSelectedTypes] = useState({});
   const [selectedVariants, setSelectedVariants] = useState({});
   const [cartConfirmation, setCartConfirmation] = useState(null);
+  const [cataloguePage, setCataloguePage] = useState(1);
+  const [hasMoreProducts, setHasMoreProducts] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     setQuery(new URLSearchParams(window.location.search).get("search") || "");
   }, []);
 
-  useEffect(() => {
-    const fetchProducts = async () => {
+  const fetchProducts = useCallback(async (page = 1) => {
       try {
         const baseUrl =
           process.env.NEXT_PUBLIC_API_URL ||
@@ -661,24 +663,32 @@ export default function ShopPage() {
           process.env.NEXT_PUBLIC_BACKEND_URL ||
           "https://api.elohimgrains.com/api";
 
-        const res = await fetch(`${baseUrl}/products`, {
+        const res = await fetch(`${baseUrl}/products?page=${page}&limit=24`, {
           cache: "no-store",
         });
 
         if (!res.ok) throw new Error("Failed to load products");
 
         const data = await res.json();
-        setProducts(Array.isArray(data) ? data : []);
+        const incoming = Array.isArray(data) ? data : (data.items || []);
+        setProducts((current) => page === 1 ? incoming : [...current, ...incoming.filter((item) => !current.some((existing) => existing.id === item.id))]);
+        setCataloguePage(page);
+        setHasMoreProducts(Boolean(data?.pagination?.has_more));
       } catch (error) {
         console.error("Shop fetch error:", error);
-        setProducts([]);
+        if (page === 1) setProducts([]);
       } finally {
-        setLoading(false);
+        if (page === 1) setLoading(false);
+        setLoadingMore(false);
       }
-    };
+    }, []);
 
-    fetchProducts();
-  }, []);
+  useEffect(() => { fetchProducts(1); }, [fetchProducts]);
+
+  const loadMoreProducts = () => {
+    setLoadingMore(true);
+    fetchProducts(cataloguePage + 1);
+  };
 
   const categoryTabs = useMemo(() => {
     const categories = new Map();
@@ -1040,6 +1050,13 @@ export default function ShopPage() {
                 ))}
               </div>
             )}
+            {hasMoreProducts && (
+              <div className="mt-8 text-center">
+                <button type="button" onClick={loadMoreProducts} disabled={loadingMore} className="rounded-xl border border-emerald-700 px-5 py-3 text-sm font-black text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
+                  {loadingMore ? "LOADING PRODUCTS..." : "LOAD MORE PRODUCTS"}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1145,8 +1162,8 @@ export default function ShopPage() {
 
           <div className="flex-1">
             {loading ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
-                Loading products...
+              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4" aria-label="Loading products">
+                {Array.from({ length: 8 }).map((_, index) => <div key={index} className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="h-44 animate-pulse rounded-xl bg-slate-200" /><div className="mt-4 h-5 w-3/4 animate-pulse rounded bg-slate-200" /><div className="mt-3 h-4 w-1/2 animate-pulse rounded bg-slate-100" /><div className="mt-5 h-10 animate-pulse rounded-xl bg-slate-100" /></div>)}
               </div>
             ) : filteredProducts.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
@@ -1188,6 +1205,8 @@ export default function ShopPage() {
                         <img
                           src={getProductImage(product)}
                           alt={product.name}
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
                         />
                         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">

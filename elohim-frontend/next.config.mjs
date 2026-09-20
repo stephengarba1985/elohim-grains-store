@@ -16,6 +16,7 @@ const nextConfig = {
     root: __dirname,
   },
   images: {
+    formats: ["image/avif", "image/webp"],
     remotePatterns: [
       { protocol: "http", hostname: "localhost" },
       { protocol: "https", hostname: "localhost" },

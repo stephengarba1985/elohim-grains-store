@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 const rolePaths = {
@@ -11,15 +12,17 @@ const rolePaths = {
 export default function AdminLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
-  let staffRole = "";
-  if (typeof window !== "undefined") {
+  const [staffRole, setStaffRole] = useState("");
+
+  useEffect(() => {
     try {
-      staffRole = JSON.parse(localStorage.getItem("user") || "{}").staff_role || "";
+      setStaffRole(JSON.parse(localStorage.getItem("user") || "{}").staff_role || "");
     } catch {
       localStorage.removeItem("user");
       localStorage.removeItem("token");
+      setStaffRole("");
     }
-  }
+  }, []);
 
   const logout = () => {
     localStorage.clear();

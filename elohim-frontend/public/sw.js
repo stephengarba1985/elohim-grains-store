@@ -1,4 +1,4 @@
-const CACHE_NAME = "elohim-grains-shell-v2";
+const CACHE_NAME = "elohim-grains-shell-v3";
 const SHELL = ["/", "/products", "/offline", "/pwa-icon.svg", "/logo.png"];
 const isPublicNavigation = (url) =>
   url.pathname === "/" ||
@@ -25,13 +25,25 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
   if (request.mode === "navigate") {
     if (!isPublicNavigation(url)) {
-      event.respondWith(fetch(request));
+      event.respondWith(fetch(request).catch(() => new Response("Service unavailable", { status: 503, statusText: "Service Unavailable" })));
       return;
     }
-    event.respondWith(fetch(request).then((response) => { const copy = response.clone(); caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)); return response; }).catch(() => caches.match(request).then((cached) => cached || caches.match("/offline"))));
+    event.respondWith(fetch(request).then((response) => {
+      const copy = response.clone();
+      event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {}));
+      return response;
+    }).catch(() => caches.match(request).then((cached) => cached || caches.match("/offline"))));
     return;
   }
-  event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => { if (response.ok && (request.destination === "image" || request.destination === "style" || request.destination === "script")) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone())); return response; })));
+  event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+    if (response.ok && (request.destination === "image" || request.destination === "style" || request.destination === "script")) {
+      try {
+        const copy = response.clone();
+        event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {}));
+      } catch {}
+    }
+    return response;
+  }).catch(() => new Response("Service unavailable", { status: 503, statusText: "Service Unavailable" }))));
 });
 
 // Push is intentionally passive until the backend has a VAPID provider and an

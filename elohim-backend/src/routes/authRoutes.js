@@ -31,6 +31,17 @@ const resolveFrontendBaseUrl = (req) => {
 };
 
 let authColumnsReady = false;
+let adminMfaColumnsReady = false;
+const ensureAdminMfaColumns = async () => {
+  if (adminMfaColumnsReady) return;
+  await pool.query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS admin_mfa_code_hash TEXT,
+      ADD COLUMN IF NOT EXISTS admin_mfa_expires_at TIMESTAMP
+  `);
+  adminMfaColumnsReady = true;
+};
+
 const ensureAuthColumns = async () => {
   if (authColumnsReady) return;
   await pool.query(`
@@ -467,6 +478,7 @@ router.post("/login", async (req, res) => {
     }
 
     if (user.is_admin) {
+      await ensureAdminMfaColumns();
       const code = String(crypto.randomInt(100000, 1000000));
       const codeHash = crypto.createHash("sha256").update(code).digest("hex");
       await pool.query("UPDATE users SET admin_mfa_code_hash=$1,admin_mfa_expires_at=NOW()+INTERVAL '10 minutes' WHERE id=$2", [codeHash,user.id]);

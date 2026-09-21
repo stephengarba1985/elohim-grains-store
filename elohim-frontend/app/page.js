@@ -4,9 +4,9 @@ import HomeWalletCard from "@/components/HomeWalletCard";
 import HomeProductSearch from "@/components/HomeProductSearch";
 
 export const metadata = {
-  title: "Elohim Grains Store | Agro Fintech",
-  description:
-    "Shop grains, fund a wallet, save toward food goals, and pay securely with Elohim Grains.",
+  title: "Buy Rice, Beans & Foodstuff in Abuja | Elohim Grains",
+  description: "Buy rice, beans, garri and everyday foodstuff online in Abuja. Elohim Grains offers reliable delivery, bulk rice supply and wholesale grains for homes and businesses.",
+  keywords: ["buy rice in Abuja", "rice delivery Abuja", "buy beans Abuja", "foodstuff delivery Abuja", "online food store Abuja", "bulk rice Abuja", "wholesale grains Abuja", "grain supplier Abuja", "food supplier for restaurants Abuja", "bulk food supply Nigeria"],
 };
 
 export const dynamic = "force-dynamic";

@@ -11,23 +11,38 @@ const ensurePriceIntelligenceTables = async () => {
     id BIGSERIAL PRIMARY KEY,
     product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
     product_name VARCHAR(255) NOT NULL,
+    location VARCHAR(120) NOT NULL DEFAULT 'Abuja',
     market VARCHAR(120) NOT NULL DEFAULT 'Abuja',
     price DECIMAL(12,2) NOT NULL CHECK (price > 0),
     unit VARCHAR(80) NOT NULL,
     observed_on DATE NOT NULL DEFAULT CURRENT_DATE,
     source VARCHAR(255) NOT NULL DEFAULT 'Elohim catalogue snapshot',
+    source_type VARCHAR(50) NOT NULL DEFAULT 'catalogue_snapshot',
+    verification_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    verified_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    verified_at TIMESTAMP,
     notes TEXT,
     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(product_id, market, unit, observed_on)
   )`);
+  await pool.query(`ALTER TABLE market_price_observations
+    ADD COLUMN IF NOT EXISTS location VARCHAR(120) NOT NULL DEFAULT 'Abuja',
+    ADD COLUMN IF NOT EXISTS source_type VARCHAR(50) NOT NULL DEFAULT 'catalogue_snapshot',
+    ADD COLUMN IF NOT EXISTS verification_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    ADD COLUMN IF NOT EXISTS verified_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP
+  `);
+  await pool.query(`UPDATE market_price_observations
+    SET source_type = 'catalogue_snapshot', verification_status = 'verified', verified_at = COALESCE(verified_at, created_at)
+    WHERE source = 'Elohim catalogue snapshot' AND verification_status = 'pending'`);
   await pool.query("CREATE INDEX IF NOT EXISTS market_price_observations_lookup_idx ON market_price_observations(product_id, market, unit, observed_on DESC)");
   priceIntelligenceReady = true;
 };
 
 const snapshotCataloguePrices = async () => {
-  await pool.query(`INSERT INTO market_price_observations (product_id, product_name, market, price, unit, observed_on, source)
-    SELECT p.id, p.name, 'Abuja', p.price, COALESCE(NULLIF(p.weight, ''), 'unit'), CURRENT_DATE, 'Elohim catalogue snapshot'
+  await pool.query(`INSERT INTO market_price_observations (product_id, product_name, location, market, price, unit, observed_on, source, source_type, verification_status, verified_at)
+    SELECT p.id, p.name, 'Abuja', 'Elohim catalogue', p.price, COALESCE(NULLIF(p.weight, ''), 'unit'), CURRENT_DATE, 'Elohim catalogue snapshot', 'catalogue_snapshot', 'verified', CURRENT_TIMESTAMP
     FROM products p WHERE COALESCE(p.price, 0) > 0
     ON CONFLICT (product_id, market, unit, observed_on) DO NOTHING`);
 };
@@ -51,7 +66,8 @@ const calculateMetrics = (observations) => {
     current_price: Number(latest.price), unit: latest.unit, market: latest.market, observed_on: latest.observed_on,
     change_7d: changeForDays(7), change_30d: changeForDays(30), change_90d: changeForDays(90),
     high_90d: Math.max(...values), low_90d: Math.min(...values), volatility_90d: mean ? Number((Math.sqrt(variance) / mean * 100).toFixed(2)) : 0,
-    observation_count: sorted.length,
+    observation_count: sorted.length, verified_observation_count: sorted.length,
+    verified_source_count: new Set(sorted.map((row) => `${row.source_type}:${row.source}`)).size,
   };
 };
 
@@ -150,15 +166,19 @@ router.get("/admin/observations", verifyToken, isAdmin, async (req, res) => {
 router.post("/admin/observations", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensurePriceIntelligenceTables();
-    const { product_id, market, price, unit, observed_on, source, notes } = req.body;
+    const { product_id, location, market, price, unit, observed_on, source, source_type, verification_status, notes } = req.body;
     const parsedPrice = Number(price);
     if (!Number.isInteger(Number(product_id)) || !Number.isFinite(parsedPrice) || parsedPrice <= 0 || !String(unit || "").trim()) return res.status(400).json({ error: "Product, price and unit are required" });
     const product = await pool.query("SELECT id,name FROM products WHERE id=$1", [product_id]);
     if (!product.rows[0]) return res.status(404).json({ error: "Product not found" });
-    const result = await pool.query(`INSERT INTO market_price_observations (product_id, product_name, market, price, unit, observed_on, source, notes, created_by)
-      VALUES ($1,$2,$3,$4,$5,COALESCE($6::date,CURRENT_DATE),$7,$8,$9)
-      ON CONFLICT (product_id, market, unit, observed_on) DO UPDATE SET price=EXCLUDED.price, source=EXCLUDED.source, notes=EXCLUDED.notes, created_by=EXCLUDED.created_by, created_at=CURRENT_TIMESTAMP
-      RETURNING *`, [product.rows[0].id, product.rows[0].name, String(market || "Abuja").trim(), parsedPrice, String(unit).trim(), observed_on || null, String(source || "Admin market observation").trim(), String(notes || "").trim(), req.user.id]);
+    const allowedSourceTypes = ["market_visit", "supplier_quote", "catalogue_snapshot", "official_feed", "admin_market_observation"];
+    const allowedVerification = ["pending", "verified", "rejected"];
+    const normalizedSourceType = allowedSourceTypes.includes(source_type) ? source_type : "admin_market_observation";
+    const normalizedVerification = allowedVerification.includes(verification_status) ? verification_status : "pending";
+    const result = await pool.query(`INSERT INTO market_price_observations (product_id, product_name, location, market, price, unit, observed_on, source, source_type, verification_status, verified_by, verified_at, notes, created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date,CURRENT_DATE),$8,$9,$10,$11,CASE WHEN $10='verified' THEN CURRENT_TIMESTAMP ELSE NULL END,$12,$11)
+      ON CONFLICT (product_id, market, unit, observed_on) DO UPDATE SET location=EXCLUDED.location, price=EXCLUDED.price, source=EXCLUDED.source, source_type=EXCLUDED.source_type, verification_status=EXCLUDED.verification_status, verified_by=EXCLUDED.verified_by, verified_at=EXCLUDED.verified_at, notes=EXCLUDED.notes, created_by=EXCLUDED.created_by, created_at=CURRENT_TIMESTAMP
+      RETURNING *`, [product.rows[0].id, product.rows[0].name, String(location || "Abuja").trim(), String(market || "Unspecified market").trim(), parsedPrice, String(unit).trim(), observed_on || null, String(source || "Admin market observation").trim(), normalizedSourceType, normalizedVerification, req.user.id, String(notes || "").trim()]);
     res.status(201).json(result.rows[0]);
   } catch (err) { console.error("CREATE PRICE OBSERVATION ERROR:", err); res.status(500).json({ error: "Failed to save market price observation" }); }
 });
@@ -168,7 +188,7 @@ router.get("/", async (req, res) => {
     await ensurePriceIntelligenceTables();
     await snapshotCataloguePrices();
     const [rows, catalog] = await Promise.all([
-      pool.query(`SELECT * FROM market_price_observations WHERE observed_on >= CURRENT_DATE - INTERVAL '90 days' ORDER BY observed_on ASC,id ASC`),
+      pool.query(`SELECT * FROM market_price_observations WHERE verification_status='verified' AND observed_on >= CURRENT_DATE - INTERVAL '90 days' ORDER BY observed_on ASC,id ASC`),
       pool.query("SELECT id,name,COALESCE(NULLIF(weight,''),'unit') AS unit FROM products ORDER BY name"),
     ]);
     const grouped = rows.rows.reduce((all, row) => { const key = String(row.product_id); (all[key] ||= []).push(row); return all; }, {});

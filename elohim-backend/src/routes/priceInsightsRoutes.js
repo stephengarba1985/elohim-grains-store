@@ -65,7 +65,7 @@ const calculateMetrics = (observations) => {
     product_id: latest.product_id,
     current_price: Number(latest.price), unit: latest.unit, market: latest.market, observed_on: latest.observed_on,
     change_7d: changeForDays(7), change_30d: changeForDays(30), change_90d: changeForDays(90),
-    high_90d: Math.max(...values), low_90d: Math.min(...values), volatility_90d: mean ? Number((Math.sqrt(variance) / mean * 100).toFixed(2)) : 0,
+    high_90d: Math.max(...values), low_90d: Math.min(...values), market_range_low: Math.min(...values), market_range_high: Math.max(...values), volatility_90d: mean ? Number((Math.sqrt(variance) / mean * 100).toFixed(2)) : 0,
     observation_count: sorted.length, verified_observation_count: sorted.length,
     verified_source_count: new Set(sorted.map((row) => `${row.source_type}:${row.source}`)).size,
   };
@@ -188,13 +188,22 @@ router.get("/", async (req, res) => {
     await ensurePriceIntelligenceTables();
     await snapshotCataloguePrices();
     const [rows, catalog] = await Promise.all([
-      pool.query(`SELECT * FROM market_price_observations WHERE verification_status='verified' AND observed_on >= CURRENT_DATE - INTERVAL '90 days' ORDER BY observed_on ASC,id ASC`),
-      pool.query("SELECT id,name,COALESCE(NULLIF(weight,''),'unit') AS unit FROM products ORDER BY name"),
+      pool.query(`SELECT * FROM market_price_observations WHERE verification_status='verified' AND observed_on >= CURRENT_DATE - INTERVAL '1 year' ORDER BY observed_on ASC,id ASC`),
+      pool.query("SELECT id,name,price,COALESCE(cost_price,0) AS cost_price,COALESCE(stock_quantity,0)::int AS stock,COALESCE(NULLIF(weight,''),'unit') AS unit FROM products ORDER BY name"),
     ]);
     const grouped = rows.rows.reduce((all, row) => { const key = String(row.product_id); (all[key] ||= []).push(row); return all; }, {});
     const commodities = catalog.rows.map((product) => {
       const observations = grouped[String(product.id)] || [];
-      return observations.length ? { name: product.name, ...calculateMetrics(observations) } : { product_id: product.id, name: product.name, unit: product.unit, observation_count: 0 };
+      const metrics = observations.length ? calculateMetrics(observations) : null;
+      const movement = metrics?.change_30d ?? metrics?.change_7d ?? null;
+      const trend = movement == null ? "Unknown" : movement > 0.5 ? "Rising" : movement < -0.5 ? "Falling" : "Stable";
+      return {
+        product_id: product.id, name: product.name, elohim_price: Number(product.price || 0), cost_price: Number(product.cost_price || 0), stock: product.stock, unit: metrics?.unit || product.unit,
+        ...(metrics || { observation_count: 0, verified_observation_count: 0, verified_source_count: 0 }),
+        trend,
+        forecast: movement == null ? { available: false, direction: "Unknown", method: "Insufficient verified observation history" } : { available: true, direction: trend === "Rising" ? "Upward" : trend === "Falling" ? "Downward" : "Stable", method: "Trend continuation from verified historical observations; this is not a guarantee." },
+        evidence: movement == null ? "The available verified observations do not establish a measured period change or a single cause." : `${Math.abs(movement)}% ${movement >= 0 ? "increase" : "decrease"} during the measured period. The available data does not establish a single cause.`,
+      };
     });
     const rice = commodities.find((item) => String(item.name).toLowerCase().includes("rice"));
     const maize = commodities.find((item) => String(item.name).toLowerCase().includes("maize"));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import API from "@/lib/api";
 import toast from "react-hot-toast";
 import {
@@ -35,6 +36,7 @@ export default function PriceInsightsDashboard({ admin = false }) {
   const [mounted, setMounted] = useState(false);
   const [inventorySignals, setInventorySignals] = useState([]);
   const [observation, setObservation] = useState({ product_id: "", location: "Abuja", market: "", price: "", unit: "", observed_on: new Date().toISOString().slice(0, 10), source: "Admin market observation", source_type: "market_visit", verification_status: "verified" });
+  const [selectedProductId, setSelectedProductId] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -47,6 +49,7 @@ export default function PriceInsightsDashboard({ admin = false }) {
   const inflation = insights?.inflation || [];
   const signals = insights?.market_signals || {};
   const observedProducts = insights?.products || [];
+  const selectedProduct = observedProducts.find((item) => String(item.product_id) === String(selectedProductId)) || observedProducts.find((item) => String(item.name || "").toLowerCase().includes("rice")) || observedProducts[0] || null;
 
   const summary = useMemo(() => {
     const riceMetric = observedProducts.find((item) => String(item.name || "").toLowerCase().includes("rice")) || {};
@@ -87,6 +90,12 @@ export default function PriceInsightsDashboard({ admin = false }) {
     }
   };
 
+  const setPriceAlert = async () => {
+    if (!selectedProduct?.product_id) return;
+    try { await API.post("/price-insights/follow", { product_id: selectedProduct.product_id, threshold_percent: 3 }); toast.success("Price alert set at 3%"); }
+    catch (error) { toast.error(error.response?.data?.error || "Please sign in to set a price alert"); }
+  };
+
   const chartFallback = (
     <div className="h-full w-full rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-sm text-slate-500">
       Loading chart...
@@ -99,13 +108,13 @@ export default function PriceInsightsDashboard({ admin = false }) {
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-green-700 uppercase tracking-wide">
-              AI Price Prediction
+              Price intelligence
             </p>
             <h1 className="text-3xl font-bold text-slate-950 mt-1">
-              Grain market intelligence
+              Recorded market intelligence
             </h1>
             <p className="text-slate-600 mt-2 max-w-2xl">
-              Track rice and maize price movement, food inflation pressure, and the best time to buy.
+              Compare Elohim selling prices with verified market observations and clearly labelled trend estimates.
             </p>
           </div>
           <button
@@ -113,7 +122,7 @@ export default function PriceInsightsDashboard({ admin = false }) {
             disabled={loading}
             className="bg-green-700 hover:bg-green-800 disabled:bg-green-300 text-white px-5 py-3 rounded-lg font-semibold"
           >
-            {loading ? "Refreshing..." : "Refresh Predictions"}
+            {loading ? "Refreshing..." : "Refresh market data"}
           </button>
         </div>
 
@@ -147,6 +156,8 @@ export default function PriceInsightsDashboard({ admin = false }) {
             <p className="text-xs text-slate-300">recorded-price calculations</p>
           </div>
         </div>
+
+        {selectedProduct && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Market estimate</p><h2 className="mt-1 text-2xl font-black">{selectedProduct.name} — {selectedProduct.unit}</h2><p className="mt-1 text-sm text-slate-500">Updated: {selectedProduct.observed_on || "No verified observation yet"}</p></div><select value={selectedProduct.product_id} onChange={(event) => setSelectedProductId(event.target.value)} className="rounded-lg border p-3">{observedProducts.map((item) => <option key={item.product_id} value={item.product_id}>{item.name}</option>)}</select></div><div className="mt-5 grid gap-3 md:grid-cols-3"><div className="rounded-lg bg-emerald-50 p-4"><p className="text-xs font-bold text-emerald-800">Elohim price</p><p className="mt-1 text-xl font-black">{formatPrice(selectedProduct.elohim_price)}</p><p className="text-xs text-emerald-700">Amount customer pays</p></div><div className="rounded-lg bg-sky-50 p-4"><p className="text-xs font-bold text-sky-800">Market range</p><p className="mt-1 text-xl font-black">{selectedProduct.market_range_low == null ? "Not enough verified data" : `${formatPrice(selectedProduct.market_range_low)}–${formatPrice(selectedProduct.market_range_high)}`}</p><p className="text-xs text-sky-700">{selectedProduct.verified_observation_count || 0} verified observations</p></div><div className="rounded-lg bg-amber-50 p-4"><p className="text-xs font-bold text-amber-800">Forecast</p><p className="mt-1 text-xl font-black">{selectedProduct.forecast?.direction}</p><p className="text-xs text-amber-700">{selectedProduct.forecast?.method}</p></div></div><div className="mt-4 flex flex-wrap gap-2 text-sm"><span className="rounded-full bg-slate-100 px-3 py-1"><b>30-day movement:</b> {selectedProduct.change_30d == null ? "Not enough history" : `${selectedProduct.change_30d >= 0 ? "+" : ""}${formatPercent(selectedProduct.change_30d)}`}</span><span className="rounded-full bg-slate-100 px-3 py-1"><b>Trend:</b> {selectedProduct.trend}</span></div><div className="mt-4 rounded-lg border p-4"><h3 className="font-bold">Market insight</h3><p className="mt-1 text-sm text-slate-600">{selectedProduct.evidence}</p></div><div className="mt-4 flex flex-wrap gap-3"><Link href={`/products/${selectedProduct.product_id}`} className="rounded-lg bg-emerald-700 px-4 py-3 font-bold text-white">BUY NOW</Link><Link href={`/plans?product_id=${selectedProduct.product_id}`} className="rounded-lg border border-emerald-700 px-4 py-3 font-bold text-emerald-800">SAVE FOR THIS PRODUCT</Link><button onClick={setPriceAlert} className="rounded-lg border px-4 py-3 font-bold">SET PRICE ALERT</button></div></section>}
 
         <div className="grid lg:grid-cols-[1.4fr_1fr] gap-6">
           <section className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">

@@ -34,6 +34,7 @@ export default function PriceInsightsDashboard({ admin = false }) {
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [inventorySignals, setInventorySignals] = useState([]);
+  const [observation, setObservation] = useState({ product_id: "", market: "Abuja", price: "", unit: "", observed_on: new Date().toISOString().slice(0, 10), source: "Admin market observation" });
 
   useEffect(() => {
     setMounted(true);
@@ -45,22 +46,21 @@ export default function PriceInsightsDashboard({ admin = false }) {
   const trends = insights?.trends || [];
   const inflation = insights?.inflation || [];
   const signals = insights?.market_signals || {};
+  const observedProducts = insights?.products || [];
 
   const summary = useMemo(() => {
-    const latest = trends[8] || trends[trends.length - 1] || {};
-    const next = trends[9] || {};
+    const riceMetric = observedProducts.find((item) => String(item.name || "").toLowerCase().includes("rice")) || {};
+    const maizeMetric = observedProducts.find((item) => String(item.name || "").toLowerCase().includes("maize")) || {};
     const foodInflation = inflation[8]?.food || inflation[inflation.length - 1]?.food || 0;
-    const riceChange = latest.rice ? ((Number(next.rice || 0) - Number(latest.rice || 0)) / latest.rice) * 100 : 0;
-    const maizeChange = latest.maize ? ((Number(next.maize || 0) - Number(latest.maize || 0)) / latest.maize) * 100 : 0;
 
     return {
-      rice: latest.rice || 0,
-      maize: latest.maize || 0,
+      rice: riceMetric.current_price || 0,
+      maize: maizeMetric.current_price || 0,
       foodInflation,
-      riceChange,
-      maizeChange,
+      riceChange: riceMetric.change_7d,
+      maizeChange: maizeMetric.change_7d,
     };
-  }, [trends, inflation]);
+  }, [observedProducts, inflation]);
 
   const fetchInsights = async () => {
     try {
@@ -72,6 +72,18 @@ export default function PriceInsightsDashboard({ admin = false }) {
       toast.error("Failed to load price insights");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveObservation = async (event) => {
+    event.preventDefault();
+    try {
+      await API.post("/price-insights/admin/observations", observation);
+      toast.success("Market observation saved");
+      setObservation((current) => ({ ...current, price: "" }));
+      fetchInsights();
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Could not save market observation");
     }
   };
 
@@ -111,7 +123,7 @@ export default function PriceInsightsDashboard({ admin = false }) {
             <p className="text-xl font-bold text-slate-950">{formatPrice(summary.rice)}</p>
             <p className={summary.riceChange >= 0 ? "text-xs text-green-700" : "text-xs text-red-600"}>
               {summary.riceChange >= 0 ? "+" : ""}
-              {formatPercent(summary.riceChange)} next month
+              {summary.riceChange == null ? "Need 7 days of observations" : `${summary.riceChange >= 0 ? "+" : ""}${formatPercent(summary.riceChange)} over 7 days`}
             </p>
           </div>
           <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 shadow-sm">
@@ -119,18 +131,18 @@ export default function PriceInsightsDashboard({ admin = false }) {
             <p className="text-xl font-bold text-slate-950">{formatPrice(summary.maize)}</p>
             <p className={summary.maizeChange >= 0 ? "text-xs text-green-700" : "text-xs text-red-600"}>
               {summary.maizeChange >= 0 ? "+" : ""}
-              {formatPercent(summary.maizeChange)} next month
+              {summary.maizeChange == null ? "Need 7 days of observations" : `${summary.maizeChange >= 0 ? "+" : ""}${formatPercent(summary.maizeChange)} over 7 days`}
             </p>
           </div>
           <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 shadow-sm">
-            <p className="text-xs text-slate-500">Food Inflation</p>
-            <p className="text-xl font-bold text-orange-600">{formatPercent(summary.foodInflation)}</p>
-            <p className="text-xs text-slate-500">modeled index</p>
+            <p className="text-xs text-slate-500">Recorded products</p>
+            <p className="text-xl font-bold text-orange-600">{observedProducts.length}</p>
+            <p className="text-xs text-slate-500">with market observations</p>
           </div>
           <div className="bg-slate-950 text-white rounded-lg px-4 py-3 shadow-sm">
             <p className="text-xs text-slate-300">Model</p>
-            <p className="text-lg font-bold">{signals.model_version || "Local market model"}</p>
-            <p className="text-xs text-slate-300">market-ready API</p>
+            <p className="text-lg font-bold">{signals.model_version || "Observation model"}</p>
+            <p className="text-xs text-slate-300">recorded-price calculations</p>
           </div>
         </div>
 
@@ -138,7 +150,7 @@ export default function PriceInsightsDashboard({ admin = false }) {
           <section className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-950">Rice vs Maize Price Trend</h2>
-              <span className="text-xs text-slate-500">dotted area indicates forecast window</span>
+              <span className="text-xs text-slate-500">recorded observations only</span>
             </div>
             <div className="h-80">
               {mounted ? (
@@ -168,9 +180,7 @@ export default function PriceInsightsDashboard({ admin = false }) {
                       </p>
                       <h3 className="font-bold text-slate-950 mt-1">{item.action}</h3>
                     </div>
-                    <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">
-                      {item.confidence}% confidence
-                    </span>
+                    {item.confidence != null && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">{item.confidence}% confidence</span>}
                   </div>
                   <p className="text-sm text-slate-600 mt-3">{item.reason}</p>
                   <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
@@ -179,8 +189,8 @@ export default function PriceInsightsDashboard({ admin = false }) {
                       <p className="font-bold">{formatPrice(item.current_price)}</p>
                     </div>
                     <div>
-                      <p className="text-slate-500">Next Month</p>
-                      <p className="font-bold">{formatPrice(item.next_month_price)}</p>
+                      <p className="text-slate-500">7-day change</p>
+                      <p className="font-bold">{item.expected_change == null ? "Not enough history" : formatPercent(item.expected_change)}</p>
                     </div>
                   </div>
                 </div>
@@ -234,6 +244,8 @@ export default function PriceInsightsDashboard({ admin = false }) {
         </div>
 
         {admin && <section className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
+          <h2 className="text-lg font-bold text-slate-950">Record a market price</h2><p className="mt-1 text-sm text-slate-500">One observation per product, market, unit and date. Saving the same combination updates the observation instead of duplicating it.</p>
+          <form onSubmit={saveObservation} className="mt-4 grid gap-3 md:grid-cols-3"><select required value={observation.product_id} onChange={(event) => { const item = observedProducts.find((product) => String(product.product_id || product.id) === event.target.value); setObservation({ ...observation, product_id: event.target.value, unit: item?.unit || observation.unit }); }} className="rounded border p-3"><option value="">Choose product</option>{observedProducts.map((product) => <option key={product.product_id || product.id} value={product.product_id || product.id}>{product.name}</option>)}</select><input required type="number" min="1" value={observation.price} onChange={(event) => setObservation({ ...observation, price: event.target.value })} className="rounded border p-3" placeholder="Observed price"/><input required value={observation.unit} onChange={(event) => setObservation({ ...observation, unit: event.target.value })} className="rounded border p-3" placeholder="Unit, e.g. 50kg"/><input value={observation.market} onChange={(event) => setObservation({ ...observation, market: event.target.value })} className="rounded border p-3" placeholder="Market"/><input type="date" required value={observation.observed_on} onChange={(event) => setObservation({ ...observation, observed_on: event.target.value })} className="rounded border p-3"/><button className="rounded bg-emerald-700 px-4 py-3 font-bold text-white">Save observation</button></form>
           <div className="flex items-center justify-between"><div><h2 className="text-lg font-bold text-slate-950">Price AI + Inventory Signals</h2><p className="text-sm text-slate-500">Advisory restocking guidance from stock and the last 30 days of sales. No purchase is made automatically.</p></div></div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{inventorySignals.map((item) => {
             const trend = item.name?.toLowerCase().includes("rice") ? summary.riceChange : item.name?.toLowerCase().includes("maize") ? summary.maizeChange : 0;

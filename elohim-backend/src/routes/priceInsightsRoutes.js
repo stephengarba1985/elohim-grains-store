@@ -4,6 +4,57 @@ const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
+let priceIntelligenceReady = false;
+const ensurePriceIntelligenceTables = async () => {
+  if (priceIntelligenceReady) return;
+  await pool.query(`CREATE TABLE IF NOT EXISTS market_price_observations (
+    id BIGSERIAL PRIMARY KEY,
+    product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+    product_name VARCHAR(255) NOT NULL,
+    market VARCHAR(120) NOT NULL DEFAULT 'Abuja',
+    price DECIMAL(12,2) NOT NULL CHECK (price > 0),
+    unit VARCHAR(80) NOT NULL,
+    observed_on DATE NOT NULL DEFAULT CURRENT_DATE,
+    source VARCHAR(255) NOT NULL DEFAULT 'Elohim catalogue snapshot',
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(product_id, market, unit, observed_on)
+  )`);
+  await pool.query("CREATE INDEX IF NOT EXISTS market_price_observations_lookup_idx ON market_price_observations(product_id, market, unit, observed_on DESC)");
+  priceIntelligenceReady = true;
+};
+
+const snapshotCataloguePrices = async () => {
+  await pool.query(`INSERT INTO market_price_observations (product_id, product_name, market, price, unit, observed_on, source)
+    SELECT p.id, p.name, 'Abuja', p.price, COALESCE(NULLIF(p.weight, ''), 'unit'), CURRENT_DATE, 'Elohim catalogue snapshot'
+    FROM products p WHERE COALESCE(p.price, 0) > 0
+    ON CONFLICT (product_id, market, unit, observed_on) DO NOTHING`);
+};
+
+const calculateMetrics = (observations) => {
+  if (!observations.length) return null;
+  const sorted = [...observations].sort((a, b) => new Date(a.observed_on) - new Date(b.observed_on));
+  const latest = sorted[sorted.length - 1];
+  const latestTime = new Date(`${latest.observed_on}T00:00:00Z`).getTime();
+  const changeForDays = (days) => {
+    const target = latestTime - days * 86400000;
+    const baseline = [...sorted].reverse().find((row) => new Date(`${row.observed_on}T00:00:00Z`).getTime() <= target);
+    return baseline ? Number((((Number(latest.price) - Number(baseline.price)) / Number(baseline.price)) * 100).toFixed(2)) : null;
+  };
+  const window90 = sorted.filter((row) => new Date(`${row.observed_on}T00:00:00Z`).getTime() >= latestTime - 90 * 86400000);
+  const values = window90.map((row) => Number(row.price));
+  const mean = values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1);
+  const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / Math.max(values.length, 1);
+  return {
+    product_id: latest.product_id,
+    current_price: Number(latest.price), unit: latest.unit, market: latest.market, observed_on: latest.observed_on,
+    change_7d: changeForDays(7), change_30d: changeForDays(30), change_90d: changeForDays(90),
+    high_90d: Math.max(...values), low_90d: Math.min(...values), volatility_90d: mean ? Number((Math.sqrt(variance) / mean * 100).toFixed(2)) : 0,
+    observation_count: sorted.length,
+  };
+};
+
 const ensurePriceAlerts = () => pool.query(`CREATE TABLE IF NOT EXISTS product_price_follows (
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
   baseline_price DECIMAL(12,2) NOT NULL, threshold_percent DECIMAL(5,2) NOT NULL DEFAULT 3, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,product_id)
@@ -88,75 +139,64 @@ router.get("/admin/inventory-signals", verifyToken, isAdmin, async (req, res) =>
   } catch (err) { console.error("PRICE INVENTORY SIGNAL ERROR:", err); res.status(500).json({ error: "Failed to load inventory signals" }); }
 });
 
+router.get("/admin/observations", verifyToken, isAdmin, async (req, res) => {
+  try {
+    await ensurePriceIntelligenceTables();
+    const result = await pool.query(`SELECT o.*, u.name AS recorded_by FROM market_price_observations o LEFT JOIN users u ON u.id=o.created_by ORDER BY o.observed_on DESC, o.id DESC LIMIT 200`);
+    res.json({ observations: result.rows });
+  } catch (err) { console.error("PRICE OBSERVATIONS ERROR:", err); res.status(500).json({ error: "Failed to load market price observations" }); }
+});
+
+router.post("/admin/observations", verifyToken, isAdmin, async (req, res) => {
+  try {
+    await ensurePriceIntelligenceTables();
+    const { product_id, market, price, unit, observed_on, source, notes } = req.body;
+    const parsedPrice = Number(price);
+    if (!Number.isInteger(Number(product_id)) || !Number.isFinite(parsedPrice) || parsedPrice <= 0 || !String(unit || "").trim()) return res.status(400).json({ error: "Product, price and unit are required" });
+    const product = await pool.query("SELECT id,name FROM products WHERE id=$1", [product_id]);
+    if (!product.rows[0]) return res.status(404).json({ error: "Product not found" });
+    const result = await pool.query(`INSERT INTO market_price_observations (product_id, product_name, market, price, unit, observed_on, source, notes, created_by)
+      VALUES ($1,$2,$3,$4,$5,COALESCE($6::date,CURRENT_DATE),$7,$8,$9)
+      ON CONFLICT (product_id, market, unit, observed_on) DO UPDATE SET price=EXCLUDED.price, source=EXCLUDED.source, notes=EXCLUDED.notes, created_by=EXCLUDED.created_by, created_at=CURRENT_TIMESTAMP
+      RETURNING *`, [product.rows[0].id, product.rows[0].name, String(market || "Abuja").trim(), parsedPrice, String(unit).trim(), observed_on || null, String(source || "Admin market observation").trim(), String(notes || "").trim(), req.user.id]);
+    res.status(201).json(result.rows[0]);
+  } catch (err) { console.error("CREATE PRICE OBSERVATION ERROR:", err); res.status(500).json({ error: "Failed to save market price observation" }); }
+});
+
 router.get("/", async (req, res) => {
   try {
-    const productRes = await pool.query(`
-      SELECT
-        p.id,
-        p.name,
-        COALESCE(AVG(NULLIF(v.price, 0)), NULLIF(p.price, 0), 0) AS market_price
-      FROM products p
-      LEFT JOIN product_variants v ON v.product_id = p.id
-      GROUP BY p.id, p.name, p.price
-    `);
-
-    const products = productRes.rows;
-    const fallbackPrice =
-      products.reduce((sum, item) => sum + Number(item.market_price || 0), 0) /
-      Math.max(products.length, 1);
-    const ricePrice = getBasePrice(products, "rice", fallbackPrice || 75000);
-    const maizePrice = getBasePrice(products, "maize", fallbackPrice || 42000);
-    const riceTrend = generateTrend(ricePrice, "Rice", 0.011, 0.025);
-    const maizeTrend = generateTrend(maizePrice, "Maize", 0.007, 0.035);
-    const inflation = Array.from({ length: 12 }, (_, index) => {
-      const date = new Date(new Date().getFullYear(), new Date().getMonth() + index - 8, 1);
-      const food = 29 + Math.sin(index * 0.8) * 2.2 + index * 0.18;
-      const headline = 24 + Math.cos(index * 0.65) * 1.6 + index * 0.12;
-
-      return {
-        month: `${monthLabels[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`,
-        food: Number(food.toFixed(1)),
-        headline: Number(headline.toFixed(1)),
-        predicted: index >= 9,
-      };
+    await ensurePriceIntelligenceTables();
+    await snapshotCataloguePrices();
+    const [rows, catalog] = await Promise.all([
+      pool.query(`SELECT * FROM market_price_observations WHERE observed_on >= CURRENT_DATE - INTERVAL '90 days' ORDER BY observed_on ASC,id ASC`),
+      pool.query("SELECT id,name,COALESCE(NULLIF(weight,''),'unit') AS unit FROM products ORDER BY name"),
+    ]);
+    const grouped = rows.rows.reduce((all, row) => { const key = String(row.product_id); (all[key] ||= []).push(row); return all; }, {});
+    const commodities = catalog.rows.map((product) => {
+      const observations = grouped[String(product.id)] || [];
+      return observations.length ? { name: product.name, ...calculateMetrics(observations) } : { product_id: product.id, name: product.name, unit: product.unit, observation_count: 0 };
     });
-
-    const recommendations = [
-      {
-        commodity: "Rice",
-        current_price: riceTrend[8].price,
-        next_month_price: riceTrend[9].price,
-        ...getRecommendation(riceTrend),
-      },
-      {
-        commodity: "Maize",
-        current_price: maizeTrend[8].price,
-        next_month_price: maizeTrend[9].price,
-        ...getRecommendation(maizeTrend),
-      },
-    ];
-
-    const combinedTrend = riceTrend.map((point, index) => ({
-      month: point.month,
-      rice: point.price,
-      maize: maizeTrend[index].price,
-      predicted: point.predicted,
-    }));
+    const rice = commodities.find((item) => String(item.name).toLowerCase().includes("rice"));
+    const maize = commodities.find((item) => String(item.name).toLowerCase().includes("maize"));
+    const dates = [...new Set(rows.rows.map((row) => row.observed_on))].sort();
+    const priceOnDate = (commodity, date) => commodity ? [...(grouped[String(commodity.product_id)] || [])].filter((row) => row.observed_on <= date).pop()?.price ?? null : null;
+    const combinedTrend = dates.map((date) => ({ month: date, rice: priceOnDate(rice, date), maize: priceOnDate(maize, date), predicted: false }));
+    const recommendations = [rice, maize].filter(Boolean).map((item) => ({ commodity: item.name, current_price: item.current_price, next_month_price: null, action: item.change_7d == null ? "Collect more observations" : item.change_7d > 3 ? "Review current price" : "Monitor market", confidence: null, reason: item.change_7d == null ? "A 7-day comparison needs an observation at least seven days old." : `Based on recorded ${item.market} observations; 7-day change: ${item.change_7d}%.`, expected_change: item.change_7d }));
 
     const marketSignals = {
       exchange_rate_pressure: "Medium",
       fuel_cost_pressure: "High",
       harvest_supply: "Moderate",
-      model_version: "Elohim local market model v1",
-      data_note:
-        "Uses current product prices and modeled market pressure. Ready for live market, exchange rate, and commodity feeds.",
+      model_version: "Elohim observation model v1",
+      data_note: "Prices and changes are calculated from recorded market observations. Catalogue snapshots are marked as an Elohim source; no projected prices are shown.",
     };
 
     res.json({
       updated_at: new Date().toISOString(),
       trends: combinedTrend,
-      inflation,
+      inflation: [],
       recommendations,
+      products: commodities,
       market_signals: marketSignals,
     });
   } catch (err) {

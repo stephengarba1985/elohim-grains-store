@@ -94,7 +94,10 @@ export default function PriceInsightsDashboard({ admin = false }) {
 
   const setPriceAlert = async () => {
     if (!selectedProduct?.product_id) return;
-    try { await API.post("/price-insights/follow", { product_id: selectedProduct.product_id, threshold_percent: 3 }); toast.success("Price alert set at 3%"); }
+    const target = window.prompt("Leave blank to watch for a 3% price change, or enter a price to alert when Elohim price falls below it:", "");
+    if (target === null) return;
+    const targetPrice = Number(target);
+    try { await API.post("/price-insights/follow", { product_id: selectedProduct.product_id, threshold_percent: 3, alert_type: target.trim() ? "below_price" : "change", target_price: targetPrice }); toast.success(target.trim() ? `Alert set below ₦${targetPrice.toLocaleString()}` : "Price-change alert set at 3%"); }
     catch (error) { toast.error(error.response?.data?.error || "Please sign in to set a price alert"); }
   };
 

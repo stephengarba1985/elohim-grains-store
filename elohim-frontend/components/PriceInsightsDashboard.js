@@ -37,6 +37,7 @@ export default function PriceInsightsDashboard({ admin = false }) {
   const [inventorySignals, setInventorySignals] = useState([]);
   const [observation, setObservation] = useState({ product_id: "", location: "Abuja", market: "", price: "", unit: "", observed_on: new Date().toISOString().slice(0, 10), source: "Admin market observation", source_type: "market_visit", verification_status: "verified" });
   const [selectedProductId, setSelectedProductId] = useState("");
+  const [periodDays, setPeriodDays] = useState(30);
 
   useEffect(() => {
     setMounted(true);
@@ -50,6 +51,7 @@ export default function PriceInsightsDashboard({ admin = false }) {
   const signals = insights?.market_signals || {};
   const observedProducts = insights?.products || [];
   const selectedProduct = observedProducts.find((item) => String(item.product_id) === String(selectedProductId)) || observedProducts.find((item) => String(item.name || "").toLowerCase().includes("rice")) || observedProducts[0] || null;
+  const visibleTrends = useMemo(() => { if (!trends.length) return []; const latest = new Date(trends[trends.length - 1].month).getTime(); return trends.filter((point) => new Date(point.month).getTime() >= latest - periodDays * 86400000); }, [trends, periodDays]);
 
   const summary = useMemo(() => {
     const riceMetric = observedProducts.find((item) => String(item.name || "").toLowerCase().includes("rice")) || {};
@@ -163,12 +165,12 @@ export default function PriceInsightsDashboard({ admin = false }) {
           <section className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-950">Rice vs Maize Price Trend</h2>
-              <span className="text-xs text-slate-500">recorded observations only</span>
+              <div className="flex gap-1">{[[7,"7D"],[30,"30D"],[90,"3M"],[180,"6M"],[365,"1Y"]].map(([days,label]) => <button key={days} onClick={() => setPeriodDays(days)} className={`rounded px-2 py-1 text-xs font-bold ${periodDays === days ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}>{label}</button>)}</div>
             </div>
             <div className="h-80">
               {mounted ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={trends}>
+                  <AreaChart data={visibleTrends}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis dataKey="month" />
                     <YAxis tickFormatter={(value) => Number(value / 1000).toFixed(0)} />

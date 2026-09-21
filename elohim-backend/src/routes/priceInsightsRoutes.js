@@ -145,12 +145,16 @@ const getRecommendation = (trend) => {
 
 router.get("/admin/inventory-signals", verifyToken, isAdmin, async (req, res) => {
   try {
+    await ensurePriceIntelligenceTables();
     const rows = await pool.query(`
-      SELECT p.id,p.name,COALESCE(p.stock_quantity,0)::int AS stock,
+      SELECT p.id,p.name,COALESCE(p.stock_quantity,0)::int AS stock,COALESCE(p.cost_price,0) AS cost_price,COALESCE(p.price,0) AS selling_price,
+        COALESCE(m.market_average,0) AS market_average,
         COALESCE(SUM(oi.quantity) FILTER (WHERE o.created_at >= CURRENT_DATE - INTERVAL '30 days'),0)::int AS units_sold
-      FROM products p LEFT JOIN order_items oi ON oi.product_id=p.id LEFT JOIN orders o ON o.id=oi.order_id
-      GROUP BY p.id,p.name,p.stock_quantity ORDER BY units_sold DESC, stock ASC LIMIT 30`);
-    const velocity = rows.rows.map((x) => ({ ...x, velocity: Number(x.units_sold) >= 20 ? "High" : Number(x.units_sold) >= 5 ? "Medium" : "Low" }));
+      FROM products p
+      LEFT JOIN LATERAL (SELECT AVG(price) AS market_average FROM market_price_observations mpo WHERE mpo.product_id=p.id AND mpo.verification_status='verified' AND mpo.observed_on >= CURRENT_DATE - INTERVAL '30 days') m ON TRUE
+      LEFT JOIN order_items oi ON oi.product_id=p.id LEFT JOIN orders o ON o.id=oi.order_id
+      GROUP BY p.id,p.name,p.stock_quantity,p.cost_price,p.price,m.market_average ORDER BY units_sold DESC, stock ASC LIMIT 30`);
+    const velocity = rows.rows.map((x) => { const sold = Number(x.units_sold); const stock = Number(x.stock); const daily = sold / 30; return { ...x, velocity: sold >= 20 ? "High" : sold >= 5 ? "Medium" : "Low", estimated_stock_days: daily > 0 ? Math.ceil(stock / daily) : null }; });
     res.json({ signals: velocity.map((x) => ({ ...x, action: x.stock <= 0 ? "Restock urgently" : x.stock <= 20 && x.velocity === "High" ? "Review restocking" : x.stock <= 20 ? "Monitor stock" : "Stock healthy" })) });
   } catch (err) { console.error("PRICE INVENTORY SIGNAL ERROR:", err); res.status(500).json({ error: "Failed to load inventory signals" }); }
 });

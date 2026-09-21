@@ -38,6 +38,8 @@ router.get("/stats", verifyToken, requirePermission("dashboard"), async (req, re
       delivered,
       pending,
       subscriptions,
+      todayProfit,
+      topProducts,
     ] = await Promise.all([
 
       pool.query(`
@@ -121,6 +123,9 @@ router.get("/stats", verifyToken, requirePermission("dashboard"), async (req, re
         WHERE status='active'
       `),
 
+      pool.query(`SELECT COALESCE(SUM(oi.quantity*(oi.price-COALESCE(p.cost_price,0))),0) AS value FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN products p ON p.id=oi.product_id WHERE DATE(o.created_at)=CURRENT_DATE AND ${hasPaymentStatusColumn ? "(o.status IN ('paid','delivered') OR o.payment_status='verified')" : "o.status IN ('paid','delivered')"}`),
+      pool.query(`SELECT p.name,COALESCE(SUM(oi.quantity*oi.price),0) AS revenue FROM order_items oi JOIN products p ON p.id=oi.product_id JOIN orders o ON o.id=oi.order_id WHERE ${hasPaymentStatusColumn ? "(o.status IN ('paid','delivered') OR o.payment_status='verified')" : "o.status IN ('paid','delivered')"} GROUP BY p.id,p.name ORDER BY revenue DESC LIMIT 5`),
+
     ]);
 
     res.json({
@@ -147,7 +152,10 @@ router.get("/stats", verifyToken, requirePermission("dashboard"), async (req, re
 
       pending: pending.rows[0].total,
 
-      subscriptions: subscriptions.rows[0].total
+      subscriptions: subscriptions.rows[0].total,
+      grossProfitToday: todayProfit.rows[0].value,
+      averageOrderToday: Number(todayOrders.rows[0].total) ? Number(todayRevenue.rows[0].revenue) / Number(todayOrders.rows[0].total) : 0,
+      topProducts: topProducts.rows
 
     });
 

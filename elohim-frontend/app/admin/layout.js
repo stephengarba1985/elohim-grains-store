@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 const rolePaths = {
-  super_admin: ["*"], operations_manager: ["/admin/dashboard","/admin/orders","/admin/products","/admin/inventory","/admin/customers","/admin/logistics","/admin/bulk","/admin/subscriptions"],
-  finance: ["/admin/dashboard","/admin/payments","/admin/money","/admin/ledger","/admin/bnpl","/admin/analytics","/admin/profit"],
+  super_admin: ["*"], operations_manager: ["/admin","/admin/orders","/admin/products","/admin/inventory","/admin/customers","/admin/logistics","/admin/bulk","/admin/subscriptions"],
+  finance: ["/admin","/admin/payments","/admin/money","/admin/ledger","/admin/bnpl","/admin/analytics","/admin/profit"],
   warehouse: ["/admin/orders","/admin/products","/admin/inventory","/admin/suppliers"], delivery_manager: ["/admin/orders","/admin/logistics"], customer_support: ["/admin/orders","/admin/customers"], vendor_manager: ["/admin/products","/admin/vendors"],
 };
 
@@ -54,7 +54,7 @@ export default function AdminLayout({ children }) {
 
         <div className="flex flex-col gap-1">
           <p className="text-xs text-gray-400 mt-2">DAILY OPERATIONS</p>
-          {navItem("Dashboard", "/admin/dashboard")}
+          {navItem("Dashboard", "/admin")}
           {navItem("Orders", "/admin/orders")}
           {navItem("Products", "/admin/products")}
           {navItem("Inventory", "/admin/inventory")}

@@ -465,13 +465,59 @@ router.get("/stats/summary", ...adminRiders, async (req, res) => {
    ASSIGN RIDER
 ========================= */
 router.put("/assign/:delivery_id", ...adminRiders, async (req, res) => {
+  const client = await pool.connect();
+
   try {
     await ensureDeliveryTrackingTables();
 
     const { delivery_id } = req.params;
     const { rider_id } = req.body;
 
-    await pool.query(
+    await client.query("BEGIN");
+
+    const deliveryRes = await client.query(
+      `SELECT d.id, d.order_id, d.status AS delivery_status, d.rider_id,
+              o.status AS order_status
+       FROM deliveries d
+       JOIN orders o ON o.id = d.order_id
+       WHERE d.id = $1
+       FOR UPDATE OF d, o`,
+      [delivery_id]
+    );
+    const delivery = deliveryRes.rows[0];
+
+    if (!delivery) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Delivery not found" });
+    }
+
+    if (!["ready_for_delivery", "delivery_failed"].includes(delivery.order_status)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Order is not ready for rider assignment" });
+    }
+
+    if (["delivered", "cancelled"].includes(delivery.delivery_status)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Terminal delivery cannot be reassigned" });
+    }
+
+    const riderRes = await client.query(
+      "SELECT id, status FROM riders WHERE id = $1 FOR UPDATE",
+      [rider_id]
+    );
+    const rider = riderRes.rows[0];
+
+    if (!rider) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Rider not found" });
+    }
+
+    if (!["available", "active"].includes(String(rider.status || "").toLowerCase())) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Rider is not available" });
+    }
+
+    await client.query(
       `UPDATE deliveries
        SET rider_id = $1,
            status = 'assigned',
@@ -481,26 +527,35 @@ router.put("/assign/:delivery_id", ...adminRiders, async (req, res) => {
       [rider_id, delivery_id]
     );
 
-    const deliveryRes = await pool.query(
-      "SELECT order_id FROM deliveries WHERE id = $1",
-      [delivery_id]
+    await client.query(
+      "UPDATE orders SET rider_id = $1, status = 'assigned' WHERE id = $2",
+      [rider_id, delivery.order_id]
     );
 
-    await pool.query(`UPDATE riders SET status='busy' WHERE id=$1`, [rider_id]);
+    await client.query(
+      `UPDATE riders
+       SET status = 'busy',
+           current_orders = COALESCE(current_orders, 0) + 1
+       WHERE id = $1`,
+      [rider_id]
+    );
 
-    if (deliveryRes.rows[0]) {
-      await addDeliveryEvent(
-        deliveryRes.rows[0].order_id,
-        delivery_id,
-        "assigned",
-        "Rider assigned"
-      );
-    }
+    await client.query("COMMIT");
+
+    await addDeliveryEvent(
+      delivery.order_id,
+      delivery_id,
+      "assigned",
+      "Rider assigned"
+    );
 
     res.json({ message: "Rider assigned 🚚" });
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error(err);
     res.status(500).json({ error: "Assignment failed" });
+  } finally {
+    client.release();
   }
 });
 

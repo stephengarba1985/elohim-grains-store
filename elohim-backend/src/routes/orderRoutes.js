@@ -88,6 +88,9 @@ router.post("/create", verifyToken, async (req, res) => {
       );
 
       if (existingOrder.rows.length > 0) {
+        if (Number(existingOrder.rows[0].user_id) !== user_id) {
+          return res.status(403).json({ error: "Payment reference does not belong to this customer" });
+        }
         return res.json({
           message: "Order already exists",
           orderId: existingOrder.rows[0].id,
@@ -364,6 +367,58 @@ router.post("/create", verifyToken, async (req, res) => {
   }
 });
 
+
+/* =========================
+   RECOVER VERIFIED PAYMENT
+========================= */
+router.post("/recover-payment", verifyToken, async (req, res) => {
+  const reference = String(req.body.reference || "").trim();
+  if (!reference) return res.status(400).json({ error: "Reference is required" });
+
+  try {
+    await ensurePaymentGatewayTables();
+    const payment = await pool.query(
+      `SELECT id, user_id, order_id, reference, amount, status
+       FROM payment_transactions
+       WHERE reference=$1 AND user_id=$2 AND status='verified'
+       LIMIT 1`,
+      [reference, req.user.id]
+    );
+
+    if (!payment.rows[0]) {
+      return res.status(404).json({ error: "Verified payment not found" });
+    }
+
+    if (payment.rows[0].order_id) {
+      const order = await pool.query(
+        "SELECT id, order_number, total_amount, status FROM orders WHERE id=$1 AND user_id=$2",
+        [payment.rows[0].order_id, req.user.id]
+      );
+      if (!order.rows[0]) return res.status(409).json({ error: "Payment is linked to an unavailable order. Contact support." });
+      return res.json({ recovered: true, order: order.rows[0] });
+    }
+
+    const cart = await pool.query("SELECT id FROM cart WHERE user_id=$1 LIMIT 1", [req.user.id]);
+    if (!cart.rows[0]) {
+      return res.status(409).json({
+        error: "Payment is verified but the order cannot be rebuilt automatically because the cart is unavailable. Contact support.",
+        reference,
+        amount: payment.rows[0].amount,
+      });
+    }
+
+    return res.status(202).json({
+      recovered: false,
+      can_create_order: true,
+      reference,
+      amount: payment.rows[0].amount,
+      next_step: "Call the authenticated order creation endpoint with this reference.",
+    });
+  } catch (err) {
+    console.error("ORDER PAYMENT RECOVERY ERROR:", err);
+    return res.status(500).json({ error: "Failed to recover paid order" });
+  }
+});
 
 /* =========================
    GET ALL ORDERS (ADMIN ONLY)

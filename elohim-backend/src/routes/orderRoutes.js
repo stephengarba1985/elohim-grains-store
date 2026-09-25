@@ -172,6 +172,19 @@ router.post("/create", verifyToken, async (req, res) => {
       : { rows: [] };
     const verifiedPayment = paymentTx.rows[0];
 
+    if (reference && !verifiedPayment) {
+      return res.status(400).json({ error: "Verified payment is required for this order" });
+    }
+
+    if (verifiedPayment) {
+      if (verifiedPayment.order_id) {
+        return res.status(409).json({ error: "Payment reference has already been used" });
+      }
+      if (Math.round(Number(verifiedPayment.amount) * 100) !== Math.round(Number(totalAmount) * 100)) {
+        return res.status(400).json({ error: "Verified payment amount does not match the current order total" });
+      }
+    }
+
     await client.query("BEGIN");
     transactionStarted = true;
 
@@ -224,19 +237,27 @@ router.post("/create", verifyToken, async (req, res) => {
       const price = variantPrice !== null ? variantPrice : baseProductPrice;
 
       if (item.variant_id) {
-        await client.query(
+        const stockUpdate = await client.query(
           `UPDATE product_variants
            SET stock = stock - $1
-           WHERE id = $2`,
+           WHERE id = $2 AND stock >= $1
+           RETURNING id`,
           [quantity, item.variant_id]
         );
+        if (stockUpdate.rows.length === 0) {
+          throw new Error("Not enough stock available for variant");
+        }
       } else {
-        await client.query(
+        const stockUpdate = await client.query(
           `UPDATE products
            SET stock_quantity = stock_quantity - $1
-           WHERE id = $2`,
+           WHERE id = $2 AND stock_quantity >= $1
+           RETURNING id`,
           [quantity, item.product_id]
         );
+        if (stockUpdate.rows.length === 0) {
+          throw new Error("Not enough stock available");
+        }
       }
 
       await client.query(

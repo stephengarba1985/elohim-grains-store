@@ -42,16 +42,14 @@ router.post("/create", verifyToken, async (req, res) => {
   let transactionStarted = false;
 
   try {
-    const { reference, user_id, delivery_address } = req.body;
+    const { reference, delivery_address } = req.body;
+    const user_id = Number(req.user.id);
     await ensurePaymentGatewayTables();
     await ensureOrderDeliveryFeeColumn();
 
     console.log("ORDER BODY:", req.body);
     console.log("ORDER REQUEST:", { reference, user_id });
 
-    if (!user_id) {
-      return res.status(400).json({ error: "User ID is required" });
-    }
 
     const roleColumnRes = await client.query(`
       SELECT column_name

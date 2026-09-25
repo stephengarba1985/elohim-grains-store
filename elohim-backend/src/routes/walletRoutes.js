@@ -1155,8 +1155,6 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
   try {
     await ensureWalletTables();
     await client.query("BEGIN");
-    const lockIds = [Number(req.params.userId)].filter(Number.isInteger).sort((a,b) => a-b);
-    for (const lockId of lockIds) await client.query("SELECT pg_advisory_xact_lock($1)", [lockId]);
 
     const usersWithPhone = await client.query(
       `SELECT id, name, email, phone
@@ -1182,9 +1180,16 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
     }
 
     const recipientUser = matches[0];
-    if (Number(recipientUser.id) !== Number(req.params.userId)) {
-      await client.query("SELECT pg_advisory_xact_lock($1)", [Number(recipientUser.id)]);
+    const senderId = Number(req.params.userId);
+    const recipientId = Number(recipientUser.id);
+    const lockIds = [...new Set([senderId, recipientId])]
+      .filter(Number.isInteger)
+      .sort((a, b) => a - b);
+
+    for (const lockId of lockIds) {
+      await client.query("SELECT pg_advisory_xact_lock($1)", [lockId]);
     }
+
     const recipientDisplayPhone = normalizePhone(recipientUser.phone) || recipientPhone;
 
     if (String(recipientUser.id) === String(req.params.userId)) {

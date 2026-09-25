@@ -12,6 +12,8 @@ const {
   verifyDeliveryOtp,
   OTP_MAX_ATTEMPTS,
   OTP_LOCK_MINUTES,
+  issueDeliveryOtp,
+  notifyCustomerDeliveryOtp,
 } = require("./trackingRoutes");
 
 const jwtSecret = process.env.JWT_SECRET;
@@ -627,11 +629,12 @@ router.put("/assign/:delivery_id", ...adminRiders, async (req, res) => {
       `UPDATE deliveries
        SET rider_id = $1,
            status = 'assigned',
-           delivery_otp = COALESCE(delivery_otp, FLOOR(100000 + RANDOM() * 900000)::text),
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $2`,
       [rider_id, delivery_id]
     );
+
+    const issuedPin = await issueDeliveryOtp(client, delivery_id);
 
     await client.query(
       "UPDATE orders SET rider_id = $1, status = 'assigned' WHERE id = $2",
@@ -654,6 +657,12 @@ router.put("/assign/:delivery_id", ...adminRiders, async (req, res) => {
       "assigned",
       "Rider assigned"
     );
+
+    try {
+      await notifyCustomerDeliveryOtp(delivery.order_id, issuedPin.otp);
+    } catch (notifyErr) {
+      console.error("DELIVERY PIN NOTIFICATION ERROR:", notifyErr);
+    }
 
     res.json({ message: "Rider assigned 🚚" });
   } catch (err) {

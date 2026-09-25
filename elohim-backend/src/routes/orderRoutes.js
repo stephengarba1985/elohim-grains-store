@@ -802,6 +802,8 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
     );
 
     if (existingOrderRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      transactionStarted = false;
       return res.status(404).json({ error: "Order not found" });
     }
 
@@ -881,36 +883,31 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
       [status, id]
     );
 
-    await addDeliveryEvent(id, delivery.id, status, `Order status updated to ${status}`);
-
-    const customerNotifications = {
-      confirmed: "Payment confirmed. Your order is now confirmed.",
-      processing: "Your order is now being prepared.",
-      in_transit: "Your order is now out for delivery. You can track it from My Orders.",
-    };
-    if (customerNotifications[status]) {
-      const customerRes = await pool.query("SELECT name, phone FROM users WHERE id = $1", [order.user_id]);
-      const customer = customerRes.rows[0];
-      if (customer?.phone) {
-        sendWhatsApp(
-          customer.phone,
-          `Hello ${customer.name || "Customer"}, ${customerNotifications[status]} Order: ${order.order_number || `#${id}`}`
-        );
-      }
-    }
-
-    if (status === "delivered" && order.rider_id) {
-      await pool.query(
-        `UPDATE riders
-         SET status = 'available',
-             current_orders = GREATEST(COALESCE(current_orders, 0) - 1, 0)
-         WHERE id = $1`,
-        [order.rider_id]
-      );
-    }
-
     await client.query("COMMIT");
     transactionStarted = false;
+
+    try {
+      await addDeliveryEvent(id, delivery.id, status, `Order status updated to ${status}`);
+
+      const customerNotifications = {
+        confirmed: "Payment confirmed. Your order is now confirmed.",
+        processing: "Your order is now being prepared.",
+        in_transit: "Your order is now out for delivery. You can track it from My Orders.",
+      };
+      if (customerNotifications[status]) {
+        const customerRes = await pool.query("SELECT name, phone FROM users WHERE id = $1", [order.user_id]);
+        const customer = customerRes.rows[0];
+        if (customer?.phone) {
+          sendWhatsApp(
+            customer.phone,
+            `Hello ${customer.name || "Customer"}, ${customerNotifications[status]} Order: ${order.order_number || `#${id}`}`
+          );
+        }
+      }
+    } catch (postCommitErr) {
+      console.error("ORDER STATUS POST-COMMIT SIDE EFFECT ERROR:", postCommitErr);
+    }
+
     res.json(result.rows[0]);
   } catch (err) {
     if (transactionStarted) await client.query("ROLLBACK").catch(() => {});

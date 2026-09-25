@@ -517,14 +517,18 @@ router.get("/user/:user_id", verifyToken, async (req, res) => {
     await ensureEscrowTables();
     await ensureOrderDeliveryFeeColumn();
 
-    const { user_id } = req.params;
+    const requestedUserId = Number(req.params.user_id);
+    const isAdminUser = Boolean(req.user.is_admin || req.user.role === "admin");
+    if (!isAdminUser && requestedUserId !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
 
     const result = await pool.query(
       `SELECT *
        FROM orders
        WHERE user_id = $1
        ORDER BY created_at DESC`,
-      [user_id]
+      [requestedUserId]
     );
 
     res.json(result.rows);
@@ -548,6 +552,12 @@ router.get("/:id", verifyToken, async (req, res) => {
 
     if (orderRes.rows.length === 0) {
       return res.status(404).json({ error: "Order not found" });
+    }
+
+    const orderOwner = orderRes.rows[0];
+    const isAdminUser = Boolean(req.user.is_admin || req.user.role === "admin");
+    if (!isAdminUser && Number(orderOwner.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Not allowed" });
     }
 
     const itemsRes = await pool.query(
@@ -574,7 +584,7 @@ router.get("/:id", verifyToken, async (req, res) => {
   }
 });
 
-router.get("/:id/invoice", async (req, res) => {
+router.get("/:id/invoice", verifyToken, async (req, res) => {
   try {
     let PDFDocument;
 
@@ -601,6 +611,10 @@ router.get("/:id/invoice", async (req, res) => {
     }
 
     const order = orderRes.rows[0];
+    const isAdminUser = Boolean(req.user.is_admin || req.user.role === "admin");
+    if (!isAdminUser && Number(order.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
 
     /* =========================
        GET ITEMS (VERY IMPORTANT)

@@ -3,6 +3,7 @@ const axios = require("axios");
 const pool = require("../config/db");
 const { createPaymentReminder, queueMobileNotification } = require("./mobileRoutes");
 const { verifyToken, isAdmin } = require("../middleware/auth");
+const { calculateCartPricing } = require("../utils/cartPricing");
 
 const router = express.Router();
 
@@ -80,7 +81,7 @@ const createVirtualAccount = ({ provider, userId }) => {
   return `${providerCode}${seed}${suffix}`.slice(0, 10);
 };
 
-const getCartTotal = async (userId) => {
+const getCartPricing = async (userId) => {
   const result = await pool.query(
     `SELECT
       cart.quantity,
@@ -92,10 +93,7 @@ const getCartTotal = async (userId) => {
     [userId]
   );
 
-  return result.rows.reduce(
-    (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
-    0
-  );
+  return calculateCartPricing({ items: result.rows });
 };
 
 router.get("/options", async (req, res) => {
@@ -260,9 +258,8 @@ router.post("/initialize", verifyToken, async (req, res) => {
   try {
     await ensurePaymentGatewayTables();
 
-    const cartTotal = await getCartTotal(user_id);
-    const deliveryFee = cartTotal > 0 ? 5000 : 0;
-    const finalAmount = Math.round((cartTotal + deliveryFee) * 100) / 100;
+    const cartPricing = await getCartPricing(user_id);
+    const finalAmount = cartPricing.total;
 
     if (!finalAmount) {
       return res.status(400).json({ error: "Cart is empty or amount is invalid" });

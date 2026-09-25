@@ -279,6 +279,12 @@ router.post("/order/:order_id/confirm-otp", verifyToken, isAdmin, async (req, re
     const { otp } = req.body;
     const delivery = await ensureDeliveryForOrder(req.params.order_id);
 
+    if (!["in_transit", "near_customer"].includes(String(delivery.status || ""))) {
+      return res.status(409).json({ error: "Delivery must be in transit before confirmation" });
+    }
+    if (delivery.otp_confirmed || delivery.status === "delivered") {
+      return res.status(409).json({ error: "Delivery has already been confirmed" });
+    }
     if (!delivery.delivery_otp || String(otp) !== String(delivery.delivery_otp)) {
       return res.status(400).json({ error: "Invalid delivery OTP" });
     }

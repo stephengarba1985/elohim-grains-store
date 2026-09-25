@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const { promisify } = require("util");
 const pool = require("../config/db");
 const sendWhatsApp = require("../utils/sendWhatsApp");
 const { verifyToken, isAdmin, requirePermission, requireRiderSession } = require("../middleware/auth");
@@ -16,6 +18,34 @@ const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret) throw new Error("JWT_SECRET is required");
 const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
 const adminRiders = [verifyToken, isAdmin, requirePermission("riders")];
+const scryptAsync = promisify(crypto.scrypt);
+
+const hashRiderPin = async (pin) => {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derived = await scryptAsync(String(pin), salt, 32);
+  return `scrypt:${salt}:${Buffer.from(derived).toString("hex")}`;
+};
+
+const verifyRiderPin = async (pin, stored) => {
+  const value = String(stored || "");
+  if (!value.startsWith("scrypt:")) return false;
+  const [, salt, expectedHex] = value.split(":");
+  if (!salt || !expectedHex) return false;
+  const derived = Buffer.from(await scryptAsync(String(pin || ""), salt, 32));
+  const expected = Buffer.from(expectedHex, "hex");
+  return derived.length === expected.length && crypto.timingSafeEqual(derived, expected);
+};
+
+const ensureRiderCredentialColumn = () => pool.query(`
+  ALTER TABLE riders
+    ADD COLUMN IF NOT EXISTS portal_pin_hash TEXT
+`);
+
+const sanitizeRider = (rider) => {
+  if (!rider) return rider;
+  const { portal_pin_hash, ...safe } = rider;
+  return safe;
+};
 
 /* =========================
    RIDER PORTAL AUTHENTICATION
@@ -24,15 +54,23 @@ router.post("/portal/login", async (req, res) => {
   try {
     const riderId = Number(req.body.rider_id);
     const phone = normalizePhone(req.body.phone);
+    const pin = String(req.body.pin || "").trim();
 
-    if (!Number.isInteger(riderId) || !phone) {
-      return res.status(400).json({ error: "Rider ID and phone number are required" });
+    if (!Number.isInteger(riderId) || !phone || !pin) {
+      return res.status(400).json({ error: "Rider ID, phone number, and PIN are required" });
     }
 
+    await ensureRiderCredentialColumn();
     const result = await pool.query("SELECT * FROM riders WHERE id = $1", [riderId]);
     const rider = result.rows[0];
     if (!rider || normalizePhone(rider.phone) !== phone) {
-      return res.status(401).json({ error: "Rider ID or phone number is incorrect" });
+      return res.status(401).json({ error: "Rider credentials are incorrect" });
+    }
+    if (!rider.portal_pin_hash) {
+      return res.status(428).json({ error: "Rider portal PIN setup is required. Contact an administrator." });
+    }
+    if (!(await verifyRiderPin(pin, rider.portal_pin_hash))) {
+      return res.status(401).json({ error: "Rider credentials are incorrect" });
     }
 
     const token = jwt.sign(
@@ -191,6 +229,7 @@ router.put("/portal/location", verifyToken, requireRiderSession, async (req, res
 ========================= */
 router.post("/", ...adminRiders, async (req, res) => {
   try {
+    await ensureRiderCredentialColumn();
     const {
       name,
       phone,
@@ -242,10 +281,35 @@ router.post("/", ...adminRiders, async (req, res) => {
       ]
     );
 
-    res.json(result.rows[0]);
+    res.json(sanitizeRider(result.rows[0]));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create rider" });
+  }
+});
+
+/* =========================
+   SET / RESET RIDER PORTAL PIN
+========================= */
+router.put("/:id/portal-pin", ...adminRiders, async (req, res) => {
+  try {
+    const pin = String(req.body.pin || "").trim();
+    if (!/^\\d{6}$/.test(pin)) {
+      return res.status(400).json({ error: "Rider portal PIN must be exactly 6 digits" });
+    }
+
+    await ensureRiderCredentialColumn();
+    const pinHash = await hashRiderPin(pin);
+    const result = await pool.query(
+      "UPDATE riders SET portal_pin_hash = $1 WHERE id = $2 RETURNING id, name, phone, email, status",
+      [pinHash, req.params.id]
+    );
+
+    if (!result.rows[0]) return res.status(404).json({ error: "Rider not found" });
+    res.json({ message: "Rider portal PIN updated", rider: result.rows[0] });
+  } catch (err) {
+    console.error("RIDER PIN UPDATE ERROR:", err);
+    res.status(500).json({ error: "Could not update rider portal PIN" });
   }
 });
 

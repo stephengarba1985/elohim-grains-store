@@ -113,7 +113,7 @@ router.get("/user/:userId", async (req, res) => {
   }
 });
 
-router.get("/admin/overview", async (req, res) => {
+router.get("/admin/overview", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensureCooperativeTables();
 

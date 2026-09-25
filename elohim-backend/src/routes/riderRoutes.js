@@ -9,7 +9,8 @@ const {
   addDeliveryEvent,
 } = require("./trackingRoutes");
 
-const jwtSecret = process.env.JWT_SECRET || "elohim_123456";
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) throw new Error("JWT_SECRET is required");
 const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
 const adminRiders = [verifyToken, isAdmin, requirePermission("riders")];
 
@@ -105,6 +106,12 @@ router.post("/portal/deliveries/:deliveryId/confirm", verifyToken, requireRiderS
     );
     const delivery = deliveryRes.rows[0];
     if (!delivery) return res.status(404).json({ error: "Assigned delivery not found" });
+    if (!["in_transit", "near_customer"].includes(String(delivery.status || ""))) {
+      return res.status(409).json({ error: "Delivery must be in transit before it can be confirmed" });
+    }
+    if (delivery.otp_confirmed || delivery.status === "delivered") {
+      return res.status(409).json({ error: "Delivery has already been confirmed" });
+    }
     if (!otp || String(delivery.delivery_otp) !== otp) {
       return res.status(400).json({ error: "The delivery PIN does not match" });
     }

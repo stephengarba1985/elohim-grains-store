@@ -51,3 +51,5 @@ jobs:
           name: frontend-npm-audit
           path: elohim-frontend/npm-audit.json
       - run: npm run build
+
+# Trigger validation after dependency security upgrades.

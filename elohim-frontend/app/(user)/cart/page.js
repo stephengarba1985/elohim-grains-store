@@ -404,9 +404,7 @@ export default function CartPage() {
       // Step 2: Load Paystack SDK from the browser
       const PaystackPop = await loadPaystackPopup();
 
-      const paystackKey =
-        process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ||
-        "pk_test_cb3837ca458c1f78520ead3c69b2cef9e228b41e";
+      const paystackKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
 
       if (!paystackKey) {
         throw new Error("Paystack public key is missing");

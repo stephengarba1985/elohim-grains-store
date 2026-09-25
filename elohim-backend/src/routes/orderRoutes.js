@@ -809,7 +809,15 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
         if (item.variant_id) {
           await client.query("UPDATE product_variants SET stock = stock + $1 WHERE id = $2", [item.quantity, item.variant_id]);
         } else {
-          await client.query("UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2", [item.quantity, item.product_id]);
+          const restored = await client.query(
+            "UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2 RETURNING stock_quantity",
+            [item.quantity, item.product_id]
+          );
+          const newStock = Number(restored.rows[0]?.stock_quantity || 0);
+          await client.query(
+            "INSERT INTO stock_history (product_id, admin_id, change, previous_stock, new_stock, reason, note, reference) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            [item.product_id, req.user.id, item.quantity, newStock - Number(item.quantity), newStock, "order_cancelled", "Inventory restored for cancelled order " + (order.order_number || id), order.order_number || String(id)]
+          ).catch(() => {});
         }
       }
 

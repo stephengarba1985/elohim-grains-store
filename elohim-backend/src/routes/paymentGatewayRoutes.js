@@ -11,26 +11,8 @@ const PROVIDERS = {
   paystack: {
     label: "Paystack",
     channels: ["card", "bank_transfer", "ussd"],
-    bank: "Paystack-Titan",
-    ussd: "*737*50*amount#",
-  },
-  flutterwave: {
-    label: "Flutterwave",
-    channels: ["card", "bank_transfer", "ussd"],
-    bank: "Flutterwave Sterling",
-    ussd: "*566*amount#",
-  },
-  monnify: {
-    label: "Monnify",
-    channels: ["virtual_account", "bank_transfer"],
-    bank: "Moniepoint MFB",
+    bank: "Paystack",
     ussd: null,
-  },
-  opay: {
-    label: "Opay Transfer",
-    channels: ["opay_transfer", "bank_transfer"],
-    bank: "OPay Digital Services",
-    ussd: "*955#",
   },
 };
 
@@ -300,9 +282,9 @@ router.post("/initialize", verifyToken, async (req, res) => {
       }
     }
 
-    const isTransfer = ["bank_transfer", "virtual_account", "opay_transfer"].includes(channel);
-    const accountNumber = isTransfer ? createVirtualAccount({ provider, userId: user_id }) : null;
-    const ussdCode = channel === "ussd" ? selectedProvider.ussd?.replace("amount", String(Math.ceil(finalAmount))) : null;
+    const providerData = paystackResponse?.data?.data || {};
+    const accountNumber = providerData.account_number || null;
+    const ussdCode = providerData.ussd_code || null;
 
     const result = await pool.query(
       `INSERT INTO payment_transactions

@@ -28,7 +28,38 @@ const verifyDeliveryOtp = async (otp, stored) => {
 
 let trackingSetupPromise = null;
 
-const generateOtp = () => String(Math.floor(100000 + Math.random() * 900000));
+const generateOtp = () => String(crypto.randomInt(100000, 1000000));
+
+const issueDeliveryOtp = async (client, deliveryId) => {
+  const otp = generateOtp();
+  const hash = await hashDeliveryOtp(otp);
+  const updated = await client.query(
+    `UPDATE deliveries
+     SET delivery_otp=$1, otp_confirmed=FALSE, otp_failed_attempts=0,
+         otp_locked_until=NULL, updated_at=CURRENT_TIMESTAMP
+     WHERE id=$2
+     RETURNING id, order_id`,
+    [hash, deliveryId]
+  );
+  if (!updated.rows[0]) throw new Error("Delivery not found");
+  return { otp, delivery: updated.rows[0] };
+};
+
+const notifyCustomerDeliveryOtp = async (orderId, otp) => {
+  const customerRes = await pool.query(
+    `SELECT u.name, u.phone, o.order_number
+     FROM orders o JOIN users u ON u.id=o.user_id
+     WHERE o.id=$1`,
+    [orderId]
+  );
+  const customer = customerRes.rows[0];
+  if (customer?.phone) {
+    await Promise.resolve(sendWhatsApp(
+      customer.phone,
+      `Hello ${customer.name || "Customer"}, your delivery PIN for Elohim Grains order ${customer.order_number || `#${orderId}`} is ${otp}. Give this PIN to the rider only after you receive your order.`
+    ));
+  }
+};
 
 const ensureDeliveryTrackingTables = async () => {
   if (trackingSetupPromise) return trackingSetupPromise;
@@ -381,4 +412,6 @@ module.exports = {
   verifyDeliveryOtp,
   OTP_MAX_ATTEMPTS,
   OTP_LOCK_MINUTES,
+  issueDeliveryOtp,
+  notifyCustomerDeliveryOtp,
 };

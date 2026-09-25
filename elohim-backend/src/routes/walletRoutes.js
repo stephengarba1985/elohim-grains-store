@@ -1000,6 +1000,7 @@ router.post("/:userId/pay-cart", verifyToken, async (req, res) => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, verified_at TIMESTAMP
     )`);
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [Number(req.user.id)]);
     const cartTotalRes = await client.query(
       `SELECT c.quantity, COALESCE(pv.price, p.price) AS price
        FROM cart c
@@ -1071,6 +1072,7 @@ router.post("/:userId/withdraw", verifyToken, async (req, res) => {
   try {
     await ensureWalletTables();
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [Number(req.params.userId)]);
 
     const balance = await getWalletBalance(req.params.userId, client);
 
@@ -1153,6 +1155,8 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
   try {
     await ensureWalletTables();
     await client.query("BEGIN");
+    const lockIds = [Number(req.params.userId)].filter(Number.isInteger).sort((a,b) => a-b);
+    for (const lockId of lockIds) await client.query("SELECT pg_advisory_xact_lock($1)", [lockId]);
 
     const usersWithPhone = await client.query(
       `SELECT id, name, email, phone
@@ -1178,6 +1182,9 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
     }
 
     const recipientUser = matches[0];
+    if (Number(recipientUser.id) !== Number(req.params.userId)) {
+      await client.query("SELECT pg_advisory_xact_lock($1)", [Number(recipientUser.id)]);
+    }
     const recipientDisplayPhone = normalizePhone(recipientUser.phone) || recipientPhone;
 
     if (String(recipientUser.id) === String(req.params.userId)) {

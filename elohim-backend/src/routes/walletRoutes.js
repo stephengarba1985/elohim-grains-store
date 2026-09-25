@@ -358,7 +358,7 @@ router.post("/fund/verify", verifyToken, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Invalid currency" });
     }
-    if (Number(payment.amount) < Math.round(Number(funding.amount) * 100)) {
+    if (Number(payment.amount) !== Math.round(Number(funding.amount) * 100)) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Amount mismatch" });
     }
@@ -429,7 +429,7 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
     const funding = fundingRes.rows[0];
     if (funding.status === "verified") { await client.query("ROLLBACK"); return res.sendStatus(200); }
     if (payment.status !== "success" || payment.currency !== "NGN") { await client.query("ROLLBACK"); return res.sendStatus(200); }
-    if (Number(payment.amount) < Math.round(Number(funding.amount) * 100)) { await client.query("ROLLBACK"); return res.sendStatus(200); }
+    if (Number(payment.amount) !== Math.round(Number(funding.amount) * 100)) { await client.query("ROLLBACK"); return res.sendStatus(200); }
 
     await insertTransaction(client, {
       userId: funding.user_id,

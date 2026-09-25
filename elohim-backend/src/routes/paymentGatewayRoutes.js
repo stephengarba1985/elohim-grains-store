@@ -2,6 +2,7 @@ const express = require("express");
 const axios = require("axios");
 const pool = require("../config/db");
 const { createPaymentReminder, queueMobileNotification } = require("./mobileRoutes");
+const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -107,7 +108,7 @@ router.get("/options", async (req, res) => {
   });
 });
 
-router.get("/admin/overview", async (req, res) => {
+router.get("/admin/overview", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensurePaymentGatewayTables();
 
@@ -243,10 +244,10 @@ router.get("/admin/overview", async (req, res) => {
   }
 });
 
-router.post("/initialize", async (req, res) => {
-  const { user_id, provider, channel, amount } = req.body;
+router.post("/initialize", verifyToken, async (req, res) => {
+  const { provider, channel } = req.body;
+  const user_id = Number(req.user.id);
   const selectedProvider = PROVIDERS[provider];
-  const parsedAmount = parseAmount(amount);
 
   if (!user_id || !selectedProvider || !channel) {
     return res.status(400).json({ error: "User, provider, and channel are required" });
@@ -260,7 +261,8 @@ router.post("/initialize", async (req, res) => {
     await ensurePaymentGatewayTables();
 
     const cartTotal = await getCartTotal(user_id);
-    const finalAmount = parsedAmount || cartTotal;
+    const deliveryFee = cartTotal > 0 ? 5000 : 0;
+    const finalAmount = Math.round((cartTotal + deliveryFee) * 100) / 100;
 
     if (!finalAmount) {
       return res.status(400).json({ error: "Cart is empty or amount is invalid" });
@@ -379,7 +381,7 @@ router.post("/initialize", async (req, res) => {
   }
 });
 
-router.post("/verify", async (req, res) => {
+router.post("/verify", verifyToken, async (req, res) => {
   const { reference } = req.body;
 
   if (!reference) {

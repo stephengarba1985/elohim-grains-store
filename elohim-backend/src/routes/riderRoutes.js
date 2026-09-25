@@ -49,7 +49,7 @@ const ensureRiderCredentialColumn = () => pool.query(`
 
 const sanitizeRider = (rider) => {
   if (!rider) return rider;
-  const { portal_pin_hash, ...safe } = rider;
+  const { portal_pin_hash, portal_failed_attempts, portal_locked_until, ...safe } = rider;
   return safe;
 };
 
@@ -378,7 +378,7 @@ router.delete("/:id", ...adminRiders, async (req, res) => {
       [id]
     );
 
-    res.json({ message: "Rider deleted successfully", rider: result.rows[0] });
+    res.json({ message: "Rider deleted successfully", rider: sanitizeRider(result.rows[0]) });
   } catch (err) {
     console.error("DELETE RIDER ERROR:", err);
     res.status(500).json({ error: "Failed to delete rider" });
@@ -447,7 +447,7 @@ router.put("/:id", ...adminRiders, async (req, res) => {
 
     res.json({
       message: "Rider updated",
-      rider: result.rows[0],
+      rider: sanitizeRider(result.rows[0]),
     });
   } catch (err) {
     console.error("UPDATE RIDER ERROR:", err);
@@ -482,7 +482,7 @@ router.put("/:id/status", ...adminRiders, async (req, res) => {
 
     res.json({
       message: "Rider status updated",
-      rider: result.rows[0],
+      rider: sanitizeRider(result.rows[0]),
     });
   } catch (err) {
     console.error("UPDATE RIDER STATUS ERROR:", err);
@@ -527,7 +527,7 @@ router.get("/", ...adminRiders, async (req, res) => {
       ORDER BY r.name
     `);
 
-    res.json(result.rows);
+    res.json(result.rows.map(sanitizeRider));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch riders" });

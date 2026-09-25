@@ -80,6 +80,18 @@ const parsePositiveNumber = (value) => {
   return number;
 };
 
+const requireGroupLeaderOrAdmin = async (groupId, user) => {
+  const group = await pool.query(
+    "SELECT id, creator_user_id FROM cooperative_groups WHERE id=$1",
+    [groupId]
+  );
+  if (!group.rows[0]) return { error: "Cooperative not found", status: 404 };
+  if (!user.is_admin && Number(group.rows[0].creator_user_id) !== Number(user.id)) {
+    return { error: "Only the cooperative leader can perform this action", status: 403 };
+  }
+  return { group: group.rows[0] };
+};
+
 const cooperativeSelect = `
   SELECT
     g.*,
@@ -286,12 +298,20 @@ router.post("/:id/members", verifyToken, async (req, res) => {
 
   try {
     await ensureCooperativeTables();
+    const authorization = await requireGroupLeaderOrAdmin(req.params.id, req.user);
+    if (authorization.error) return res.status(authorization.status).json({ error: authorization.error });
+
+    const normalizedRole = role === "leader" ? "member" : role;
+    if (user_id) {
+      const userExists = await pool.query("SELECT 1 FROM users WHERE id=$1", [user_id]);
+      if (!userExists.rows[0]) return res.status(400).json({ error: "Member user does not exist" });
+    }
 
     const result = await pool.query(
       `INSERT INTO cooperative_members (group_id, user_id, name, phone, role)
        VALUES ($1,$2,$3,$4,$5)
        RETURNING *`,
-      [req.params.id, user_id, name, phone || null, role]
+      [req.params.id, user_id, name, phone || null, normalizedRole]
     );
 
     res.json(result.rows[0]);
@@ -311,6 +331,26 @@ router.post("/:id/contributions", verifyToken, async (req, res) => {
 
   try {
     await ensureCooperativeTables();
+    const authorization = await requireGroupLeaderOrAdmin(req.params.id, req.user);
+    if (authorization.error) return res.status(authorization.status).json({ error: authorization.error });
+
+    if (member_id) {
+      const member = await pool.query(
+        "SELECT user_id FROM cooperative_members WHERE id=$1 AND group_id=$2",
+        [member_id, req.params.id]
+      );
+      if (!member.rows[0]) return res.status(400).json({ error: "Member does not belong to this cooperative" });
+      if (user_id && member.rows[0].user_id && Number(user_id) !== Number(member.rows[0].user_id)) {
+        return res.status(400).json({ error: "Contribution user does not match the selected member" });
+      }
+    }
+    if (user_id) {
+      const memberUser = await pool.query(
+        "SELECT 1 FROM cooperative_members WHERE group_id=$1 AND user_id=$2",
+        [req.params.id, user_id]
+      );
+      if (!memberUser.rows[0]) return res.status(400).json({ error: "Contribution user is not a cooperative member" });
+    }
 
     const result = await pool.query(
       `INSERT INTO cooperative_contributions (group_id, member_id, user_id, amount, note)
@@ -336,6 +376,8 @@ router.post("/:id/bulk-requests", verifyToken, async (req, res) => {
 
   try {
     await ensureCooperativeTables();
+    const authorization = await requireGroupLeaderOrAdmin(req.params.id, req.user);
+    if (authorization.error) return res.status(authorization.status).json({ error: authorization.error });
 
     const result = await pool.query(
       `INSERT INTO cooperative_bulk_requests

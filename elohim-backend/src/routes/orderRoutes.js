@@ -934,10 +934,22 @@ router.put("/:id/assign-rider", verifyToken, isAdmin, async (req, res) => {
     const { id } = req.params;
     const { rider_id } = req.body;
 
+    const orderCheck = await pool.query("SELECT id, status, rider_id FROM orders WHERE id=$1", [id]);
+    if (!orderCheck.rows[0]) return res.status(404).json({ error: "Order not found" });
+    if (!["ready_for_delivery", "delivery_failed"].includes(orderCheck.rows[0].status)) {
+      return res.status(409).json({ error: "Order is not ready for rider assignment" });
+    }
+
+    const riderCheck = await pool.query("SELECT id, status FROM riders WHERE id=$1", [rider_id]);
+    if (!riderCheck.rows[0]) return res.status(404).json({ error: "Rider not found" });
+    if (!["available", "active"].includes(String(riderCheck.rows[0].status || "").toLowerCase())) {
+      return res.status(409).json({ error: "Rider is not available" });
+    }
+
     const result = await pool.query(
       `UPDATE orders
        SET rider_id = $1, status = 'assigned'
-       WHERE id = $2
+       WHERE id = $2 AND status IN ('ready_for_delivery', 'delivery_failed')
        RETURNING *`,
       [rider_id, id]
     );

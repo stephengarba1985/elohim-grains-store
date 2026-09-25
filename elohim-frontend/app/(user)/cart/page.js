@@ -238,8 +238,22 @@ export default function CartPage() {
       window.location.href = `/order/${res.data.orderId}`;
     } catch (err) {
       console.error("ORDER ERROR:", err.response?.data || err.message);
-      setPaymentNotice("Payment went through, but we could not finish creating the order. Please contact support.");
-      toast.error("Order failed after payment");
+      try {
+        const recovery = await API.post("/orders/recover-payment", { reference });
+        if (recovery.data?.order?.id) {
+          toast.success("Your paid order was recovered");
+          window.location.href = `/order/${recovery.data.order.id}`;
+          return;
+        }
+        if (recovery.data?.can_create_order) {
+          setPaymentNotice(`Payment ${reference} is verified. Your cart is preserved; please retry order creation or contact support if it continues to fail.`);
+        } else {
+          setPaymentNotice(`Payment ${reference} went through, but we could not finish creating the order. Please contact support and quote this reference.`);
+        }
+      } catch (recoveryErr) {
+        setPaymentNotice(`Payment ${reference} went through, but we could not finish creating the order. Please contact support and quote this reference.`);
+      }
+      toast.error("Order needs recovery after payment");
     } finally {
       setPaymentLoading(false);
     }

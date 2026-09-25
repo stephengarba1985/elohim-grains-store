@@ -11,6 +11,7 @@ const {
 } = require("./trackingRoutes");
 
 const { verifyToken, isAdmin } = require("../middleware/auth");
+const { calculateDeliveryFee } = require("../utils/cartPricing");
 
 const ensureOrderDeliveryFeeColumn = () =>
   pool.query(`
@@ -117,9 +118,7 @@ router.post("/create", verifyToken, async (req, res) => {
 
     const items = cartRes.rows;
     let totalAmount = 0;
-    const deliveryFee = isBulk || items.some((item) => Number(item.quantity || 0) >= 10)
-      ? 0
-      : 5000;
+    const deliveryFee = calculateDeliveryFee({ isBulk, items });
 
     for (const item of items) {
       const quantity = Number(item.quantity);

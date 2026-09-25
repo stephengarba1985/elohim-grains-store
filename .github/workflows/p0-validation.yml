@@ -1,0 +1,41 @@
+name: P0 Validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  backend-validation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: elohim-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: elohim-backend/package-lock.json
+      - run: npm ci
+      - name: Syntax check backend JavaScript
+        run: find . -path ./node_modules -prune -o -name '*.js' -print0 | xargs -0 -n1 node --check
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: elohim-frontend
+    env:
+      NEXT_PUBLIC_API_URL: https://api.elohimgrains.com/api
+      NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: pk_test_ci_placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: elohim-frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build

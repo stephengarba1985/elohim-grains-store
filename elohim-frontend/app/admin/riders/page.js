@@ -31,6 +31,7 @@ export default function RidersPage() {
   });
 
   const [editingId, setEditingId] = useState(null);
+  const [portalPin, setPortalPin] = useState("");
 
   useEffect(() => {
     fetchRiders();
@@ -149,6 +150,7 @@ export default function RidersPage() {
   /* ========================= EDIT ========================= */
   const editRider = (rider) => {
     setEditingId(rider.id);
+    setPortalPin("");
     setForm({
       name: rider.name || "",
       phone: rider.phone || "",
@@ -162,6 +164,19 @@ export default function RidersPage() {
       emergency_phone: rider.emergency_phone || "",
       status: rider.status || "available",
     });
+  };
+
+  const updatePortalPin = async () => {
+    if (!editingId) return toast.error("Select a rider to edit first");
+    if (!/^\\d{6}$/.test(portalPin)) return toast.error("Portal PIN must be exactly 6 digits");
+    try {
+      await API.put(`/riders/${editingId}/portal-pin`, { pin: portalPin });
+      setPortalPin("");
+      toast.success("Rider portal PIN updated");
+    } catch (err) {
+      console.error(err.response?.data || err.message);
+      toast.error(err.response?.data?.error || "Failed to update rider portal PIN");
+    }
   };
 
   /* ========================= DELETE ========================= */
@@ -182,6 +197,7 @@ export default function RidersPage() {
   /* ========================= CANCEL EDIT ========================= */
   const cancelEdit = () => {
     setEditingId(null);
+    setPortalPin("");
     setForm({
       name: "",
       phone: "",
@@ -493,6 +509,27 @@ export default function RidersPage() {
               <option value="assigned">Assigned</option>
               <option value="in_transit">In Transit</option>
             </select>
+          )}
+
+          {editingId && (
+            <div className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <label className="block text-sm font-semibold text-amber-950">Rider portal PIN</label>
+              <div className="mt-2 flex gap-2">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength="6"
+                  placeholder="6-digit portal PIN"
+                  className="border p-2 rounded flex-1 bg-white"
+                  value={portalPin}
+                  onChange={(e) => setPortalPin(e.target.value.replace(/\\D/g, "").slice(0, 6))}
+                />
+                <button type="button" onClick={updatePortalPin} className="bg-amber-700 text-white px-4 py-2 rounded">
+                  Set / Reset PIN
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-amber-800">Share the PIN securely with this rider. It is never displayed again after saving.</p>
+            </div>
           )}
 
           <div className="md:col-span-2 flex gap-3">

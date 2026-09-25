@@ -7,7 +7,7 @@ const { createWalletAlert } = require("./mobileRoutes");
 const { verifyToken, isAdmin, requireRecentAuth } = require("../middleware/auth");
 const { normalizePhone, canonicalPhone } = require("../utils/phone");
 const { sendEmail } = require("../utils/mail");
-const { calculateCartPricing } = require("../utils/cartPricing");
+const { getAuthoritativeCartPricing } = require("../utils/cartPricing");
 
 const router = express.Router();
 
@@ -1001,19 +1001,12 @@ router.post("/:userId/pay-cart", verifyToken, async (req, res) => {
     )`);
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1)", [Number(req.user.id)]);
-    const cartTotalRes = await client.query(
-      `SELECT c.quantity, COALESCE(pv.price, p.price) AS price
-       FROM cart c
-       JOIN products p ON p.id = c.product_id
-       LEFT JOIN product_variants pv ON pv.id = c.variant_id
-       WHERE c.user_id = $1`,
-      [req.user.id]
-    );
-    if (cartTotalRes.rows.length === 0) {
+    const cartPricing = await getAuthoritativeCartPricing(client, req.user.id);
+    if (cartPricing.items.length === 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Cart is empty" });
     }
-    const amount = calculateCartPricing({ items: cartTotalRes.rows }).total;
+    const amount = cartPricing.total;
     if (!amount || amount <= 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Invalid cart total" });

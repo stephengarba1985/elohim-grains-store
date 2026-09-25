@@ -614,7 +614,7 @@ router.post("/change-pin", verifyToken, requireRecentAuth(15), async (req, res) 
   }
 });
 
-router.post("/virtual-accounts/confirm-transfer", async (req, res) => {
+router.post("/virtual-accounts/confirm-transfer", verifyToken, isAdmin, async (req, res) => {
   const { account_number, amount, sender_name, reference } = req.body;
   const depositAmount = parseAmount(amount);
   const normalizedReference =
@@ -873,7 +873,7 @@ router.get("/admin/phone-cleanup-report", verifyToken, isAdmin, async (req, res)
   }
 });
 
-router.get("/admin/overview", async (req, res) => {
+router.get("/admin/overview", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensureWalletTables();
 
@@ -949,7 +949,7 @@ router.get("/admin/overview", async (req, res) => {
   }
 });
 
-router.post("/:userId/fund", async (req, res) => {
+router.post("/:userId/fund", verifyToken, isAdmin, async (req, res) => {
   const amount = parseAmount(req.body.amount);
 
   if (!amount) {

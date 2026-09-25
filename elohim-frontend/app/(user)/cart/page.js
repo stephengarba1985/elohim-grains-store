@@ -209,16 +209,11 @@ export default function CartPage() {
 
   const providerChannels = {
     paystack: ["card", "bank_transfer", "ussd"],
-    flutterwave: ["card", "bank_transfer", "ussd"],
-    monnify: ["virtual_account", "bank_transfer"],
-    opay: ["opay_transfer", "bank_transfer"],
   };
 
   const channelLabels = {
     card: "Card",
     bank_transfer: "Bank Transfer",
-    virtual_account: "Virtual Account",
-    opay_transfer: "Opay Transfer",
     ussd: "USSD",
   };
 

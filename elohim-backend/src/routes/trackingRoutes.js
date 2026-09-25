@@ -200,7 +200,10 @@ router.get("/:id", verifyToken, async (req, res) => {
         eta: tracking.delivery.eta,
         address: tracking.delivery.destination,
       },
-      delivery: tracking.delivery,
+      delivery: {
+        ...tracking.delivery,
+        otp: tracking.delivery.otp ? "******" : null,
+      },
       rider: tracking.rider,
       events: tracking.events,
     });
@@ -210,11 +213,11 @@ router.get("/:id", verifyToken, async (req, res) => {
   }
 });
 
-router.get("/order/:order_id", async (req, res) => {
+router.get("/order/:order_id", verifyToken, async (req, res) => {
   try {
     const tracking = await getTrackingData(req.params.order_id);
 
-    if (!tracking) {
+    if (!tracking || (Number(tracking.user_id) !== Number(req.user.id) && !req.user.is_admin)) {
       return res.status(404).json({ error: "Order not found" });
     }
 

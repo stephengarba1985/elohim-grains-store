@@ -11,7 +11,7 @@ const {
 } = require("./trackingRoutes");
 
 const { verifyToken, isAdmin } = require("../middleware/auth");
-const { calculateDeliveryFee } = require("../utils/cartPricing");
+const { calculateCartPricing, getItemUnitPrice } = require("../utils/cartPricing");
 
 const ensureOrderDeliveryFeeColumn = () =>
   pool.query(`
@@ -120,18 +120,13 @@ router.post("/create", verifyToken, async (req, res) => {
     }
 
     const items = cartRes.rows;
-    let totalAmount = 0;
-    const deliveryFee = calculateDeliveryFee({ isBulk, items });
+    const cartPricing = calculateCartPricing({ items, isBulk });
+    const deliveryFee = cartPricing.deliveryFee;
+    let totalAmount = cartPricing.total;
 
     for (const item of items) {
       const quantity = Number(item.quantity);
-      const productPrice = Number(item.product_price || 0);
-      const productBulkPrice = Number(item.product_bulk_price || 0);
-      const variantPrice =
-        item.variant_price != null ? Number(item.variant_price) : null;
-      const baseProductPrice =
-        isBulk && productBulkPrice > 0 ? productBulkPrice : productPrice;
-      const price = variantPrice !== null ? variantPrice : baseProductPrice;
+      const price = getItemUnitPrice(item, isBulk);
 
       if (!price || price <= 0) {
         throw new Error("Invalid product price for order item");
@@ -155,10 +150,7 @@ router.post("/create", verifyToken, async (req, res) => {
         }
       }
 
-      totalAmount += price * quantity;
     }
-
-    totalAmount += deliveryFee;
 
     const referenceColumnRes = await client.query(`
       SELECT column_name
@@ -240,13 +232,7 @@ router.post("/create", verifyToken, async (req, res) => {
 
     for (const item of items) {
       const quantity = Number(item.quantity);
-      const productPrice = Number(item.product_price || 0);
-      const productBulkPrice = Number(item.product_bulk_price || 0);
-      const variantPrice =
-        item.variant_price != null ? Number(item.variant_price) : null;
-      const baseProductPrice =
-        isBulk && productBulkPrice > 0 ? productBulkPrice : productPrice;
-      const price = variantPrice !== null ? variantPrice : baseProductPrice;
+      const price = getItemUnitPrice(item, isBulk);
 
       if (item.variant_id) {
         const stockUpdate = await client.query(

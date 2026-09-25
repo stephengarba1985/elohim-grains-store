@@ -19,6 +19,8 @@ if (!jwtSecret) throw new Error("JWT_SECRET is required");
 const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
 const adminRiders = [verifyToken, isAdmin, requirePermission("riders")];
 const scryptAsync = promisify(crypto.scrypt);
+const RIDER_LOGIN_MAX_ATTEMPTS = 5;
+const RIDER_LOGIN_LOCK_MINUTES = 15;
 
 const hashRiderPin = async (pin) => {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -38,7 +40,9 @@ const verifyRiderPin = async (pin, stored) => {
 
 const ensureRiderCredentialColumn = () => pool.query(`
   ALTER TABLE riders
-    ADD COLUMN IF NOT EXISTS portal_pin_hash TEXT
+    ADD COLUMN IF NOT EXISTS portal_pin_hash TEXT,
+    ADD COLUMN IF NOT EXISTS portal_failed_attempts INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS portal_locked_until TIMESTAMP
 `);
 
 const sanitizeRider = (rider) => {
@@ -69,9 +73,28 @@ router.post("/portal/login", async (req, res) => {
     if (!rider.portal_pin_hash) {
       return res.status(428).json({ error: "Rider portal PIN setup is required. Contact an administrator." });
     }
+    if (rider.portal_locked_until && new Date(rider.portal_locked_until) > new Date()) {
+      return res.status(429).json({ error: "Too many sign-in attempts. Try again later." });
+    }
     if (!(await verifyRiderPin(pin, rider.portal_pin_hash))) {
+      await pool.query(
+        `UPDATE riders
+         SET portal_failed_attempts = COALESCE(portal_failed_attempts, 0) + 1,
+             portal_locked_until = CASE
+               WHEN COALESCE(portal_failed_attempts, 0) + 1 >= $2
+               THEN CURRENT_TIMESTAMP + ($3 * INTERVAL '1 minute')
+               ELSE portal_locked_until
+             END
+         WHERE id = $1`,
+        [rider.id, RIDER_LOGIN_MAX_ATTEMPTS, RIDER_LOGIN_LOCK_MINUTES]
+      );
       return res.status(401).json({ error: "Rider credentials are incorrect" });
     }
+
+    await pool.query(
+      "UPDATE riders SET portal_failed_attempts = 0, portal_locked_until = NULL WHERE id = $1",
+      [rider.id]
+    );
 
     const token = jwt.sign(
       { type: "rider_portal", rider_id: rider.id },

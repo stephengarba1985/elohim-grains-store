@@ -3,7 +3,7 @@ const axios = require("axios");
 const pool = require("../config/db");
 const { createPaymentReminder, queueMobileNotification } = require("./mobileRoutes");
 const { verifyToken, isAdmin } = require("../middleware/auth");
-const { calculateCartPricing } = require("../utils/cartPricing");
+const { getAuthoritativeCartPricing } = require("../utils/cartPricing");
 
 const router = express.Router();
 
@@ -79,21 +79,6 @@ const createVirtualAccount = ({ provider, userId }) => {
   const suffix = String(Date.now()).slice(-6);
   const providerCode = provider === "opay" ? "81" : provider === "monnify" ? "55" : "70";
   return `${providerCode}${seed}${suffix}`.slice(0, 10);
-};
-
-const getCartPricing = async (userId) => {
-  const result = await pool.query(
-    `SELECT
-      cart.quantity,
-      COALESCE(product_variants.price, products.price) AS price
-     FROM cart
-     JOIN products ON cart.product_id = products.id
-     LEFT JOIN product_variants ON cart.variant_id = product_variants.id
-     WHERE cart.user_id=$1`,
-    [userId]
-  );
-
-  return calculateCartPricing({ items: result.rows });
 };
 
 router.get("/options", async (req, res) => {
@@ -258,7 +243,7 @@ router.post("/initialize", verifyToken, async (req, res) => {
   try {
     await ensurePaymentGatewayTables();
 
-    const cartPricing = await getCartPricing(user_id);
+    const cartPricing = await getAuthoritativeCartPricing(pool, user_id);
     const finalAmount = cartPricing.total;
 
     if (!finalAmount) {

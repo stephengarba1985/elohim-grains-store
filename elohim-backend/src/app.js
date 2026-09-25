@@ -586,6 +586,10 @@ app.use(
   plansRoute
 );
 
+app.use("/api/wallet/set-pin", walletSecurityLimiter);
+app.use("/api/wallet/change-pin", walletSecurityLimiter);
+app.use("/api/wallet/fund/verify", walletSecurityLimiter);
+
 app.use(
   "/api/wallet",
   walletRoutes
@@ -620,10 +624,6 @@ app.use(
   "/api/vendors",
   vendorMarketplaceRoutes
 );
-
-app.use("/api/wallet/set-pin", walletSecurityLimiter);
-app.use("/api/wallet/change-pin", walletSecurityLimiter);
-app.use("/api/wallet/fund/verify", walletSecurityLimiter);
 
 app.use(
   "/api/suppliers",

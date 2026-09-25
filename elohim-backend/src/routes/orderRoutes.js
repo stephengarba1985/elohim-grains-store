@@ -812,6 +812,31 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
 
     const order = existingOrderRes.rows[0];
 
+    const terminalStatuses = ["delivered", "cancelled", "refunded"];
+    if (terminalStatuses.includes(order.status) && status !== order.status) {
+      await client.query("ROLLBACK");
+      transactionStarted = false;
+      return res.status(409).json({ error: `Order is already ${order.status} and cannot move to ${status}` });
+    }
+
+    const allowedTransitions = {
+      pending: ["paid", "confirmed", "processing", "cancelled"],
+      paid: ["confirmed", "processing", "ready_for_delivery", "cancelled", "refunded"],
+      confirmed: ["processing", "ready_for_delivery", "cancelled", "refunded"],
+      processing: ["ready_for_delivery", "cancelled", "refunded"],
+      ready_for_delivery: ["assigned", "cancelled", "refunded"],
+      assigned: ["picked_up", "in_transit", "delivery_failed"],
+      picked_up: ["in_transit", "delivery_failed"],
+      in_transit: ["near_customer", "delivery_failed"],
+      near_customer: ["delivery_failed"],
+      delivery_failed: ["assigned", "cancelled", "refunded"],
+    };
+    if (status !== order.status && !(allowedTransitions[order.status] || []).includes(status)) {
+      await client.query("ROLLBACK");
+      transactionStarted = false;
+      return res.status(409).json({ error: `Invalid order transition from ${order.status} to ${status}` });
+    }
+
     const canRestoreInventory = ["pending", "paid", "confirmed", "processing", "ready_for_delivery"].includes(order.status);
     if (status === "cancelled" && canRestoreInventory && !order.inventory_restored) {
       const itemsRes = await client.query(

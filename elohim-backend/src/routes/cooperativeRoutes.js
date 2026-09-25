@@ -1,5 +1,6 @@
 const express = require("express");
 const pool = require("../config/db");
+const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -94,7 +95,8 @@ const cooperativeSelect = `
   LEFT JOIN cooperative_bulk_requests br ON br.group_id = g.id
 `;
 
-router.get("/user/:userId", async (req, res) => {
+router.get("/user/:userId", verifyToken, async (req, res) => {
+  if (Number(req.params.userId) !== Number(req.user.id) && !req.user.is_admin) return res.status(403).json({ error: "Not allowed" });
   try {
     await ensureCooperativeTables();
 
@@ -160,7 +162,7 @@ router.get("/admin/overview", verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", verifyToken, async (req, res) => {
   try {
     await ensureCooperativeTables();
 
@@ -173,6 +175,13 @@ router.get("/:id", async (req, res) => {
 
     if (group.rows.length === 0) {
       return res.status(404).json({ error: "Cooperative not found" });
+    }
+    const access = await pool.query(
+      "SELECT 1 FROM cooperative_members WHERE group_id=$1 AND user_id=$2 LIMIT 1",
+      [req.params.id, req.user.id]
+    );
+    if (!req.user.is_admin && Number(group.rows[0].creator_user_id) !== Number(req.user.id) && access.rows.length === 0) {
+      return res.status(403).json({ error: "Not allowed" });
     }
 
     const members = await pool.query(
@@ -209,9 +218,9 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", verifyToken, async (req, res) => {
   const {
-    creator_user_id,
+    creator_user_id: ignoredCreatorUserId,
     name,
     group_type = "other",
     target_amount = 0,
@@ -220,7 +229,9 @@ router.post("/", async (req, res) => {
   } = req.body;
   const normalizedType = GROUP_TYPES.includes(group_type) ? group_type : "other";
 
-  if (!creator_user_id || !name) {
+  const creator_user_id = Number(req.user.id);
+
+  if (!name) {
     return res.status(400).json({ error: "Creator and group name are required" });
   }
 
@@ -266,7 +277,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.post("/:id/members", async (req, res) => {
+router.post("/:id/members", verifyToken, async (req, res) => {
   const { name, phone, user_id = null, role = "member" } = req.body;
 
   if (!name) {
@@ -290,7 +301,7 @@ router.post("/:id/members", async (req, res) => {
   }
 });
 
-router.post("/:id/contributions", async (req, res) => {
+router.post("/:id/contributions", verifyToken, async (req, res) => {
   const { amount, member_id = null, user_id = null, note = null } = req.body;
   const parsedAmount = parsePositiveNumber(amount);
 
@@ -315,7 +326,7 @@ router.post("/:id/contributions", async (req, res) => {
   }
 });
 
-router.post("/:id/bulk-requests", async (req, res) => {
+router.post("/:id/bulk-requests", verifyToken, async (req, res) => {
   const { product_id, quantity, requested_price, delivery_note } = req.body;
   const parsedQuantity = parsePositiveNumber(quantity);
 
@@ -347,7 +358,7 @@ router.post("/:id/bulk-requests", async (req, res) => {
   }
 });
 
-router.put("/bulk-requests/:id", async (req, res) => {
+router.put("/bulk-requests/:id", verifyToken, isAdmin, async (req, res) => {
   const { status } = req.body;
 
   if (!status) {

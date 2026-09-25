@@ -56,11 +56,7 @@ function WalletPageContent() {
     pin: "",
     note: "",
   });
-  const [depositForm, setDepositForm] = useState({
-    amount: "",
-    sender_name: "",
-    reference: "",
-  });
+
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -172,36 +168,6 @@ function WalletPageContent() {
     setForm({ amount: "", recipient_phone: "", pin: "", note: "" });
   };
 
-  const confirmVirtualAccountTransfer = async () => {
-    if (!virtualAccount?.account_number) {
-      return toast.error("Virtual account not ready");
-    }
-
-    const amount = Number(depositForm.amount);
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return toast.error("Enter transfer amount");
-    }
-
-    try {
-      setLoading(true);
-      await API.post("/wallet/virtual-accounts/confirm-transfer", {
-        account_number: virtualAccount.account_number,
-        amount,
-        sender_name: depositForm.sender_name || user?.name,
-        reference: depositForm.reference,
-      });
-
-      toast.success("Transfer confirmed and wallet credited");
-      setDepositForm({ amount: "", sender_name: "", reference: "" });
-      fetchWallet(user?.id);
-    } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.error || "Transfer confirmation failed");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const submitAction = async (action = activeAction) => {
     if (!user?.id) {
@@ -336,88 +302,6 @@ function WalletPageContent() {
         </div>
 
         <div className="grid lg:grid-cols-[420px_1fr] gap-6 items-start">
-          <section className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:block lg:col-span-2">
-            <div className="bg-slate-950 px-5 py-4 text-white">
-              <h2 className="text-lg font-bold">Elohim Wallet Account</h2>
-              <p className="text-sm text-slate-300 mt-1">
-                Transfer to your personal account and your wallet is credited after confirmation.
-              </p>
-            </div>
-
-            <div className="p-5 grid lg:grid-cols-[1fr_1.2fr] gap-5">
-              <div className="grid sm:grid-cols-3 gap-3">
-                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
-                  <p className="text-xs text-slate-500">Wallet Number</p>
-                  <p className="font-bold text-slate-950 mt-1">
-                    {walletNumber || "Unavailable"}
-                  </p>
-                </div>
-                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
-                  <p className="text-xs text-slate-500">Bank</p>
-                  <p className="font-bold text-slate-950 mt-1">
-                    {virtualAccount?.bank_name || "Generating..."}
-                  </p>
-                </div>
-                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
-                  <p className="text-xs text-slate-500">Account Number</p>
-                  <p className="font-bold text-slate-950 mt-1">
-                    {virtualAccount?.account_number || "Generating..."}
-                  </p>
-                </div>
-                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
-                  <p className="text-xs text-slate-500">Account Name</p>
-                  <p className="font-bold text-slate-950 mt-1">
-                    {virtualAccount?.account_name || "ELOHIM WALLET"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid sm:grid-cols-[1fr_1fr_1fr_auto] gap-3 items-end">
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Amount Sent</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={depositForm.amount}
-                    onChange={(event) =>
-                      setDepositForm({ ...depositForm, amount: event.target.value })
-                    }
-                    className="border border-slate-300 rounded-lg p-3 w-full mt-1"
-                    placeholder="Amount"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Sender</span>
-                  <input
-                    value={depositForm.sender_name}
-                    onChange={(event) =>
-                      setDepositForm({ ...depositForm, sender_name: event.target.value })
-                    }
-                    className="border border-slate-300 rounded-lg p-3 w-full mt-1"
-                    placeholder="Sender name"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Reference</span>
-                  <input
-                    value={depositForm.reference}
-                    onChange={(event) =>
-                      setDepositForm({ ...depositForm, reference: event.target.value })
-                    }
-                    className="border border-slate-300 rounded-lg p-3 w-full mt-1"
-                    placeholder="Bank ref"
-                  />
-                </label>
-                <button
-                  onClick={confirmVirtualAccountTransfer}
-                  disabled={loading}
-                  className="bg-green-700 hover:bg-green-800 disabled:bg-green-300 text-white px-4 py-3 rounded-lg font-semibold"
-                >
-                  Confirm
-                </button>
-              </div>
-            </div>
-          </section>
 
           <section className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:block">
             <div className="bg-green-700 px-5 py-4 text-white">

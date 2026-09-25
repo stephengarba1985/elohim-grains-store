@@ -7,6 +7,7 @@ const { createWalletAlert } = require("./mobileRoutes");
 const { verifyToken, isAdmin, requireRecentAuth } = require("../middleware/auth");
 const { normalizePhone, canonicalPhone } = require("../utils/phone");
 const { sendEmail } = require("../utils/mail");
+const { calculateCartPricing } = require("../utils/cartPricing");
 
 const router = express.Router();
 
@@ -1011,12 +1012,7 @@ router.post("/:userId/pay-cart", verifyToken, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Cart is empty" });
     }
-    const subtotal = cartTotalRes.rows.reduce(
-      (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
-      0
-    );
-    const isBulk = cartTotalRes.rows.some((item) => Number(item.quantity || 0) >= 10);
-    const amount = Math.round((subtotal + (isBulk ? 0 : 5000)) * 100) / 100;
+    const amount = calculateCartPricing({ items: cartTotalRes.rows }).total;
     if (!amount || amount <= 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Invalid cart total" });

@@ -162,7 +162,7 @@ export default function CartPage() {
       if (walletBalance === null || walletBalance < payableTotal) return toast.error("Insufficient wallet balance");
       try {
         setPaymentLoading(true);
-        const payment = await API.post(`/wallet/${user.id}/pay-cart`, { amount: payableTotal, pin: walletPin });
+        const payment = await API.post(`/wallet/${user.id}/pay-cart`, { pin: walletPin });
         await createOrderFromReference(payment.data.reference);
       } catch (err) {
         toast.error(err.response?.data?.error || "Wallet payment failed");
@@ -231,8 +231,6 @@ export default function CartPage() {
 
       const res = await API.post("/orders/create", {
         reference,
-        user_id: user.id,
-        delivery_fee: deliveryFee || 0,
         delivery_address: [checkoutDetails.address, checkoutDetails.landmark && `Landmark: ${checkoutDetails.landmark}`, checkoutDetails.city, checkoutDetails.state].filter(Boolean).join(", "),
       });
 
@@ -273,10 +271,8 @@ export default function CartPage() {
 
     try {
       const res = await API.post("/payment-gateways/initialize", {
-        user_id: user.id,
         provider,
         channel,
-        amount: payableTotal,
       });
 
       setPaymentInstructions(res.data.instructions);
@@ -347,7 +343,6 @@ export default function CartPage() {
     try {
       await API.post("/payment/verify", {
         reference,
-        user_id: userId,
       });
       return;
     } catch (primaryErr) {
@@ -382,10 +377,8 @@ export default function CartPage() {
     try {
       // Step 1: Initialize payment on backend
       const init = await API.post("/payment-gateways/initialize", {
-        user_id: user.id,
         provider: "paystack",
         channel: "card",
-        amount: payableTotal,
       });
 
       const paymentInfo = init.data.instructions;
@@ -405,7 +398,7 @@ export default function CartPage() {
         throw new Error("Paystack public key is missing");
       }
 
-      const amountInKobo = Math.round(Number(payableTotal) * 100);
+      const amountInKobo = Math.round(Number(paymentInfo.amount) * 100);
 
       if (!Number.isFinite(amountInKobo) || amountInKobo <= 0) {
         throw new Error("Invalid payment amount");

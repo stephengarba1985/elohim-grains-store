@@ -3,6 +3,28 @@ const router = express.Router();
 const pool = require("../config/db");
 const { verifyToken, isAdmin } = require("../middleware/auth");
 const sendWhatsApp = require("../utils/sendWhatsApp");
+const crypto = require("crypto");
+const { promisify } = require("util");
+
+const scryptAsync = promisify(crypto.scrypt);
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_LOCK_MINUTES = 15;
+
+const hashDeliveryOtp = async (otp) => {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derived = await scryptAsync(String(otp), salt, 32);
+  return `scrypt:${salt}:${Buffer.from(derived).toString("hex")}`;
+};
+
+const verifyDeliveryOtp = async (otp, stored) => {
+  const value = String(stored || "");
+  if (!value.startsWith("scrypt:")) return value.length > 0 && value === String(otp || "");
+  const [, salt, expectedHex] = value.split(":");
+  if (!salt || !expectedHex) return false;
+  const derived = Buffer.from(await scryptAsync(String(otp || ""), salt, 32));
+  const expected = Buffer.from(expectedHex, "hex");
+  return derived.length === expected.length && crypto.timingSafeEqual(derived, expected);
+};
 
 let trackingSetupPromise = null;
 
@@ -27,7 +49,7 @@ const ensureDeliveryTrackingTables = async () => {
         rider_id INTEGER REFERENCES riders(id) ON DELETE SET NULL,
         status VARCHAR(30) DEFAULT 'pending',
         eta_minutes INTEGER DEFAULT 30,
-        delivery_otp VARCHAR(10),
+        delivery_otp TEXT,
         otp_confirmed BOOLEAN DEFAULT FALSE,
         confirmed_at TIMESTAMP,
         current_lat DECIMAL(10,7),
@@ -41,7 +63,9 @@ const ensureDeliveryTrackingTables = async () => {
     await pool.query(`
       ALTER TABLE deliveries
         ADD COLUMN IF NOT EXISTS eta_minutes INTEGER DEFAULT 30,
-        ADD COLUMN IF NOT EXISTS delivery_otp VARCHAR(10),
+        ADD COLUMN IF NOT EXISTS delivery_otp TEXT,
+        ADD COLUMN IF NOT EXISTS otp_failed_attempts INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS otp_locked_until TIMESTAMP,
         ADD COLUMN IF NOT EXISTS otp_confirmed BOOLEAN DEFAULT FALSE,
         ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMP,
         ADD COLUMN IF NOT EXISTS current_lat DECIMAL(10,7),
@@ -49,6 +73,8 @@ const ensureDeliveryTrackingTables = async () => {
         ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     `);
+
+    await pool.query(`ALTER TABLE deliveries ALTER COLUMN delivery_otp TYPE TEXT`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS delivery_events (
@@ -88,7 +114,7 @@ const ensureDeliveryForOrder = async (orderId, riderId = null, status = "pending
              updated_at = CURRENT_TIMESTAMP
          WHERE order_id = $4
          RETURNING *`,
-        [riderId, status, generateOtp(), orderId]
+        [riderId, status, await hashDeliveryOtp(generateOtp()), orderId]
       );
 
       return updated.rows[0];
@@ -101,7 +127,7 @@ const ensureDeliveryForOrder = async (orderId, riderId = null, status = "pending
     `INSERT INTO deliveries (order_id, rider_id, status, delivery_otp)
      VALUES ($1, $2, $3, $4)
      RETURNING *`,
-    [orderId, riderId, status, generateOtp()]
+    [orderId, riderId, status, await hashDeliveryOtp(generateOtp())]
   );
 
   return created.rows[0];
@@ -285,7 +311,22 @@ router.post("/order/:order_id/confirm-otp", verifyToken, isAdmin, async (req, re
     if (delivery.otp_confirmed || delivery.status === "delivered") {
       return res.status(409).json({ error: "Delivery has already been confirmed" });
     }
-    if (!delivery.delivery_otp || String(otp) !== String(delivery.delivery_otp)) {
+    if (delivery.otp_locked_until && new Date(delivery.otp_locked_until) > new Date()) {
+      return res.status(429).json({ error: "Too many incorrect PIN attempts. Try again later." });
+    }
+
+    if (!delivery.delivery_otp || !(await verifyDeliveryOtp(otp, delivery.delivery_otp))) {
+      await pool.query(
+        `UPDATE deliveries
+         SET otp_failed_attempts = COALESCE(otp_failed_attempts, 0) + 1,
+             otp_locked_until = CASE
+               WHEN COALESCE(otp_failed_attempts, 0) + 1 >= $2
+               THEN CURRENT_TIMESTAMP + ($3 * INTERVAL '1 minute')
+               ELSE otp_locked_until
+             END
+         WHERE id = $1`,
+        [delivery.id, OTP_MAX_ATTEMPTS, OTP_LOCK_MINUTES]
+      );
       return res.status(400).json({ error: "Invalid delivery OTP" });
     }
 
@@ -294,6 +335,8 @@ router.post("/order/:order_id/confirm-otp", verifyToken, isAdmin, async (req, re
        SET status = 'delivered',
            otp_confirmed = TRUE,
            confirmed_at = CURRENT_TIMESTAMP,
+           otp_failed_attempts = 0,
+           otp_locked_until = NULL,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $1
        RETURNING *`,
@@ -335,4 +378,7 @@ module.exports = {
   ensureDeliveryTrackingTables,
   ensureDeliveryForOrder,
   addDeliveryEvent,
+  verifyDeliveryOtp,
+  OTP_MAX_ATTEMPTS,
+  OTP_LOCK_MINUTES,
 };

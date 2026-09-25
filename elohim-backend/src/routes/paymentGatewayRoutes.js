@@ -389,8 +389,8 @@ router.post("/verify", verifyToken, async (req, res) => {
     await ensurePaymentGatewayTables();
 
     const existing = await pool.query(
-      "SELECT * FROM payment_transactions WHERE reference=$1",
-      [reference]
+      "SELECT * FROM payment_transactions WHERE reference=$1 AND user_id=$2",
+      [reference, req.user.id]
     );
 
     if (existing.rows.length === 0) {

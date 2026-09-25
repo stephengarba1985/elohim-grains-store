@@ -7,6 +7,9 @@ const { verifyToken, isAdmin, requirePermission, requireRiderSession } = require
 const {
   ensureDeliveryTrackingTables,
   addDeliveryEvent,
+  verifyDeliveryOtp,
+  OTP_MAX_ATTEMPTS,
+  OTP_LOCK_MINUTES,
 } = require("./trackingRoutes");
 
 const jwtSecret = process.env.JWT_SECRET;
@@ -112,13 +115,29 @@ router.post("/portal/deliveries/:deliveryId/confirm", verifyToken, requireRiderS
     if (delivery.otp_confirmed || delivery.status === "delivered") {
       return res.status(409).json({ error: "Delivery has already been confirmed" });
     }
-    if (!otp || String(delivery.delivery_otp) !== otp) {
+    if (delivery.otp_locked_until && new Date(delivery.otp_locked_until) > new Date()) {
+      return res.status(429).json({ error: "Too many incorrect PIN attempts. Try again later." });
+    }
+
+    if (!otp || !(await verifyDeliveryOtp(otp, delivery.delivery_otp))) {
+      await pool.query(
+        `UPDATE deliveries
+         SET otp_failed_attempts = COALESCE(otp_failed_attempts, 0) + 1,
+             otp_locked_until = CASE
+               WHEN COALESCE(otp_failed_attempts, 0) + 1 >= $2
+               THEN CURRENT_TIMESTAMP + ($3 * INTERVAL '1 minute')
+               ELSE otp_locked_until
+             END
+         WHERE id = $1`,
+        [delivery.id, OTP_MAX_ATTEMPTS, OTP_LOCK_MINUTES]
+      );
       return res.status(400).json({ error: "The delivery PIN does not match" });
     }
 
     await pool.query(
       `UPDATE deliveries SET status = 'delivered', otp_confirmed = TRUE,
-       confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+       confirmed_at = CURRENT_TIMESTAMP, otp_failed_attempts = 0,
+       otp_locked_until = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
       [delivery.id]
     );
     await pool.query("UPDATE orders SET status = 'delivered' WHERE id = $1", [delivery.order_id]);

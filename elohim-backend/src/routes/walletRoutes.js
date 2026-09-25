@@ -982,11 +982,10 @@ router.post("/:userId/fund", async (req, res) => {
 });
 
 router.post("/:userId/pay-cart", verifyToken, async (req, res) => {
-  const amount = parseAmount(req.body.amount);
   const { pin } = req.body;
 
   if (String(req.user.id) !== String(req.params.userId)) return res.status(403).json({ error: "Not allowed" });
-  if (!amount || !pin) return res.status(400).json({ error: "Amount and Wallet PIN are required" });
+  if (!pin) return res.status(400).json({ error: "Wallet PIN is required" });
   if (!(await verifyWalletPin(req.user.id, pin))) return res.status(401).json({ error: "Invalid Wallet PIN" });
 
   const client = await pool.connect();
@@ -1000,6 +999,28 @@ router.post("/:userId/pay-cart", verifyToken, async (req, res) => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, verified_at TIMESTAMP
     )`);
     await client.query("BEGIN");
+    const cartTotalRes = await client.query(
+      `SELECT c.quantity, COALESCE(pv.price, p.price) AS price
+       FROM cart c
+       JOIN products p ON p.id = c.product_id
+       LEFT JOIN product_variants pv ON pv.id = c.variant_id
+       WHERE c.user_id = $1`,
+      [req.user.id]
+    );
+    if (cartTotalRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Cart is empty" });
+    }
+    const subtotal = cartTotalRes.rows.reduce(
+      (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
+      0
+    );
+    const isBulk = cartTotalRes.rows.some((item) => Number(item.quantity || 0) >= 10);
+    const amount = Math.round((subtotal + (isBulk ? 0 : 5000)) * 100) / 100;
+    if (!amount || amount <= 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Invalid cart total" });
+    }
     const balance = await getWalletBalance(req.user.id, client);
     if (amount > balance) {
       await client.query("ROLLBACK");

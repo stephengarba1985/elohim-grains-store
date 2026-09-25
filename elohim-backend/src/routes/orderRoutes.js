@@ -752,6 +752,8 @@ router.post("/:id/notify-customer", verifyToken, isAdmin, async (req, res) => {
   }
 });
 router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
+  const client = await pool.connect();
+  let transactionStarted = false;
   try {
     await ensureOrderStatusEvents();
     await ensureOrderDeliveryFeeColumn();
@@ -782,8 +784,11 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
       return res.status(400).json({ error: "Delivery must be verified with the customer delivery PIN" });
     }
 
-    const existingOrderRes = await pool.query(
-      `SELECT user_id, rider_id, status, inventory_restored, order_number FROM orders WHERE id = $1`,
+    await client.query("BEGIN");
+    transactionStarted = true;
+
+    const existingOrderRes = await client.query(
+      `SELECT user_id, rider_id, status, inventory_restored, order_number FROM orders WHERE id = $1 FOR UPDATE`,
       [id]
     );
 
@@ -795,24 +800,24 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
 
     const canRestoreInventory = ["pending", "paid", "confirmed", "processing", "ready_for_delivery"].includes(order.status);
     if (status === "cancelled" && canRestoreInventory && !order.inventory_restored) {
-      const itemsRes = await pool.query(
+      const itemsRes = await client.query(
         "SELECT product_id, variant_id, quantity FROM order_items WHERE order_id = $1",
         [id]
       );
 
       for (const item of itemsRes.rows) {
         if (item.variant_id) {
-          await pool.query("UPDATE product_variants SET stock = stock + $1 WHERE id = $2", [item.quantity, item.variant_id]);
+          await client.query("UPDATE product_variants SET stock = stock + $1 WHERE id = $2", [item.quantity, item.variant_id]);
         } else {
-          await pool.query("UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2", [item.quantity, item.product_id]);
+          await client.query("UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2", [item.quantity, item.product_id]);
         }
       }
 
-      await pool.query("UPDATE orders SET inventory_restored = TRUE WHERE id = $1", [id]);
+      await client.query("UPDATE orders SET inventory_restored = TRUE WHERE id = $1", [id]);
     }
     const delivery = await ensureDeliveryForOrder(id, order.rider_id, status);
 
-    const result = await pool.query(
+    const result = await client.query(
       `UPDATE orders
        SET status = $1
        WHERE id = $2
@@ -820,13 +825,13 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
       [status, id]
     );
 
-    await pool.query(
+    await client.query(
       `INSERT INTO order_status_events (order_id, previous_status, status, changed_by, note)
        VALUES ($1, $2, $3, $4, $5)`,
       [id, order.status || null, status, req.user.id, req.body.note || null]
     );
 
-    await pool.query(
+    await client.query(
       `UPDATE deliveries
        SET status = $1,
            updated_at = CURRENT_TIMESTAMP
@@ -862,10 +867,15 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
       );
     }
 
+    await client.query("COMMIT");
+    transactionStarted = false;
     res.json(result.rows[0]);
   } catch (err) {
+    if (transactionStarted) await client.query("ROLLBACK").catch(() => {});
     console.error("UPDATE ORDER STATUS ERROR:", err);
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

@@ -13,7 +13,7 @@ router.get('/recovery/:user_id', verifyToken, async (req,res) => {
   try {
     if (Number(req.params.user_id) !== Number(req.user.id) && !req.user.is_admin) return res.status(403).json({ error: 'Not authorised' })
     await ensureCartRecovery()
-    const consent = await pool.query('SELECT reminder_consent FROM cart_recovery_preferences WHERE user_id=$1',[req.user.id])
+    const consent = await pool.query('SELECT reminder_consent FROM cart_recovery_preferences WHERE user_id=$1',[req.params.user_id])
     const items = await pool.query(`SELECT c.product_id,c.quantity,p.name,p.price,p.image_url FROM cart c JOIN products p ON p.id=c.product_id WHERE c.user_id=$1 ORDER BY c.created_at DESC`,[req.params.user_id])
     res.json({ consent: consent.rows[0]?.reminder_consent === true, has_cart: items.rows.length > 0, items: items.rows })
   } catch(err) { console.error('CART RECOVERY ERROR:',err);res.status(500).json({error:'Failed to load saved cart'}) }
@@ -95,7 +95,7 @@ router.post('/', verifyToken, async (req, res) => {
     const existing = await pool.query(
       variantId
         ? 'SELECT * FROM cart WHERE product_id = $1 AND user_id = $2 AND variant_id = $3'
-        : 'SELECT * FROM cart WHERE product_id = $1 AND user_id = $2',
+        : 'SELECT * FROM cart WHERE product_id = $1 AND user_id = $2 AND variant_id IS NULL',
       variantId
         ? [productId, userId, variantId]
         : [productId, userId]
@@ -111,7 +111,7 @@ router.post('/', verifyToken, async (req, res) => {
       const updated = await pool.query(
         variantId
           ? 'UPDATE cart SET quantity = $1 WHERE product_id = $2 AND user_id = $3 AND variant_id = $4 RETURNING *'
-          : 'UPDATE cart SET quantity = $1 WHERE product_id = $2 AND user_id = $3 RETURNING *',
+          : 'UPDATE cart SET quantity = $1 WHERE product_id = $2 AND user_id = $3 AND variant_id IS NULL RETURNING *',
         variantId
           ? [newQty, productId, userId, variantId]
           : [newQty, productId, userId]
@@ -158,6 +158,8 @@ router.get('/:user_id', verifyToken, async (req, res) => {
         cart.created_at,
         products.name AS product_name,
         products.image_url AS product_image,
+        products.price AS product_price,
+        products.stock_quantity AS product_stock,
         products.category_id,
         categories.name AS category_name,
         product_types.id AS product_type_id,
@@ -278,7 +280,7 @@ router.delete('/clear/:user_id', verifyToken, async (req, res) => {
   try {
     await pool.query(
       'DELETE FROM cart WHERE user_id = $1',
-      [req.params.user_id]
+      [req.user.id]
     )
 
     res.json({ message: "Cart cleared" })

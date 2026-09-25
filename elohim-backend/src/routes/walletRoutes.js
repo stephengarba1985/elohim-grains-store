@@ -7,6 +7,7 @@ const { createWalletAlert } = require("./mobileRoutes");
 const { verifyToken, isAdmin, requireRecentAuth } = require("../middleware/auth");
 const { normalizePhone, canonicalPhone } = require("../utils/phone");
 const { sendEmail } = require("../utils/mail");
+const { getAuthoritativeCartPricing } = require("../utils/cartPricing");
 
 const router = express.Router();
 
@@ -357,7 +358,7 @@ router.post("/fund/verify", verifyToken, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Invalid currency" });
     }
-    if (Number(payment.amount) < Math.round(Number(funding.amount) * 100)) {
+    if (Number(payment.amount) !== Math.round(Number(funding.amount) * 100)) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Amount mismatch" });
     }
@@ -428,7 +429,7 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
     const funding = fundingRes.rows[0];
     if (funding.status === "verified") { await client.query("ROLLBACK"); return res.sendStatus(200); }
     if (payment.status !== "success" || payment.currency !== "NGN") { await client.query("ROLLBACK"); return res.sendStatus(200); }
-    if (Number(payment.amount) < Math.round(Number(funding.amount) * 100)) { await client.query("ROLLBACK"); return res.sendStatus(200); }
+    if (Number(payment.amount) !== Math.round(Number(funding.amount) * 100)) { await client.query("ROLLBACK"); return res.sendStatus(200); }
 
     await insertTransaction(client, {
       userId: funding.user_id,
@@ -613,7 +614,7 @@ router.post("/change-pin", verifyToken, requireRecentAuth(15), async (req, res) 
   }
 });
 
-router.post("/virtual-accounts/confirm-transfer", async (req, res) => {
+router.post("/virtual-accounts/confirm-transfer", verifyToken, isAdmin, async (req, res) => {
   const { account_number, amount, sender_name, reference } = req.body;
   const depositAmount = parseAmount(amount);
   const normalizedReference =
@@ -872,7 +873,7 @@ router.get("/admin/phone-cleanup-report", verifyToken, isAdmin, async (req, res)
   }
 });
 
-router.get("/admin/overview", async (req, res) => {
+router.get("/admin/overview", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensureWalletTables();
 
@@ -948,7 +949,7 @@ router.get("/admin/overview", async (req, res) => {
   }
 });
 
-router.post("/:userId/fund", async (req, res) => {
+router.post("/:userId/fund", verifyToken, isAdmin, async (req, res) => {
   const amount = parseAmount(req.body.amount);
 
   if (!amount) {
@@ -982,11 +983,10 @@ router.post("/:userId/fund", async (req, res) => {
 });
 
 router.post("/:userId/pay-cart", verifyToken, async (req, res) => {
-  const amount = parseAmount(req.body.amount);
   const { pin } = req.body;
 
   if (String(req.user.id) !== String(req.params.userId)) return res.status(403).json({ error: "Not allowed" });
-  if (!amount || !pin) return res.status(400).json({ error: "Amount and Wallet PIN are required" });
+  if (!pin) return res.status(400).json({ error: "Wallet PIN is required" });
   if (!(await verifyWalletPin(req.user.id, pin))) return res.status(401).json({ error: "Invalid Wallet PIN" });
 
   const client = await pool.connect();
@@ -1000,6 +1000,17 @@ router.post("/:userId/pay-cart", verifyToken, async (req, res) => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, verified_at TIMESTAMP
     )`);
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [Number(req.user.id)]);
+    const cartPricing = await getAuthoritativeCartPricing(client, req.user.id);
+    if (cartPricing.items.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Cart is empty" });
+    }
+    const amount = cartPricing.total;
+    if (!amount || amount <= 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Invalid cart total" });
+    }
     const balance = await getWalletBalance(req.user.id, client);
     if (amount > balance) {
       await client.query("ROLLBACK");
@@ -1054,6 +1065,7 @@ router.post("/:userId/withdraw", verifyToken, async (req, res) => {
   try {
     await ensureWalletTables();
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [Number(req.params.userId)]);
 
     const balance = await getWalletBalance(req.params.userId, client);
 
@@ -1161,6 +1173,16 @@ router.post("/:userId/transfer", verifyToken, async (req, res) => {
     }
 
     const recipientUser = matches[0];
+    const senderId = Number(req.params.userId);
+    const recipientId = Number(recipientUser.id);
+    const lockIds = [...new Set([senderId, recipientId])]
+      .filter(Number.isInteger)
+      .sort((a, b) => a - b);
+
+    for (const lockId of lockIds) {
+      await client.query("SELECT pg_advisory_xact_lock($1)", [lockId]);
+    }
+
     const recipientDisplayPhone = normalizePhone(recipientUser.phone) || recipientPhone;
 
     if (String(recipientUser.id) === String(req.params.userId)) {

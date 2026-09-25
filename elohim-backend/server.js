@@ -4,6 +4,14 @@ const app = require('./src/app');
 
 const PORT = process.env.PORT || 5000;
 
+const requiredProductionEnv = ["DATABASE_URL", "JWT_SECRET", "PAYSTACK_SECRET_KEY", "FRONTEND_URL"];
+if (process.env.NODE_ENV === "production") {
+  const missing = requiredProductionEnv.filter((name) => !String(process.env[name] || "").trim());
+  if (missing.length) {
+    throw new Error(`Missing required production environment variables: ${missing.join(", ")}`);
+  }
+}
+
 /* =========================
    CRON SETUP (SAFE)
 ========================= */

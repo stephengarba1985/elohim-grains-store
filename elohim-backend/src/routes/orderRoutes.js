@@ -11,6 +11,7 @@ const {
 } = require("./trackingRoutes");
 
 const { verifyToken, isAdmin } = require("../middleware/auth");
+const { calculateCartPricing, getItemUnitPrice } = require("../utils/cartPricing");
 
 const ensureOrderDeliveryFeeColumn = () =>
   pool.query(`
@@ -42,16 +43,14 @@ router.post("/create", verifyToken, async (req, res) => {
   let transactionStarted = false;
 
   try {
-    const { reference, user_id, delivery_address } = req.body;
+    const { reference, delivery_address } = req.body;
+    const user_id = Number(req.user.id);
     await ensurePaymentGatewayTables();
     await ensureOrderDeliveryFeeColumn();
 
     console.log("ORDER BODY:", req.body);
     console.log("ORDER REQUEST:", { reference, user_id });
 
-    if (!user_id) {
-      return res.status(400).json({ error: "User ID is required" });
-    }
 
     const roleColumnRes = await client.query(`
       SELECT column_name
@@ -89,6 +88,9 @@ router.post("/create", verifyToken, async (req, res) => {
       );
 
       if (existingOrder.rows.length > 0) {
+        if (Number(existingOrder.rows[0].user_id) !== user_id) {
+          return res.status(403).json({ error: "Payment reference does not belong to this customer" });
+        }
         return res.json({
           message: "Order already exists",
           orderId: existingOrder.rows[0].id,
@@ -118,20 +120,13 @@ router.post("/create", verifyToken, async (req, res) => {
     }
 
     const items = cartRes.rows;
-    let totalAmount = 0;
-    const deliveryFee = isBulk || items.some((item) => Number(item.quantity || 0) >= 10)
-      ? 0
-      : 5000;
+    const cartPricing = calculateCartPricing({ items, isBulk });
+    const deliveryFee = cartPricing.deliveryFee;
+    let totalAmount = cartPricing.total;
 
     for (const item of items) {
       const quantity = Number(item.quantity);
-      const productPrice = Number(item.product_price || 0);
-      const productBulkPrice = Number(item.product_bulk_price || 0);
-      const variantPrice =
-        item.variant_price != null ? Number(item.variant_price) : null;
-      const baseProductPrice =
-        isBulk && productBulkPrice > 0 ? productBulkPrice : productPrice;
-      const price = variantPrice !== null ? variantPrice : baseProductPrice;
+      const price = getItemUnitPrice(item, isBulk);
 
       if (!price || price <= 0) {
         throw new Error("Invalid product price for order item");
@@ -155,10 +150,7 @@ router.post("/create", verifyToken, async (req, res) => {
         }
       }
 
-      totalAmount += price * quantity;
     }
-
-    totalAmount += deliveryFee;
 
     const referenceColumnRes = await client.query(`
       SELECT column_name
@@ -167,16 +159,38 @@ router.post("/create", verifyToken, async (req, res) => {
         AND column_name = 'reference'
     `);
     const hasReferenceColumn = referenceColumnRes.rows.length > 0;
+    await client.query("BEGIN");
+    transactionStarted = true;
+
     const paymentTx = reference
       ? await client.query(
-          "SELECT * FROM payment_transactions WHERE reference=$1 AND user_id=$2 AND status='verified'",
+          `SELECT *
+           FROM payment_transactions
+           WHERE reference=$1 AND user_id=$2 AND status='verified'
+           FOR UPDATE`,
           [reference, user_id]
         )
       : { rows: [] };
     const verifiedPayment = paymentTx.rows[0];
 
-    await client.query("BEGIN");
-    transactionStarted = true;
+    if (reference && !verifiedPayment) {
+      await client.query("ROLLBACK");
+      transactionStarted = false;
+      return res.status(400).json({ error: "Verified payment is required for this order" });
+    }
+
+    if (verifiedPayment) {
+      if (verifiedPayment.order_id) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return res.status(409).json({ error: "Payment reference has already been used" });
+      }
+      if (Math.round(Number(verifiedPayment.amount) * 100) !== Math.round(Number(totalAmount) * 100)) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return res.status(400).json({ error: "Verified payment amount does not match the current order total" });
+      }
+    }
 
     const orderRes = hasReferenceColumn
       ? hasIsBulkColumn
@@ -218,28 +232,30 @@ router.post("/create", verifyToken, async (req, res) => {
 
     for (const item of items) {
       const quantity = Number(item.quantity);
-      const productPrice = Number(item.product_price || 0);
-      const productBulkPrice = Number(item.product_bulk_price || 0);
-      const variantPrice =
-        item.variant_price != null ? Number(item.variant_price) : null;
-      const baseProductPrice =
-        isBulk && productBulkPrice > 0 ? productBulkPrice : productPrice;
-      const price = variantPrice !== null ? variantPrice : baseProductPrice;
+      const price = getItemUnitPrice(item, isBulk);
 
       if (item.variant_id) {
-        await client.query(
+        const stockUpdate = await client.query(
           `UPDATE product_variants
            SET stock = stock - $1
-           WHERE id = $2`,
+           WHERE id = $2 AND stock >= $1
+           RETURNING id`,
           [quantity, item.variant_id]
         );
+        if (stockUpdate.rows.length === 0) {
+          throw new Error("Not enough stock available for variant");
+        }
       } else {
-        await client.query(
+        const stockUpdate = await client.query(
           `UPDATE products
            SET stock_quantity = stock_quantity - $1
-           WHERE id = $2`,
+           WHERE id = $2 AND stock_quantity >= $1
+           RETURNING id`,
           [quantity, item.product_id]
         );
+        if (stockUpdate.rows.length === 0) {
+          throw new Error("Not enough stock available");
+        }
       }
 
       await client.query(
@@ -348,6 +364,58 @@ router.post("/create", verifyToken, async (req, res) => {
 
 
 /* =========================
+   RECOVER VERIFIED PAYMENT
+========================= */
+router.post("/recover-payment", verifyToken, async (req, res) => {
+  const reference = String(req.body.reference || "").trim();
+  if (!reference) return res.status(400).json({ error: "Reference is required" });
+
+  try {
+    await ensurePaymentGatewayTables();
+    const payment = await pool.query(
+      `SELECT id, user_id, order_id, reference, amount, status
+       FROM payment_transactions
+       WHERE reference=$1 AND user_id=$2 AND status='verified'
+       LIMIT 1`,
+      [reference, req.user.id]
+    );
+
+    if (!payment.rows[0]) {
+      return res.status(404).json({ error: "Verified payment not found" });
+    }
+
+    if (payment.rows[0].order_id) {
+      const order = await pool.query(
+        "SELECT id, order_number, total_amount, status FROM orders WHERE id=$1 AND user_id=$2",
+        [payment.rows[0].order_id, req.user.id]
+      );
+      if (!order.rows[0]) return res.status(409).json({ error: "Payment is linked to an unavailable order. Contact support." });
+      return res.json({ recovered: true, order: order.rows[0] });
+    }
+
+    const cart = await pool.query("SELECT id FROM cart WHERE user_id=$1 LIMIT 1", [req.user.id]);
+    if (!cart.rows[0]) {
+      return res.status(409).json({
+        error: "Payment is verified but the order cannot be rebuilt automatically because the cart is unavailable. Contact support.",
+        reference,
+        amount: payment.rows[0].amount,
+      });
+    }
+
+    return res.status(202).json({
+      recovered: false,
+      can_create_order: true,
+      reference,
+      amount: payment.rows[0].amount,
+      next_step: "Call the authenticated order creation endpoint with this reference.",
+    });
+  } catch (err) {
+    console.error("ORDER PAYMENT RECOVERY ERROR:", err);
+    return res.status(500).json({ error: "Failed to recover paid order" });
+  }
+});
+
+/* =========================
    GET ALL ORDERS (ADMIN ONLY)
 ========================= */
 
@@ -444,14 +512,18 @@ router.get("/user/:user_id", verifyToken, async (req, res) => {
     await ensureEscrowTables();
     await ensureOrderDeliveryFeeColumn();
 
-    const { user_id } = req.params;
+    const requestedUserId = Number(req.params.user_id);
+    const isAdminUser = Boolean(req.user.is_admin || req.user.role === "admin");
+    if (!isAdminUser && requestedUserId !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
 
     const result = await pool.query(
       `SELECT *
        FROM orders
        WHERE user_id = $1
        ORDER BY created_at DESC`,
-      [user_id]
+      [requestedUserId]
     );
 
     res.json(result.rows);
@@ -475,6 +547,12 @@ router.get("/:id", verifyToken, async (req, res) => {
 
     if (orderRes.rows.length === 0) {
       return res.status(404).json({ error: "Order not found" });
+    }
+
+    const orderOwner = orderRes.rows[0];
+    const isAdminUser = Boolean(req.user.is_admin || req.user.role === "admin");
+    if (!isAdminUser && Number(orderOwner.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Not allowed" });
     }
 
     const itemsRes = await pool.query(
@@ -501,7 +579,7 @@ router.get("/:id", verifyToken, async (req, res) => {
   }
 });
 
-router.get("/:id/invoice", async (req, res) => {
+router.get("/:id/invoice", verifyToken, async (req, res) => {
   try {
     let PDFDocument;
 
@@ -528,6 +606,10 @@ router.get("/:id/invoice", async (req, res) => {
     }
 
     const order = orderRes.rows[0];
+    const isAdminUser = Boolean(req.user.is_admin || req.user.role === "admin");
+    if (!isAdminUser && Number(order.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
 
     /* =========================
        GET ITEMS (VERY IMPORTANT)
@@ -679,6 +761,8 @@ router.post("/:id/notify-customer", verifyToken, isAdmin, async (req, res) => {
   }
 });
 router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
+  const client = await pool.connect();
+  let transactionStarted = false;
   try {
     await ensureOrderStatusEvents();
     await ensureOrderDeliveryFeeColumn();
@@ -709,37 +793,75 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
       return res.status(400).json({ error: "Delivery must be verified with the customer delivery PIN" });
     }
 
-    const existingOrderRes = await pool.query(
-      `SELECT user_id, rider_id, status, inventory_restored, order_number FROM orders WHERE id = $1`,
+    await client.query("BEGIN");
+    transactionStarted = true;
+
+    const existingOrderRes = await client.query(
+      `SELECT user_id, rider_id, status, inventory_restored, order_number FROM orders WHERE id = $1 FOR UPDATE`,
       [id]
     );
 
     if (existingOrderRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      transactionStarted = false;
       return res.status(404).json({ error: "Order not found" });
     }
 
     const order = existingOrderRes.rows[0];
 
+    const terminalStatuses = ["delivered", "cancelled", "refunded"];
+    if (terminalStatuses.includes(order.status) && status !== order.status) {
+      await client.query("ROLLBACK");
+      transactionStarted = false;
+      return res.status(409).json({ error: `Order is already ${order.status} and cannot move to ${status}` });
+    }
+
+    const allowedTransitions = {
+      pending: ["paid", "confirmed", "processing", "cancelled"],
+      paid: ["confirmed", "processing", "ready_for_delivery", "cancelled", "refunded"],
+      confirmed: ["processing", "ready_for_delivery", "cancelled", "refunded"],
+      processing: ["ready_for_delivery", "cancelled", "refunded"],
+      ready_for_delivery: ["assigned", "cancelled", "refunded"],
+      assigned: ["picked_up", "in_transit", "delivery_failed"],
+      picked_up: ["in_transit", "delivery_failed"],
+      in_transit: ["near_customer", "delivery_failed"],
+      near_customer: ["delivery_failed"],
+      delivery_failed: ["assigned", "cancelled", "refunded"],
+    };
+    if (status !== order.status && !(allowedTransitions[order.status] || []).includes(status)) {
+      await client.query("ROLLBACK");
+      transactionStarted = false;
+      return res.status(409).json({ error: `Invalid order transition from ${order.status} to ${status}` });
+    }
+
     const canRestoreInventory = ["pending", "paid", "confirmed", "processing", "ready_for_delivery"].includes(order.status);
     if (status === "cancelled" && canRestoreInventory && !order.inventory_restored) {
-      const itemsRes = await pool.query(
+      const itemsRes = await client.query(
         "SELECT product_id, variant_id, quantity FROM order_items WHERE order_id = $1",
         [id]
       );
 
       for (const item of itemsRes.rows) {
         if (item.variant_id) {
-          await pool.query("UPDATE product_variants SET stock = stock + $1 WHERE id = $2", [item.quantity, item.variant_id]);
+          await client.query("UPDATE product_variants SET stock = stock + $1 WHERE id = $2", [item.quantity, item.variant_id]);
         } else {
-          await pool.query("UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2", [item.quantity, item.product_id]);
+          const restored = await client.query(
+            "UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2 RETURNING stock_quantity",
+            [item.quantity, item.product_id]
+          );
+          const newStock = Number(restored.rows[0]?.stock_quantity || 0);
+          await client.query(
+            "INSERT INTO stock_history (product_id, admin_id, change, previous_stock, new_stock, reason, note, reference) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            [item.product_id, req.user.id, item.quantity, newStock - Number(item.quantity), newStock, "order_cancelled", "Inventory restored for cancelled order " + (order.order_number || id), order.order_number || String(id)]
+          ).catch(() => {});
         }
       }
 
-      await pool.query("UPDATE orders SET inventory_restored = TRUE WHERE id = $1", [id]);
+      await client.query("UPDATE orders SET inventory_restored = TRUE WHERE id = $1", [id]);
     }
     const delivery = await ensureDeliveryForOrder(id, order.rider_id, status);
 
-    const result = await pool.query(
+    const result = await client.query(
       `UPDATE orders
        SET status = $1
        WHERE id = $2
@@ -747,13 +869,13 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
       [status, id]
     );
 
-    await pool.query(
+    await client.query(
       `INSERT INTO order_status_events (order_id, previous_status, status, changed_by, note)
        VALUES ($1, $2, $3, $4, $5)`,
       [id, order.status || null, status, req.user.id, req.body.note || null]
     );
 
-    await pool.query(
+    await client.query(
       `UPDATE deliveries
        SET status = $1,
            updated_at = CURRENT_TIMESTAMP
@@ -761,38 +883,38 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
       [status, id]
     );
 
-    await addDeliveryEvent(id, delivery.id, status, `Order status updated to ${status}`);
+    await client.query("COMMIT");
+    transactionStarted = false;
 
-    const customerNotifications = {
-      confirmed: "Payment confirmed. Your order is now confirmed.",
-      processing: "Your order is now being prepared.",
-      in_transit: "Your order is now out for delivery. You can track it from My Orders.",
-    };
-    if (customerNotifications[status]) {
-      const customerRes = await pool.query("SELECT name, phone FROM users WHERE id = $1", [order.user_id]);
-      const customer = customerRes.rows[0];
-      if (customer?.phone) {
-        sendWhatsApp(
-          customer.phone,
-          `Hello ${customer.name || "Customer"}, ${customerNotifications[status]} Order: ${order.order_number || `#${id}`}`
-        );
+    try {
+      await addDeliveryEvent(id, delivery.id, status, `Order status updated to ${status}`);
+
+      const customerNotifications = {
+        confirmed: "Payment confirmed. Your order is now confirmed.",
+        processing: "Your order is now being prepared.",
+        in_transit: "Your order is now out for delivery. You can track it from My Orders.",
+      };
+      if (customerNotifications[status]) {
+        const customerRes = await pool.query("SELECT name, phone FROM users WHERE id = $1", [order.user_id]);
+        const customer = customerRes.rows[0];
+        if (customer?.phone) {
+          sendWhatsApp(
+            customer.phone,
+            `Hello ${customer.name || "Customer"}, ${customerNotifications[status]} Order: ${order.order_number || `#${id}`}`
+          );
+        }
       }
-    }
-
-    if (status === "delivered" && order.rider_id) {
-      await pool.query(
-        `UPDATE riders
-         SET status = 'available',
-             current_orders = GREATEST(COALESCE(current_orders, 0) - 1, 0)
-         WHERE id = $1`,
-        [order.rider_id]
-      );
+    } catch (postCommitErr) {
+      console.error("ORDER STATUS POST-COMMIT SIDE EFFECT ERROR:", postCommitErr);
     }
 
     res.json(result.rows[0]);
   } catch (err) {
+    if (transactionStarted) await client.query("ROLLBACK").catch(() => {});
     console.error("UPDATE ORDER STATUS ERROR:", err);
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -804,10 +926,22 @@ router.put("/:id/assign-rider", verifyToken, isAdmin, async (req, res) => {
     const { id } = req.params;
     const { rider_id } = req.body;
 
+    const orderCheck = await pool.query("SELECT id, status, rider_id FROM orders WHERE id=$1", [id]);
+    if (!orderCheck.rows[0]) return res.status(404).json({ error: "Order not found" });
+    if (!["ready_for_delivery", "delivery_failed"].includes(orderCheck.rows[0].status)) {
+      return res.status(409).json({ error: "Order is not ready for rider assignment" });
+    }
+
+    const riderCheck = await pool.query("SELECT id, status FROM riders WHERE id=$1", [rider_id]);
+    if (!riderCheck.rows[0]) return res.status(404).json({ error: "Rider not found" });
+    if (!["available", "active"].includes(String(riderCheck.rows[0].status || "").toLowerCase())) {
+      return res.status(409).json({ error: "Rider is not available" });
+    }
+
     const result = await pool.query(
       `UPDATE orders
        SET rider_id = $1, status = 'assigned'
-       WHERE id = $2
+       WHERE id = $2 AND status IN ('ready_for_delivery', 'delivery_failed')
        RETURNING *`,
       [rider_id, id]
     );

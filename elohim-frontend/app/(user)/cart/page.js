@@ -162,7 +162,7 @@ export default function CartPage() {
       if (walletBalance === null || walletBalance < payableTotal) return toast.error("Insufficient wallet balance");
       try {
         setPaymentLoading(true);
-        const payment = await API.post(`/wallet/${user.id}/pay-cart`, { amount: payableTotal, pin: walletPin });
+        const payment = await API.post(`/wallet/${user.id}/pay-cart`, { pin: walletPin });
         await createOrderFromReference(payment.data.reference);
       } catch (err) {
         toast.error(err.response?.data?.error || "Wallet payment failed");
@@ -209,16 +209,11 @@ export default function CartPage() {
 
   const providerChannels = {
     paystack: ["card", "bank_transfer", "ussd"],
-    flutterwave: ["card", "bank_transfer", "ussd"],
-    monnify: ["virtual_account", "bank_transfer"],
-    opay: ["opay_transfer", "bank_transfer"],
   };
 
   const channelLabels = {
     card: "Card",
     bank_transfer: "Bank Transfer",
-    virtual_account: "Virtual Account",
-    opay_transfer: "Opay Transfer",
     ussd: "USSD",
   };
 
@@ -231,8 +226,6 @@ export default function CartPage() {
 
       const res = await API.post("/orders/create", {
         reference,
-        user_id: user.id,
-        delivery_fee: deliveryFee || 0,
         delivery_address: [checkoutDetails.address, checkoutDetails.landmark && `Landmark: ${checkoutDetails.landmark}`, checkoutDetails.city, checkoutDetails.state].filter(Boolean).join(", "),
       });
 
@@ -240,8 +233,22 @@ export default function CartPage() {
       window.location.href = `/order/${res.data.orderId}`;
     } catch (err) {
       console.error("ORDER ERROR:", err.response?.data || err.message);
-      setPaymentNotice("Payment went through, but we could not finish creating the order. Please contact support.");
-      toast.error("Order failed after payment");
+      try {
+        const recovery = await API.post("/orders/recover-payment", { reference });
+        if (recovery.data?.order?.id) {
+          toast.success("Your paid order was recovered");
+          window.location.href = `/order/${recovery.data.order.id}`;
+          return;
+        }
+        if (recovery.data?.can_create_order) {
+          setPaymentNotice(`Payment ${reference} is verified. Your cart is preserved; please retry order creation or contact support if it continues to fail.`);
+        } else {
+          setPaymentNotice(`Payment ${reference} went through, but we could not finish creating the order. Please contact support and quote this reference.`);
+        }
+      } catch (recoveryErr) {
+        setPaymentNotice(`Payment ${reference} went through, but we could not finish creating the order. Please contact support and quote this reference.`);
+      }
+      toast.error("Order needs recovery after payment");
     } finally {
       setPaymentLoading(false);
     }
@@ -273,10 +280,8 @@ export default function CartPage() {
 
     try {
       const res = await API.post("/payment-gateways/initialize", {
-        user_id: user.id,
         provider,
         channel,
-        amount: payableTotal,
       });
 
       setPaymentInstructions(res.data.instructions);
@@ -347,7 +352,6 @@ export default function CartPage() {
     try {
       await API.post("/payment/verify", {
         reference,
-        user_id: userId,
       });
       return;
     } catch (primaryErr) {
@@ -382,10 +386,8 @@ export default function CartPage() {
     try {
       // Step 1: Initialize payment on backend
       const init = await API.post("/payment-gateways/initialize", {
-        user_id: user.id,
         provider: "paystack",
         channel: "card",
-        amount: payableTotal,
       });
 
       const paymentInfo = init.data.instructions;
@@ -397,15 +399,13 @@ export default function CartPage() {
       // Step 2: Load Paystack SDK from the browser
       const PaystackPop = await loadPaystackPopup();
 
-      const paystackKey =
-        process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ||
-        "pk_test_cb3837ca458c1f78520ead3c69b2cef9e228b41e";
+      const paystackKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
 
       if (!paystackKey) {
         throw new Error("Paystack public key is missing");
       }
 
-      const amountInKobo = Math.round(Number(payableTotal) * 100);
+      const amountInKobo = Math.round(Number(paymentInfo.amount) * 100);
 
       if (!Number.isFinite(amountInKobo) || amountInKobo <= 0) {
         throw new Error("Invalid payment amount");

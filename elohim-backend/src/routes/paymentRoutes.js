@@ -175,12 +175,13 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
   }
 });
 
-router.post("/verify", async (req, res) => {
-  const { reference, user_id } = req.body;
+router.post("/verify", verifyToken, async (req, res) => {
+  const { reference } = req.body;
+  const user_id = Number(req.user.id);
 
-  if (!reference || !user_id) {
+  if (!reference) {
     return res.status(400).json({
-      error: "Reference and user_id are required",
+      error: "Reference is required",
     });
   }
 

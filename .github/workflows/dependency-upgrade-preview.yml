@@ -1,0 +1,33 @@
+name: Dependency Upgrade Preview
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  upgrade-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Upgrade backend vulnerable dependencies
+        working-directory: elohim-backend
+        run: |
+          npm install multer@^2.3.0 nodemailer@^9.1.0
+          npm audit fix --package-lock-only
+      - name: Upgrade frontend vulnerable dependencies
+        working-directory: elohim-frontend
+        run: |
+          npm install next@^16.3.3
+          npm audit fix --package-lock-only
+      - name: Capture upgraded manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: upgraded-dependency-files
+          path: |
+            elohim-backend/package.json
+            elohim-backend/package-lock.json
+            elohim-frontend/package.json
+            elohim-frontend/package-lock.json

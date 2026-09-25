@@ -13,7 +13,7 @@ router.get('/recovery/:user_id', verifyToken, async (req,res) => {
   try {
     if (Number(req.params.user_id) !== Number(req.user.id) && !req.user.is_admin) return res.status(403).json({ error: 'Not authorised' })
     await ensureCartRecovery()
-    const consent = await pool.query('SELECT reminder_consent FROM cart_recovery_preferences WHERE user_id=$1',[req.params.user_id])
+    const consent = await pool.query('SELECT reminder_consent FROM cart_recovery_preferences WHERE user_id=$1',[req.user.id])
     const items = await pool.query(`SELECT c.product_id,c.quantity,p.name,p.price,p.image_url FROM cart c JOIN products p ON p.id=c.product_id WHERE c.user_id=$1 ORDER BY c.created_at DESC`,[req.params.user_id])
     res.json({ consent: consent.rows[0]?.reminder_consent === true, has_cart: items.rows.length > 0, items: items.rows })
   } catch(err) { console.error('CART RECOVERY ERROR:',err);res.status(500).json({error:'Failed to load saved cart'}) }
@@ -26,16 +26,16 @@ router.patch('/recovery-preferences', verifyToken, async (req,res) => {
 /* =========================
    ADD TO CART (CLEAN + SAFE)
 ========================= */
-router.post('/', async (req, res) => {
+router.post('/', verifyToken, async (req, res) => {
   try {
-    const { product_id, quantity, user_id, variant_id } = req.body
+    const { product_id, quantity, variant_id } = req.body
 
     const productId = Number(product_id)
     const qty = Number(quantity)
-    const userId = Number(user_id)
+    const userId = Number(req.user.id)
     const variantId = variant_id ? Number(variant_id) : null
 
-    if (!productId || !userId || qty <= 0) {
+    if (!productId || !userId || !Number.isInteger(qty) || qty <= 0) {
       return res.status(400).json({ error: "Invalid cart payload" })
     }
 
@@ -144,9 +144,9 @@ router.post('/', async (req, res) => {
 /* =========================
    GET CART
 ========================= */
-router.get('/:user_id', async (req, res) => {
+router.get('/:user_id', verifyToken, async (req, res) => {
   try {
-    const { user_id } = req.params
+    const user_id = Number(req.user.id)
 
     const result = await pool.query(`
       SELECT
@@ -217,9 +217,9 @@ router.get('/:user_id', async (req, res) => {
             image: item.variant_image || "",
           }
         : null,
-      price: Number(item.variant_price || 0),
+      price: Number(item.variant_id ? item.variant_price : item.product_price || 0),
       weight: item.variant_weight || "",
-      stock: Number(item.variant_stock || 0),
+      stock: Number(item.variant_id ? item.variant_stock : item.product_stock || 0),
     }))
 
     res.json(cart)
@@ -232,7 +232,7 @@ router.get('/:user_id', async (req, res) => {
 /* =========================
    UPDATE CART QUANTITY
 ========================= */
-router.patch('/:id/:user_id', async (req, res) => {
+router.patch('/:id/:user_id', verifyToken, async (req, res) => {
   try {
     const quantity = Number(req.body.quantity)
 
@@ -246,7 +246,7 @@ router.patch('/:id/:user_id', async (req, res) => {
        JOIN products ON products.id = cart.product_id
        LEFT JOIN product_variants ON product_variants.id = cart.variant_id
        WHERE cart.id = $1 AND cart.user_id = $2`,
-      [req.params.id, req.params.user_id]
+      [req.params.id, req.user.id]
     )
 
     if (cartItem.rows.length === 0) {
@@ -261,7 +261,7 @@ router.patch('/:id/:user_id', async (req, res) => {
 
     const updated = await pool.query(
       'UPDATE cart SET quantity = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
-      [quantity, req.params.id, req.params.user_id]
+      [quantity, req.params.id, req.user.id]
     )
 
     res.json(updated.rows[0])
@@ -274,7 +274,7 @@ router.patch('/:id/:user_id', async (req, res) => {
 /* =========================
    CLEAR CART
 ========================= */
-router.delete('/clear/:user_id', async (req, res) => {
+router.delete('/clear/:user_id', verifyToken, async (req, res) => {
   try {
     await pool.query(
       'DELETE FROM cart WHERE user_id = $1',
@@ -291,11 +291,11 @@ router.delete('/clear/:user_id', async (req, res) => {
 /* =========================
    REMOVE ITEM
 ========================= */
-router.delete('/:id/:user_id', async (req, res) => {
+router.delete('/:id/:user_id', verifyToken, async (req, res) => {
   try {
     await pool.query(
       'DELETE FROM cart WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.params.user_id]
+      [req.params.id, req.user.id]
     )
 
     res.json({ message: "Item removed" })

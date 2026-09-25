@@ -4,6 +4,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   upgrade-preview:
     runs-on: ubuntu-latest
@@ -22,6 +25,13 @@ jobs:
         run: |
           npm install next@^16.3.3
           npm audit fix --package-lock-only
+      - name: Commit generated dependency files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add elohim-backend/package.json elohim-backend/package-lock.json elohim-frontend/package.json elohim-frontend/package-lock.json
+          git diff --cached --quiet || git commit -m "fix: upgrade vulnerable npm dependencies"
+          git push origin HEAD:fix/p0-cart-order-security
       - name: Capture upgraded manifests
         uses: actions/upload-artifact@v4
         with:

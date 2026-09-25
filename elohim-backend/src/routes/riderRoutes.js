@@ -514,6 +514,25 @@ router.put("/status/:delivery_id", ...adminRiders, async (req, res) => {
     const { delivery_id } = req.params;
     const { status } = req.body;
 
+    const allowedStatuses = new Set([
+      "assigned",
+      "picked_up",
+      "in_transit",
+      "near_customer",
+      "delivery_failed",
+      "cancelled",
+    ]);
+
+    if (status === "delivered") {
+      return res.status(409).json({
+        error: "Delivered status requires successful delivery PIN confirmation.",
+      });
+    }
+
+    if (!allowedStatuses.has(status)) {
+      return res.status(400).json({ error: "Invalid delivery status" });
+    }
+
     const result = await pool.query(
       `UPDATE deliveries
        SET status = $1,

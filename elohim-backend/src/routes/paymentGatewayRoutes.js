@@ -2,6 +2,8 @@ const express = require("express");
 const axios = require("axios");
 const pool = require("../config/db");
 const { createPaymentReminder, queueMobileNotification } = require("./mobileRoutes");
+const { verifyToken, isAdmin } = require("../middleware/auth");
+const { getAuthoritativeCartPricing } = require("../utils/cartPricing");
 
 const router = express.Router();
 
@@ -9,26 +11,8 @@ const PROVIDERS = {
   paystack: {
     label: "Paystack",
     channels: ["card", "bank_transfer", "ussd"],
-    bank: "Paystack-Titan",
-    ussd: "*737*50*amount#",
-  },
-  flutterwave: {
-    label: "Flutterwave",
-    channels: ["card", "bank_transfer", "ussd"],
-    bank: "Flutterwave Sterling",
-    ussd: "*566*amount#",
-  },
-  monnify: {
-    label: "Monnify",
-    channels: ["virtual_account", "bank_transfer"],
-    bank: "Moniepoint MFB",
+    bank: "Paystack",
     ussd: null,
-  },
-  opay: {
-    label: "Opay Transfer",
-    channels: ["opay_transfer", "bank_transfer"],
-    bank: "OPay Digital Services",
-    ussd: "*955#",
   },
 };
 
@@ -79,24 +63,6 @@ const createVirtualAccount = ({ provider, userId }) => {
   return `${providerCode}${seed}${suffix}`.slice(0, 10);
 };
 
-const getCartTotal = async (userId) => {
-  const result = await pool.query(
-    `SELECT
-      cart.quantity,
-      COALESCE(product_variants.price, products.price) AS price
-     FROM cart
-     JOIN products ON cart.product_id = products.id
-     LEFT JOIN product_variants ON cart.variant_id = product_variants.id
-     WHERE cart.user_id=$1`,
-    [userId]
-  );
-
-  return result.rows.reduce(
-    (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
-    0
-  );
-};
-
 router.get("/options", async (req, res) => {
   res.json({
     providers: Object.entries(PROVIDERS).map(([value, config]) => ({
@@ -107,7 +73,7 @@ router.get("/options", async (req, res) => {
   });
 });
 
-router.get("/admin/overview", async (req, res) => {
+router.get("/admin/overview", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensurePaymentGatewayTables();
 
@@ -243,10 +209,10 @@ router.get("/admin/overview", async (req, res) => {
   }
 });
 
-router.post("/initialize", async (req, res) => {
-  const { user_id, provider, channel, amount } = req.body;
+router.post("/initialize", verifyToken, async (req, res) => {
+  const { provider, channel } = req.body;
+  const user_id = Number(req.user.id);
   const selectedProvider = PROVIDERS[provider];
-  const parsedAmount = parseAmount(amount);
 
   if (!user_id || !selectedProvider || !channel) {
     return res.status(400).json({ error: "User, provider, and channel are required" });
@@ -259,8 +225,8 @@ router.post("/initialize", async (req, res) => {
   try {
     await ensurePaymentGatewayTables();
 
-    const cartTotal = await getCartTotal(user_id);
-    const finalAmount = parsedAmount || cartTotal;
+    const cartPricing = await getAuthoritativeCartPricing(pool, user_id);
+    const finalAmount = cartPricing.total;
 
     if (!finalAmount) {
       return res.status(400).json({ error: "Cart is empty or amount is invalid" });
@@ -316,9 +282,9 @@ router.post("/initialize", async (req, res) => {
       }
     }
 
-    const isTransfer = ["bank_transfer", "virtual_account", "opay_transfer"].includes(channel);
-    const accountNumber = isTransfer ? createVirtualAccount({ provider, userId: user_id }) : null;
-    const ussdCode = channel === "ussd" ? selectedProvider.ussd?.replace("amount", String(Math.ceil(finalAmount))) : null;
+    const providerData = paystackResponse?.data?.data || {};
+    const accountNumber = providerData.account_number || null;
+    const ussdCode = providerData.ussd_code || null;
 
     const result = await pool.query(
       `INSERT INTO payment_transactions
@@ -379,7 +345,7 @@ router.post("/initialize", async (req, res) => {
   }
 });
 
-router.post("/verify", async (req, res) => {
+router.post("/verify", verifyToken, async (req, res) => {
   const { reference } = req.body;
 
   if (!reference) {
@@ -390,8 +356,8 @@ router.post("/verify", async (req, res) => {
     await ensurePaymentGatewayTables();
 
     const existing = await pool.query(
-      "SELECT * FROM payment_transactions WHERE reference=$1",
-      [reference]
+      "SELECT * FROM payment_transactions WHERE reference=$1 AND user_id=$2",
+      [reference, req.user.id]
     );
 
     if (existing.rows.length === 0) {

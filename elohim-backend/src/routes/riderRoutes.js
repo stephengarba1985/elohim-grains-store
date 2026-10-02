@@ -1,17 +1,57 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const { promisify } = require("util");
 const pool = require("../config/db");
 const sendWhatsApp = require("../utils/sendWhatsApp");
 const { verifyToken, isAdmin, requirePermission, requireRiderSession } = require("../middleware/auth");
 const {
   ensureDeliveryTrackingTables,
   addDeliveryEvent,
+  verifyDeliveryOtp,
+  OTP_MAX_ATTEMPTS,
+  OTP_LOCK_MINUTES,
+  issueDeliveryOtp,
+  notifyCustomerDeliveryOtp,
 } = require("./trackingRoutes");
 
-const jwtSecret = process.env.JWT_SECRET || "elohim_123456";
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) throw new Error("JWT_SECRET is required");
 const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
 const adminRiders = [verifyToken, isAdmin, requirePermission("riders")];
+const scryptAsync = promisify(crypto.scrypt);
+const RIDER_LOGIN_MAX_ATTEMPTS = 5;
+const RIDER_LOGIN_LOCK_MINUTES = 15;
+
+const hashRiderPin = async (pin) => {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derived = await scryptAsync(String(pin), salt, 32);
+  return `scrypt:${salt}:${Buffer.from(derived).toString("hex")}`;
+};
+
+const verifyRiderPin = async (pin, stored) => {
+  const value = String(stored || "");
+  if (!value.startsWith("scrypt:")) return false;
+  const [, salt, expectedHex] = value.split(":");
+  if (!salt || !expectedHex) return false;
+  const derived = Buffer.from(await scryptAsync(String(pin || ""), salt, 32));
+  const expected = Buffer.from(expectedHex, "hex");
+  return derived.length === expected.length && crypto.timingSafeEqual(derived, expected);
+};
+
+const ensureRiderCredentialColumn = () => pool.query(`
+  ALTER TABLE riders
+    ADD COLUMN IF NOT EXISTS portal_pin_hash TEXT,
+    ADD COLUMN IF NOT EXISTS portal_failed_attempts INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS portal_locked_until TIMESTAMP
+`);
+
+const sanitizeRider = (rider) => {
+  if (!rider) return rider;
+  const { portal_pin_hash, portal_failed_attempts, portal_locked_until, ...safe } = rider;
+  return safe;
+};
 
 /* =========================
    RIDER PORTAL AUTHENTICATION
@@ -20,16 +60,43 @@ router.post("/portal/login", async (req, res) => {
   try {
     const riderId = Number(req.body.rider_id);
     const phone = normalizePhone(req.body.phone);
+    const pin = String(req.body.pin || "").trim();
 
-    if (!Number.isInteger(riderId) || !phone) {
-      return res.status(400).json({ error: "Rider ID and phone number are required" });
+    if (!Number.isInteger(riderId) || !phone || !pin) {
+      return res.status(400).json({ error: "Rider ID, phone number, and PIN are required" });
     }
 
+    await ensureRiderCredentialColumn();
     const result = await pool.query("SELECT * FROM riders WHERE id = $1", [riderId]);
     const rider = result.rows[0];
     if (!rider || normalizePhone(rider.phone) !== phone) {
-      return res.status(401).json({ error: "Rider ID or phone number is incorrect" });
+      return res.status(401).json({ error: "Rider credentials are incorrect" });
     }
+    if (!rider.portal_pin_hash) {
+      return res.status(428).json({ error: "Rider portal PIN setup is required. Contact an administrator." });
+    }
+    if (rider.portal_locked_until && new Date(rider.portal_locked_until) > new Date()) {
+      return res.status(429).json({ error: "Too many sign-in attempts. Try again later." });
+    }
+    if (!(await verifyRiderPin(pin, rider.portal_pin_hash))) {
+      await pool.query(
+        `UPDATE riders
+         SET portal_failed_attempts = COALESCE(portal_failed_attempts, 0) + 1,
+             portal_locked_until = CASE
+               WHEN COALESCE(portal_failed_attempts, 0) + 1 >= $2
+               THEN CURRENT_TIMESTAMP + ($3 * INTERVAL '1 minute')
+               ELSE portal_locked_until
+             END
+         WHERE id = $1`,
+        [rider.id, RIDER_LOGIN_MAX_ATTEMPTS, RIDER_LOGIN_LOCK_MINUTES]
+      );
+      return res.status(401).json({ error: "Rider credentials are incorrect" });
+    }
+
+    await pool.query(
+      "UPDATE riders SET portal_failed_attempts = 0, portal_locked_until = NULL WHERE id = $1",
+      [rider.id]
+    );
 
     const token = jwt.sign(
       { type: "rider_portal", rider_id: rider.id },
@@ -105,13 +172,35 @@ router.post("/portal/deliveries/:deliveryId/confirm", verifyToken, requireRiderS
     );
     const delivery = deliveryRes.rows[0];
     if (!delivery) return res.status(404).json({ error: "Assigned delivery not found" });
-    if (!otp || String(delivery.delivery_otp) !== otp) {
+    if (!["in_transit", "near_customer"].includes(String(delivery.status || ""))) {
+      return res.status(409).json({ error: "Delivery must be in transit before it can be confirmed" });
+    }
+    if (delivery.otp_confirmed || delivery.status === "delivered") {
+      return res.status(409).json({ error: "Delivery has already been confirmed" });
+    }
+    if (delivery.otp_locked_until && new Date(delivery.otp_locked_until) > new Date()) {
+      return res.status(429).json({ error: "Too many incorrect PIN attempts. Try again later." });
+    }
+
+    if (!otp || !(await verifyDeliveryOtp(otp, delivery.delivery_otp))) {
+      await pool.query(
+        `UPDATE deliveries
+         SET otp_failed_attempts = COALESCE(otp_failed_attempts, 0) + 1,
+             otp_locked_until = CASE
+               WHEN COALESCE(otp_failed_attempts, 0) + 1 >= $2
+               THEN CURRENT_TIMESTAMP + ($3 * INTERVAL '1 minute')
+               ELSE otp_locked_until
+             END
+         WHERE id = $1`,
+        [delivery.id, OTP_MAX_ATTEMPTS, OTP_LOCK_MINUTES]
+      );
       return res.status(400).json({ error: "The delivery PIN does not match" });
     }
 
     await pool.query(
       `UPDATE deliveries SET status = 'delivered', otp_confirmed = TRUE,
-       confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+       confirmed_at = CURRENT_TIMESTAMP, otp_failed_attempts = 0,
+       otp_locked_until = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
       [delivery.id]
     );
     await pool.query("UPDATE orders SET status = 'delivered' WHERE id = $1", [delivery.order_id]);
@@ -165,6 +254,7 @@ router.put("/portal/location", verifyToken, requireRiderSession, async (req, res
 ========================= */
 router.post("/", ...adminRiders, async (req, res) => {
   try {
+    await ensureRiderCredentialColumn();
     const {
       name,
       phone,
@@ -216,10 +306,35 @@ router.post("/", ...adminRiders, async (req, res) => {
       ]
     );
 
-    res.json(result.rows[0]);
+    res.json(sanitizeRider(result.rows[0]));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create rider" });
+  }
+});
+
+/* =========================
+   SET / RESET RIDER PORTAL PIN
+========================= */
+router.put("/:id/portal-pin", ...adminRiders, async (req, res) => {
+  try {
+    const pin = String(req.body.pin || "").trim();
+    if (!/^\\d{6}$/.test(pin)) {
+      return res.status(400).json({ error: "Rider portal PIN must be exactly 6 digits" });
+    }
+
+    await ensureRiderCredentialColumn();
+    const pinHash = await hashRiderPin(pin);
+    const result = await pool.query(
+      "UPDATE riders SET portal_pin_hash = $1 WHERE id = $2 RETURNING id, name, phone, email, status",
+      [pinHash, req.params.id]
+    );
+
+    if (!result.rows[0]) return res.status(404).json({ error: "Rider not found" });
+    res.json({ message: "Rider portal PIN updated", rider: result.rows[0] });
+  } catch (err) {
+    console.error("RIDER PIN UPDATE ERROR:", err);
+    res.status(500).json({ error: "Could not update rider portal PIN" });
   }
 });
 
@@ -263,7 +378,7 @@ router.delete("/:id", ...adminRiders, async (req, res) => {
       [id]
     );
 
-    res.json({ message: "Rider deleted successfully", rider: result.rows[0] });
+    res.json({ message: "Rider deleted successfully", rider: sanitizeRider(result.rows[0]) });
   } catch (err) {
     console.error("DELETE RIDER ERROR:", err);
     res.status(500).json({ error: "Failed to delete rider" });
@@ -332,7 +447,7 @@ router.put("/:id", ...adminRiders, async (req, res) => {
 
     res.json({
       message: "Rider updated",
-      rider: result.rows[0],
+      rider: sanitizeRider(result.rows[0]),
     });
   } catch (err) {
     console.error("UPDATE RIDER ERROR:", err);
@@ -367,7 +482,7 @@ router.put("/:id/status", ...adminRiders, async (req, res) => {
 
     res.json({
       message: "Rider status updated",
-      rider: result.rows[0],
+      rider: sanitizeRider(result.rows[0]),
     });
   } catch (err) {
     console.error("UPDATE RIDER STATUS ERROR:", err);
@@ -412,7 +527,7 @@ router.get("/", ...adminRiders, async (req, res) => {
       ORDER BY r.name
     `);
 
-    res.json(result.rows);
+    res.json(result.rows.map(sanitizeRider));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch riders" });
@@ -458,42 +573,104 @@ router.get("/stats/summary", ...adminRiders, async (req, res) => {
    ASSIGN RIDER
 ========================= */
 router.put("/assign/:delivery_id", ...adminRiders, async (req, res) => {
+  const client = await pool.connect();
+
   try {
     await ensureDeliveryTrackingTables();
 
     const { delivery_id } = req.params;
     const { rider_id } = req.body;
 
-    await pool.query(
+    await client.query("BEGIN");
+
+    const deliveryRes = await client.query(
+      `SELECT d.id, d.order_id, d.status AS delivery_status, d.rider_id,
+              o.status AS order_status
+       FROM deliveries d
+       JOIN orders o ON o.id = d.order_id
+       WHERE d.id = $1
+       FOR UPDATE OF d, o`,
+      [delivery_id]
+    );
+    const delivery = deliveryRes.rows[0];
+
+    if (!delivery) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Delivery not found" });
+    }
+
+    if (!["ready_for_delivery", "delivery_failed"].includes(delivery.order_status)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Order is not ready for rider assignment" });
+    }
+
+    if (["delivered", "cancelled"].includes(delivery.delivery_status)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Terminal delivery cannot be reassigned" });
+    }
+
+    const riderRes = await client.query(
+      "SELECT id, status FROM riders WHERE id = $1 FOR UPDATE",
+      [rider_id]
+    );
+    const rider = riderRes.rows[0];
+
+    if (!rider) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Rider not found" });
+    }
+
+    if (!["available", "active"].includes(String(rider.status || "").toLowerCase())) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Rider is not available" });
+    }
+
+    await client.query(
       `UPDATE deliveries
        SET rider_id = $1,
            status = 'assigned',
-           delivery_otp = COALESCE(delivery_otp, FLOOR(100000 + RANDOM() * 900000)::text),
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $2`,
       [rider_id, delivery_id]
     );
 
-    const deliveryRes = await pool.query(
-      "SELECT order_id FROM deliveries WHERE id = $1",
-      [delivery_id]
+    const issuedPin = await issueDeliveryOtp(client, delivery_id);
+
+    await client.query(
+      "UPDATE orders SET rider_id = $1, status = 'assigned' WHERE id = $2",
+      [rider_id, delivery.order_id]
     );
 
-    await pool.query(`UPDATE riders SET status='busy' WHERE id=$1`, [rider_id]);
+    await client.query(
+      `UPDATE riders
+       SET status = 'busy',
+           current_orders = COALESCE(current_orders, 0) + 1
+       WHERE id = $1`,
+      [rider_id]
+    );
 
-    if (deliveryRes.rows[0]) {
-      await addDeliveryEvent(
-        deliveryRes.rows[0].order_id,
-        delivery_id,
-        "assigned",
-        "Rider assigned"
-      );
+    await client.query("COMMIT");
+
+    await addDeliveryEvent(
+      delivery.order_id,
+      delivery_id,
+      "assigned",
+      "Rider assigned"
+    );
+
+    try {
+      await notifyCustomerDeliveryOtp(delivery.order_id, issuedPin.otp);
+    } catch (notifyErr) {
+      console.error("DELIVERY PIN NOTIFICATION ERROR:", notifyErr);
     }
 
     res.json({ message: "Rider assigned 🚚" });
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error(err);
     res.status(500).json({ error: "Assignment failed" });
+  } finally {
+    client.release();
   }
 });
 
@@ -506,6 +683,25 @@ router.put("/status/:delivery_id", ...adminRiders, async (req, res) => {
 
     const { delivery_id } = req.params;
     const { status } = req.body;
+
+    const allowedStatuses = new Set([
+      "assigned",
+      "picked_up",
+      "in_transit",
+      "near_customer",
+      "delivery_failed",
+      "cancelled",
+    ]);
+
+    if (status === "delivered") {
+      return res.status(409).json({
+        error: "Delivered status requires successful delivery PIN confirmation.",
+      });
+    }
+
+    if (!allowedStatuses.has(status)) {
+      return res.status(400).json({ error: "Invalid delivery status" });
+    }
 
     const result = await pool.query(
       `UPDATE deliveries

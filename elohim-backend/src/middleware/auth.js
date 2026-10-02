@@ -1,7 +1,8 @@
 const jwt = require("jsonwebtoken");
 const pool = require("../config/db");
 
-const jwtSecret = process.env.JWT_SECRET || "elohim_123456";
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) throw new Error("JWT_SECRET is required");
 let staffRolesReady = false;
 const ensureStaffRoles = async () => {
   if (staffRolesReady) return;

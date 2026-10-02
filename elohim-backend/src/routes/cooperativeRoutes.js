@@ -1,5 +1,6 @@
 const express = require("express");
 const pool = require("../config/db");
+const { verifyToken, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -79,6 +80,18 @@ const parsePositiveNumber = (value) => {
   return number;
 };
 
+const requireGroupLeaderOrAdmin = async (groupId, user) => {
+  const group = await pool.query(
+    "SELECT id, creator_user_id FROM cooperative_groups WHERE id=$1",
+    [groupId]
+  );
+  if (!group.rows[0]) return { error: "Cooperative not found", status: 404 };
+  if (!user.is_admin && Number(group.rows[0].creator_user_id) !== Number(user.id)) {
+    return { error: "Only the cooperative leader can perform this action", status: 403 };
+  }
+  return { group: group.rows[0] };
+};
+
 const cooperativeSelect = `
   SELECT
     g.*,
@@ -94,7 +107,8 @@ const cooperativeSelect = `
   LEFT JOIN cooperative_bulk_requests br ON br.group_id = g.id
 `;
 
-router.get("/user/:userId", async (req, res) => {
+router.get("/user/:userId", verifyToken, async (req, res) => {
+  if (Number(req.params.userId) !== Number(req.user.id) && !req.user.is_admin) return res.status(403).json({ error: "Not allowed" });
   try {
     await ensureCooperativeTables();
 
@@ -113,7 +127,7 @@ router.get("/user/:userId", async (req, res) => {
   }
 });
 
-router.get("/admin/overview", async (req, res) => {
+router.get("/admin/overview", verifyToken, isAdmin, async (req, res) => {
   try {
     await ensureCooperativeTables();
 
@@ -160,7 +174,7 @@ router.get("/admin/overview", async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", verifyToken, async (req, res) => {
   try {
     await ensureCooperativeTables();
 
@@ -173,6 +187,13 @@ router.get("/:id", async (req, res) => {
 
     if (group.rows.length === 0) {
       return res.status(404).json({ error: "Cooperative not found" });
+    }
+    const access = await pool.query(
+      "SELECT 1 FROM cooperative_members WHERE group_id=$1 AND user_id=$2 LIMIT 1",
+      [req.params.id, req.user.id]
+    );
+    if (!req.user.is_admin && Number(group.rows[0].creator_user_id) !== Number(req.user.id) && access.rows.length === 0) {
+      return res.status(403).json({ error: "Not allowed" });
     }
 
     const members = await pool.query(
@@ -209,9 +230,9 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", verifyToken, async (req, res) => {
   const {
-    creator_user_id,
+    creator_user_id: ignoredCreatorUserId,
     name,
     group_type = "other",
     target_amount = 0,
@@ -220,7 +241,9 @@ router.post("/", async (req, res) => {
   } = req.body;
   const normalizedType = GROUP_TYPES.includes(group_type) ? group_type : "other";
 
-  if (!creator_user_id || !name) {
+  const creator_user_id = Number(req.user.id);
+
+  if (!name) {
     return res.status(400).json({ error: "Creator and group name are required" });
   }
 
@@ -266,7 +289,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.post("/:id/members", async (req, res) => {
+router.post("/:id/members", verifyToken, async (req, res) => {
   const { name, phone, user_id = null, role = "member" } = req.body;
 
   if (!name) {
@@ -275,12 +298,20 @@ router.post("/:id/members", async (req, res) => {
 
   try {
     await ensureCooperativeTables();
+    const authorization = await requireGroupLeaderOrAdmin(req.params.id, req.user);
+    if (authorization.error) return res.status(authorization.status).json({ error: authorization.error });
+
+    const normalizedRole = role === "leader" ? "member" : role;
+    if (user_id) {
+      const userExists = await pool.query("SELECT 1 FROM users WHERE id=$1", [user_id]);
+      if (!userExists.rows[0]) return res.status(400).json({ error: "Member user does not exist" });
+    }
 
     const result = await pool.query(
       `INSERT INTO cooperative_members (group_id, user_id, name, phone, role)
        VALUES ($1,$2,$3,$4,$5)
        RETURNING *`,
-      [req.params.id, user_id, name, phone || null, role]
+      [req.params.id, user_id, name, phone || null, normalizedRole]
     );
 
     res.json(result.rows[0]);
@@ -290,7 +321,7 @@ router.post("/:id/members", async (req, res) => {
   }
 });
 
-router.post("/:id/contributions", async (req, res) => {
+router.post("/:id/contributions", verifyToken, async (req, res) => {
   const { amount, member_id = null, user_id = null, note = null } = req.body;
   const parsedAmount = parsePositiveNumber(amount);
 
@@ -300,6 +331,26 @@ router.post("/:id/contributions", async (req, res) => {
 
   try {
     await ensureCooperativeTables();
+    const authorization = await requireGroupLeaderOrAdmin(req.params.id, req.user);
+    if (authorization.error) return res.status(authorization.status).json({ error: authorization.error });
+
+    if (member_id) {
+      const member = await pool.query(
+        "SELECT user_id FROM cooperative_members WHERE id=$1 AND group_id=$2",
+        [member_id, req.params.id]
+      );
+      if (!member.rows[0]) return res.status(400).json({ error: "Member does not belong to this cooperative" });
+      if (user_id && member.rows[0].user_id && Number(user_id) !== Number(member.rows[0].user_id)) {
+        return res.status(400).json({ error: "Contribution user does not match the selected member" });
+      }
+    }
+    if (user_id) {
+      const memberUser = await pool.query(
+        "SELECT 1 FROM cooperative_members WHERE group_id=$1 AND user_id=$2",
+        [req.params.id, user_id]
+      );
+      if (!memberUser.rows[0]) return res.status(400).json({ error: "Contribution user is not a cooperative member" });
+    }
 
     const result = await pool.query(
       `INSERT INTO cooperative_contributions (group_id, member_id, user_id, amount, note)
@@ -315,7 +366,7 @@ router.post("/:id/contributions", async (req, res) => {
   }
 });
 
-router.post("/:id/bulk-requests", async (req, res) => {
+router.post("/:id/bulk-requests", verifyToken, async (req, res) => {
   const { product_id, quantity, requested_price, delivery_note } = req.body;
   const parsedQuantity = parsePositiveNumber(quantity);
 
@@ -325,6 +376,8 @@ router.post("/:id/bulk-requests", async (req, res) => {
 
   try {
     await ensureCooperativeTables();
+    const authorization = await requireGroupLeaderOrAdmin(req.params.id, req.user);
+    if (authorization.error) return res.status(authorization.status).json({ error: authorization.error });
 
     const result = await pool.query(
       `INSERT INTO cooperative_bulk_requests
@@ -347,7 +400,7 @@ router.post("/:id/bulk-requests", async (req, res) => {
   }
 });
 
-router.put("/bulk-requests/:id", async (req, res) => {
+router.put("/bulk-requests/:id", verifyToken, isAdmin, async (req, res) => {
   const { status } = req.body;
 
   if (!status) {

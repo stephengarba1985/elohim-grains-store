@@ -7,6 +7,9 @@ const crypto = require("crypto");
 const { sendVerificationEmail, sendEmail } = require("../utils/mail");
 const { normalizePhone } = require("../utils/phone");
 
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) throw new Error("JWT_SECRET is required");
+
 const resolveFrontendBaseUrl = (req) => {
   const requestOrigin = String(req.get("origin") || "").trim();
   if (/^https?:\/\//i.test(requestOrigin)) {
@@ -500,7 +503,7 @@ router.post("/login", async (req, res) => {
         staff_role: user.staff_role,
         auth_time: Math.floor(Date.now() / 1000),
       },
-      process.env.JWT_SECRET || "elohim_123456",
+      jwtSecret,
       {
         expiresIn: user.is_admin ? "4h" : "24h",
       }
@@ -539,7 +542,7 @@ router.post("/verify-admin-mfa", async (req,res) => {
     if(!result.rows[0])return res.status(401).json({error:"Invalid or expired admin verification code"});
     const user=result.rows[0];
     await pool.query("UPDATE users SET admin_mfa_code_hash=NULL,admin_mfa_expires_at=NULL WHERE id=$1",[user.id]);
-    const token=jwt.sign({id:user.id,role:user.role,is_admin:true,staff_role:user.staff_role,auth_time:Math.floor(Date.now()/1000)},process.env.JWT_SECRET||"elohim_123456",{expiresIn:"4h"});
+    const token=jwt.sign({id:user.id,role:user.role,is_admin:true,staff_role:user.staff_role,auth_time:Math.floor(Date.now()/1000)},jwtSecret,{expiresIn:"4h"});
     res.json({success:true,token,user:{id:user.id,name:user.name,email:user.email,phone:user.phone,role:user.role,is_admin:true,staff_role:user.staff_role}});
   } catch(err){console.error("ADMIN MFA ERROR:",err);res.status(500).json({error:"Admin verification failed"});}
 });

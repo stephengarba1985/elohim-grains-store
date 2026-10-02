@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import API from "@/lib/api";
 
+const isRetryableNetworkError = (error) => Boolean(error?.isOffline || (!error?.response && error?.request));
+
 const replayAction = async (action) => {
   const { type, payload } = action;
   if (type === "add") return API.post("/cart", payload);
@@ -53,9 +55,13 @@ export const useCartStore = create(
         const { user } = get();
         if (!user) throw new Error("No user");
         const payload = { product_id: productId, quantity, user_id: user.id, variant_id: variantId, is_bulk: user.role === "bulk" };
-        try { await API.post("/cart", payload); }
-        catch { set((state) => ({ pendingCartActions: [...state.pendingCartActions, { type: "add", payload }] })); }
-        set((state) => ({ cartCount: state.cartCount + 1, cartUserId: String(user.id) }));
+        try {
+          await API.post("/cart", payload);
+          await get().fetchCart();
+        } catch (error) {
+          if (!isRetryableNetworkError(error)) throw error;
+          set((state) => ({ pendingCartActions: [...state.pendingCartActions, { type: "add", payload }], cartCount: state.cartCount + 1, cartUserId: String(user.id) }));
+        }
       },
       updateQuantity: async (cartId, quantity) => {
         const { user } = get();
@@ -63,7 +69,7 @@ export const useCartStore = create(
         const payload = { cartId, quantity, userId: user.id };
         set((state) => ({ cart: state.cart.map((item) => Number(item.id) === Number(cartId) ? { ...item, quantity } : item) }));
         try { await replayAction({ type: "update", payload }); }
-        catch { set((state) => ({ pendingCartActions: [...state.pendingCartActions, { type: "update", payload }] })); }
+        catch (error) { if (isRetryableNetworkError(error)) set((state) => ({ pendingCartActions: [...state.pendingCartActions, { type: "update", payload }] })); else { await get().fetchCart(); throw error; } }
       },
       removeFromCart: async (cartId) => {
         const { user } = get();
@@ -71,7 +77,7 @@ export const useCartStore = create(
         const payload = { cartId, userId: user.id };
         set((state) => ({ cart: state.cart.filter((item) => Number(item.id) !== Number(cartId)), cartCount: Math.max(0, state.cartCount - 1) }));
         try { await replayAction({ type: "remove", payload }); }
-        catch { set((state) => ({ pendingCartActions: [...state.pendingCartActions, { type: "remove", payload }] })); }
+        catch (error) { if (isRetryableNetworkError(error)) set((state) => ({ pendingCartActions: [...state.pendingCartActions, { type: "remove", payload }] })); else { await get().fetchCart(); throw error; } }
       },
       clearCart: async () => {
         const { user } = get();
@@ -79,7 +85,7 @@ export const useCartStore = create(
         const payload = { userId: user.id };
         set({ cart: [], cartCount: 0 });
         try { await replayAction({ type: "clear", payload }); }
-        catch { set((state) => ({ pendingCartActions: [...state.pendingCartActions, { type: "clear", payload }] })); }
+        catch (error) { if (isRetryableNetworkError(error)) set((state) => ({ pendingCartActions: [...state.pendingCartActions, { type: "clear", payload }] })); else { await get().fetchCart(); throw error; } }
       },
     }),
     { name: "elohim-cart-cache", partialize: (state) => ({ cart: state.cart, cartCount: state.cartCount, cartUserId: state.cartUserId, pendingCartActions: state.pendingCartActions }) }

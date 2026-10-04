@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 const rolePaths = {
   super_admin: ["*"], operations_manager: ["/admin","/admin/orders","/admin/products","/admin/inventory","/admin/customers","/admin/logistics","/admin/bulk","/admin/subscriptions"],
   finance: ["/admin","/admin/payments","/admin/money","/admin/ledger","/admin/bnpl","/admin/analytics","/admin/profit"],
-  warehouse: ["/admin/orders","/admin/products","/admin/inventory","/admin/suppliers"], delivery_manager: ["/admin/orders","/admin/logistics"], customer_support: ["/admin/orders","/admin/customers"], vendor_manager: ["/admin/products","/admin/vendors"],
+  warehouse: ["/admin/orders","/admin/products","/admin/inventory","/admin/suppliers"], delivery_manager: ["/admin/orders","/admin/logistics","/admin/riders"], customer_support: ["/admin/orders","/admin/customers"], vendor_manager: ["/admin/products","/admin/vendors"],
 };
 
 export default function AdminLayout({ children }) {
@@ -60,6 +60,7 @@ export default function AdminLayout({ children }) {
           {navItem("Inventory", "/admin/inventory")}
           {navItem("Customers", "/admin/customers")}
           {navItem("Deliveries", "/admin/logistics")}
+          {navItem("Riders", "/admin/riders")}
           {navItem("Bulk Orders", "/admin/bulk")}
           {navItem("Subscriptions", "/admin/subscriptions")}
 

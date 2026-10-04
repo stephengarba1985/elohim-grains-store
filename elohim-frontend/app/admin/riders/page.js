@@ -43,6 +43,7 @@ export default function RidersPage() {
 
     if (search) {
       list = list.filter((r) =>
+        String(r.id).includes(search.trim()) ||
         r.name?.toLowerCase().includes(search.toLowerCase()) ||
         r.phone?.includes(search) ||
         r.plate_number?.toLowerCase().includes(search.toLowerCase())
@@ -559,7 +560,7 @@ export default function RidersPage() {
       <div className="flex gap-3 mb-5">
         <input
           className="border rounded-lg p-3 flex-1"
-          placeholder="Search rider..."
+          placeholder="Search by rider ID, name, phone or plate..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -639,7 +640,8 @@ export default function RidersPage() {
                   <span className="text-sm text-gray-500">Select</span>
                 </div>
                 <h2 className="font-bold text-lg">{r.name}</h2>
-                <p className="text-sm text-gray-600">{r.phone}</p>
+                <p className="text-sm font-semibold text-emerald-700">Rider ID: {r.id}</p>
+                <p className="text-sm text-gray-600">Phone: {r.phone || "Not provided"}</p>
                 <p className="text-xs text-gray-500">Email: {r.email || "-"}</p>
                 <p className="text-xs text-gray-500">Vehicle: {r.vehicle_type || "-"}</p>
                 {r.plate_number && (
@@ -768,6 +770,7 @@ export default function RidersPage() {
             <h2 className="text-2xl font-bold mb-4">{selectedRider.name}</h2>
 
             <div className="grid md:grid-cols-2 gap-3 text-sm">
+              <p><b>Rider ID:</b> {selectedRider.id}</p>
               <p><b>Phone:</b> {selectedRider.phone}</p>
               <p><b>Email:</b> {selectedRider.email}</p>
               <p><b>Vehicle:</b> {selectedRider.vehicle_type}</p>
@@ -778,6 +781,14 @@ export default function RidersPage() {
               <p><b>Earnings:</b> ₦{Number(selectedRider.earnings || 0).toLocaleString()}</p>
               <p><b>Completed:</b> {selectedRider.completed_deliveries || 0}</p>
               <p><b>Cancelled:</b> {selectedRider.cancelled_deliveries || 0}</p>
+            </div>
+
+            <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm">
+              <h3 className="font-bold text-emerald-950">Rider portal sign-in details</h3>
+              <p className="mt-2"><b>Rider ID:</b> {selectedRider.id}</p>
+              <p><b>Registered phone:</b> {selectedRider.phone || "Not provided"}</p>
+              <a href="/rider" target="_blank" rel="noreferrer" className="mt-2 inline-block font-semibold text-emerald-700 underline">Open rider portal</a>
+              <p className="mt-2 text-emerald-900">Give these details to this rider to sign in. No login PIN is required. The customer provides the delivery PIN after receiving their order.</p>
             </div>
 
             <div className="mt-6 flex justify-end">

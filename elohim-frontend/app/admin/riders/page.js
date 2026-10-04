@@ -169,7 +169,7 @@ export default function RidersPage() {
 
   const updatePortalPin = async () => {
     if (!editingId) return toast.error("Select a rider to edit first");
-    if (!/^\\d{6}$/.test(portalPin)) return toast.error("Portal PIN must be exactly 6 digits");
+    if (!/^\d{6}$/.test(portalPin)) return toast.error("Portal PIN must be exactly 6 digits");
     try {
       await API.put(`/riders/${editingId}/portal-pin`, { pin: portalPin });
       setPortalPin("");
@@ -523,7 +523,7 @@ export default function RidersPage() {
                   placeholder="6-digit portal PIN"
                   className="border p-2 rounded flex-1 bg-white"
                   value={portalPin}
-                  onChange={(e) => setPortalPin(e.target.value.replace(/\\D/g, "").slice(0, 6))}
+                  onChange={(e) => setPortalPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 />
                 <button type="button" onClick={updatePortalPin} className="bg-amber-700 text-white px-4 py-2 rounded">
                   Set / Reset PIN
@@ -788,7 +788,7 @@ export default function RidersPage() {
               <p className="mt-2"><b>Rider ID:</b> {selectedRider.id}</p>
               <p><b>Registered phone:</b> {selectedRider.phone || "Not provided"}</p>
               <a href="/rider" target="_blank" rel="noreferrer" className="mt-2 inline-block font-semibold text-emerald-700 underline">Open rider portal</a>
-              <p className="mt-2 text-emerald-900">Give these details to this rider to sign in. No login PIN is required. The customer provides the delivery PIN after receiving their order.</p>
+              <p className="mt-2 text-emerald-900">The rider signs in with their rider ID, registered phone number, and six-digit portal PIN. Use Edit Rider to set or reset their portal PIN, then share it securely with this rider. The customer provides a separate delivery PIN after receiving their order.</p>
             </div>
 
             <div className="mt-6 flex justify-end">

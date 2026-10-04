@@ -319,14 +319,14 @@ router.post("/", ...adminRiders, async (req, res) => {
 router.put("/:id/portal-pin", ...adminRiders, async (req, res) => {
   try {
     const pin = String(req.body.pin || "").trim();
-    if (!/^\\d{6}$/.test(pin)) {
+    if (!/^\d{6}$/.test(pin)) {
       return res.status(400).json({ error: "Rider portal PIN must be exactly 6 digits" });
     }
 
     await ensureRiderCredentialColumn();
     const pinHash = await hashRiderPin(pin);
     const result = await pool.query(
-      "UPDATE riders SET portal_pin_hash = $1 WHERE id = $2 RETURNING id, name, phone, email, status",
+      "UPDATE riders SET portal_pin_hash = $1, portal_failed_attempts = 0, portal_locked_until = NULL WHERE id = $2 RETURNING id, name, phone, email, status",
       [pinHash, req.params.id]
     );
 

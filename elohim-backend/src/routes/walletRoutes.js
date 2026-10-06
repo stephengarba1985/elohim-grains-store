@@ -273,43 +273,7 @@ const sendWalletFundingEmail = async (user, amount, reference, balance) => {
 
 // POST /wallet/fund/initialize — returns Paystack authorization_url
 router.post("/fund/initialize", verifyToken, async (req, res) => {
-  const amount = parseAmount(req.body.amount);
-  if (!amount) return res.status(400).json({ error: "Amount must be greater than zero" });
-  if (amount < 100) return res.status(400).json({ error: "Minimum funding amount is NGN 100" });
-  if (!process.env.PAYSTACK_SECRET_KEY) return res.status(500).json({ error: "Payment gateway not configured" });
-
-  try {
-    await ensureWalletTables().catch(console.error);
-
-    const userRes = await pool.query("SELECT id, name, email FROM users WHERE id=$1", [req.user.id]);
-    if (userRes.rows.length === 0) return res.status(404).json({ error: "User not found" });
-
-    const user = userRes.rows[0];
-    const reference = `EGW-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
-    const frontendUrl = process.env.FRONTEND_URL || "https://elohimgrains.com";
-
-    const paystackRes = await axios.post(
-      "https://api.paystack.co/transaction/initialize",
-      {
-        email: user.email,
-        amount: Math.round(amount * 100),
-        reference,
-        metadata: { user_id: req.user.id, purpose: "wallet_funding" },
-        callback_url: `${frontendUrl}/user/wallet?reference=${reference}`,
-      },
-      { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
-    );
-
-    await pool.query(
-      `INSERT INTO wallet_funding_transactions (user_id, reference, amount) VALUES ($1,$2,$3)`,
-      [req.user.id, reference, amount]
-    );
-
-    res.json({ authorization_url: paystackRes.data.data.authorization_url, reference });
-  } catch (err) {
-    console.error("FUND INITIALIZE ERROR:", err.response?.data || err.message);
-    res.status(500).json({ error: "Failed to initialize payment" });
-  }
+  return res.status(410).json({ error: "Purchases use OPay bank transfer only. Place an order from your cart." });
 });
 
 // POST /wallet/fund/verify — verify a Paystack payment and credit wallet
@@ -983,55 +947,7 @@ router.post("/:userId/fund", verifyToken, isAdmin, async (req, res) => {
 });
 
 router.post("/:userId/pay-cart", verifyToken, async (req, res) => {
-  const { pin } = req.body;
-
-  if (String(req.user.id) !== String(req.params.userId)) return res.status(403).json({ error: "Not allowed" });
-  if (!pin) return res.status(400).json({ error: "Wallet PIN is required" });
-  if (!(await verifyWalletPin(req.user.id, pin))) return res.status(401).json({ error: "Invalid Wallet PIN" });
-
-  const client = await pool.connect();
-  try {
-    await ensureWalletTables();
-    await client.query(`CREATE TABLE IF NOT EXISTS payment_transactions (
-      id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL, provider VARCHAR(50) NOT NULL,
-      channel VARCHAR(50) NOT NULL, reference VARCHAR(100) UNIQUE NOT NULL,
-      amount DECIMAL(10,2) NOT NULL, status VARCHAR(30) DEFAULT 'pending',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, verified_at TIMESTAMP
-    )`);
-    await client.query("BEGIN");
-    await client.query("SELECT pg_advisory_xact_lock($1)", [Number(req.user.id)]);
-    const cartPricing = await getAuthoritativeCartPricing(client, req.user.id);
-    if (cartPricing.items.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ error: "Cart is empty" });
-    }
-    const amount = cartPricing.total;
-    if (!amount || amount <= 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ error: "Invalid cart total" });
-    }
-    const balance = await getWalletBalance(req.user.id, client);
-    if (amount > balance) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ error: "Insufficient wallet balance", balance, shortfall: amount - balance });
-    }
-    const reference = `WALLET-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
-    await insertTransaction(client, { userId: req.user.id, type: "plan_payment", direction: "debit", amount, note: `Cart payment ${reference}` });
-    await client.query(
-      `INSERT INTO payment_transactions (user_id, provider, channel, reference, amount, status, verified_at)
-       VALUES ($1, 'wallet', 'wallet', $2, $3, 'verified', CURRENT_TIMESTAMP)`,
-      [req.user.id, reference, amount]
-    );
-    await client.query("COMMIT");
-    res.json({ reference, balance: balance - amount });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("WALLET CART PAYMENT ERROR:", err);
-    res.status(500).json({ error: "Wallet payment failed" });
-  } finally {
-    client.release();
-  }
+  return res.status(410).json({ error: "Purchases use OPay bank transfer only. Place an order from your cart." });
 });
 
 router.post("/:userId/withdraw", verifyToken, async (req, res) => {

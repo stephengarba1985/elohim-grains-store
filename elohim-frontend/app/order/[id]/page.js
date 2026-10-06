@@ -93,6 +93,14 @@ export default function OrderDetails() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
+      {order.payment_gateway === "opay" && order.payment_status !== "verified" && order.status === "pending" && <section className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-5">
+        <h2 className="text-xl font-bold">Complete your OPay transfer</h2>
+        <p className="mt-2">Bank: <b>OPay</b></p><p>Account number: <b>8148993001</b></p><p>Account name: <b>Elohim Grains Store</b></p>
+        <p className="mt-2">Amount: <b>{formatPrice(total)}</b></p><p>Payment reference: <b>{order.reference}</b></p>
+        <p className="mt-3">Include this reference in your transfer narration and keep your receipt. Your payment stays pending until an administrator confirms receipt.</p>
+        <button onClick={fetchOrder} className="mt-3 font-bold text-emerald-700 underline">Refresh payment status</button>
+      </section>}
+
       <div className="max-w-3xl mx-auto">
 
         {/* SUCCESS BANNER */}

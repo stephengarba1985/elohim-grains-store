@@ -170,6 +170,7 @@ function WalletPageContent() {
 
 
   const submitAction = async (action = activeAction) => {
+    if (action === "fund") return toast("Wallet funding is unavailable. Pay for orders by OPay transfer at checkout.");
     if (!user?.id) {
       return toast.error("Please log in first");
     }
@@ -230,9 +231,9 @@ function WalletPageContent() {
           <button onClick={() => document.getElementById("mobile-wallet-funding")?.scrollIntoView({ behavior: "smooth", block: "center" })} className="w-full rounded-xl bg-emerald-700 px-5 py-4 text-sm font-black text-white">FUND WALLET</button>
           <section id="mobile-wallet-funding" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="font-black text-slate-950">Fund your wallet</p>
-            <p className="mt-1 text-sm text-slate-500">You will complete payment securely through Paystack.</p>
+            <p className="mt-1 text-sm text-slate-500">Wallet funding is unavailable. Pay for your orders by OPay transfer at checkout.</p>
             <label className="mt-4 block"><span className="text-sm font-bold text-slate-700">Amount</span><input type="number" min="1" value={form.amount} onChange={(event) => updateForm({ amount: event.target.value })} placeholder="Enter amount" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3" /></label>
-          <button onClick={() => submitAction("fund")} disabled={loading} className="mt-3 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white disabled:bg-slate-300">{loading ? "PROCESSING..." : "FUND WALLET"}</button>
+          <button onClick={() => submitAction("fund")} disabled={true} className="mt-3 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white disabled:bg-slate-300">{loading ? "PROCESSING..." : "FUND WALLET"}</button>
           </section>
           <section>
             <div className="flex items-center justify-between"><h2 className="text-xl font-black text-slate-950">Recent activity</h2><button onClick={() => fetchWallet(user?.id)} className="text-sm font-bold text-emerald-700">Refresh</button></div>
@@ -398,13 +399,13 @@ function WalletPageContent() {
 
                 {activeAction === "fund" && (
                   <p className="text-xs text-slate-500">
-                    You will be redirected to Paystack to complete payment securely.
+                    Wallet funding is unavailable. Use OPay transfer at checkout.
                   </p>
                 )}
 
                 <button
                   onClick={submitAction}
-                  disabled={loading}
+                  disabled={loading || activeAction === "fund"}
                   className="w-full bg-slate-950 hover:bg-slate-800 disabled:bg-slate-300 text-white px-5 py-3 rounded-lg font-semibold"
                 >
                   {loading ? "Processing..." : actionLabels[activeAction]}

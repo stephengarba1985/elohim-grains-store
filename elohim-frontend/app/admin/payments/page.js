@@ -64,7 +64,10 @@ export default function AdminPaymentsPage() {
 
   const verifyTransaction = async (transaction) => {
     try {
-      await API.post("/payment-gateways/verify", { reference: transaction.reference });
+      if (transaction.provider !== "opay") return toast.error("Historical gateway payments require provider verification");
+      const receipt = window.prompt("Check your OPay account for the exact amount first. Enter the bank receipt / transaction reference for this transfer:");
+      if (!receipt?.trim()) return;
+      await API.post("/payment-gateways/admin/confirm-transfer", { reference: transaction.reference, receipt_reference: receipt.trim() });
       toast.success("Payment verified");
       fetchPayments();
     } catch (err) {
@@ -232,7 +235,7 @@ export default function AdminPaymentsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-950">Payment Gateways</h1>
           <p className="text-slate-500 mt-1">
-            Monitor Paystack, Flutterwave, Monnify, Opay transfer, virtual account, bank transfer, and USSD payments.
+            Confirm OPay transfers after checking receipt in the store account. Historical payments remain available for reporting.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -454,7 +457,7 @@ export default function AdminPaymentsPage() {
                   </div>
                 </div>
 
-                {transaction.status === "pending" && (
+                {transaction.status === "pending" && transaction.provider === "opay" && transaction.order_id && (
                   <div className="mt-4 flex gap-2">
                     <button
                       onClick={(e) => {
@@ -462,7 +465,7 @@ export default function AdminPaymentsPage() {
                       }}
                       className="bg-green-700 text-white px-3 py-2 rounded text-sm font-semibold"
                     >
-                      Mark Verified
+                      Confirm OPay Receipt
                     </button>
 
                     <button

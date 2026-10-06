@@ -1,20 +1,13 @@
 const express = require("express");
-const axios = require("axios");
 const pool = require("../config/db");
-const { createPaymentReminder, queueMobileNotification } = require("./mobileRoutes");
-const { verifyToken, isAdmin } = require("../middleware/auth");
+const { createPaymentReminder } = require("./mobileRoutes");
+const { verifyToken, isAdmin, requirePermission } = require("../middleware/auth");
 const { getAuthoritativeCartPricing } = require("../utils/cartPricing");
 
 const router = express.Router();
 
-const PROVIDERS = {
-  paystack: {
-    label: "Paystack",
-    channels: ["card", "bank_transfer", "ussd"],
-    bank: "Paystack",
-    ussd: null,
-  },
-};
+const OPAY_ACCOUNT = { bank_name: "OPay", account_number: "8148993001", account_name: "Elohim Grains Store" };
+const PROVIDERS = { opay: { label: "OPay bank transfer", channels: ["bank_transfer"], bank: "OPay" } };
 
 const ensurePaymentGatewayTables = async () => {
   await pool.query(`
@@ -45,26 +38,14 @@ const ensurePaymentGatewayTables = async () => {
   `);
 };
 
-const parseAmount = (value) => {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-  return Math.round(amount * 100) / 100;
-};
-
 const createReference = (provider) => {
   const prefix = provider.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
 };
 
-const createVirtualAccount = ({ provider, userId }) => {
-  const seed = String(userId || "0").padStart(4, "0").slice(-4);
-  const suffix = String(Date.now()).slice(-6);
-  const providerCode = provider === "opay" ? "81" : provider === "monnify" ? "55" : "70";
-  return `${providerCode}${seed}${suffix}`.slice(0, 10);
-};
-
 router.get("/options", async (req, res) => {
   res.json({
+    account: OPAY_ACCOUNT,
     providers: Object.entries(PROVIDERS).map(([value, config]) => ({
       value,
       label: config.label,
@@ -233,59 +214,8 @@ router.post("/initialize", verifyToken, async (req, res) => {
     }
 
     const reference = createReference(provider);
-    let paystackResponse = null;
-
-    if (provider === "paystack") {
-      try {
-        const userRes = await pool.query(
-          "SELECT email, name FROM users WHERE id = $1",
-          [user_id]
-        );
-
-        if (userRes.rows.length === 0) {
-          return res.status(404).json({
-            error: "User not found",
-          });
-        }
-
-        const user = userRes.rows[0];
-
-        paystackResponse = await axios.post(
-          "https://api.paystack.co/transaction/initialize",
-          {
-            email: user.email,
-            amount: Math.round(finalAmount * 100),
-            currency: "NGN",
-            reference,
-            callback_url: `${process.env.FRONTEND_URL}/payment/callback`,
-            metadata: {
-              user_id,
-              provider,
-            },
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-      } catch (err) {
-        console.error(
-          "PAYSTACK INITIALIZE ERROR:",
-          err.response?.data || err.message
-        );
-
-        return res.status(500).json({
-          error: "Unable to initialize Paystack payment.",
-        });
-      }
-    }
-
-    const providerData = paystackResponse?.data?.data || {};
-    const accountNumber = providerData.account_number || null;
-    const ussdCode = providerData.ussd_code || null;
-
+    const accountNumber = OPAY_ACCOUNT.account_number;
+    const ussdCode = null;
     const result = await pool.query(
       `INSERT INTO payment_transactions
         (user_id, provider, channel, reference, amount, account_number, account_name, bank_name, ussd_code, metadata)
@@ -298,12 +228,12 @@ router.post("/initialize", verifyToken, async (req, res) => {
         reference,
         finalAmount,
         accountNumber,
-        accountNumber ? `ELOHIM GRAINS/${reference.slice(-8)}` : null,
+        OPAY_ACCOUNT.account_name,
         accountNumber ? selectedProvider.bank : null,
         ussdCode,
         JSON.stringify({
           provider_label: selectedProvider.label,
-          paystack: paystackResponse?.data?.data || null,
+          manual_confirmation: true,
         }),
       ]
     );
@@ -321,28 +251,50 @@ router.post("/initialize", verifyToken, async (req, res) => {
     res.json({
       transaction: result.rows[0],
       authorization_url:
-        paystackResponse?.data?.data?.authorization_url || null,
+        null,
       access_code:
-        paystackResponse?.data?.data?.access_code || null,
+        null,
       instructions: {
         title: selectedProvider.label,
         reference,
         amount: finalAmount,
         bank_name: accountNumber ? selectedProvider.bank : null,
         account_number: accountNumber,
-        account_name: accountNumber ? `ELOHIM GRAINS/${reference.slice(-8)}` : null,
+        account_name: OPAY_ACCOUNT.account_name,
         ussd_code: ussdCode,
-        message: accountNumber
-          ? "Transfer the exact amount to the virtual account, then verify payment."
-          : channel === "ussd"
-            ? "Dial the USSD code and complete payment, then verify payment."
-            : "Complete payment using the selected gateway, then verify payment.",
+        message: "Transfer the exact amount to this OPay account using your reference. Your payment stays pending until an administrator confirms receipt.",
       },
     });
   } catch (err) {
     console.error("PAYMENT INIT ERROR:", err);
     res.status(500).json({ error: "Failed to initialize payment" });
   }
+});
+
+router.post("/admin/confirm-transfer", verifyToken, isAdmin, requirePermission("payments"), async (req, res) => {
+  const receiptReference = String(req.body.receipt_reference || "").trim();
+  if (!req.body.reference || !receiptReference) return res.status(400).json({ error: "Payment reference and bank receipt reference are required" });
+  await ensurePaymentGatewayTables();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query("SELECT * FROM payment_transactions WHERE reference=$1 AND provider='opay' FOR UPDATE", [req.body.reference]);
+    const payment = result.rows[0];
+    if (!payment || !payment.order_id) { await client.query("ROLLBACK"); return res.status(404).json({ error: "OPay order payment not found" }); }
+    if (payment.status === "verified") { await client.query("ROLLBACK"); return res.json({ message: "Already confirmed" }); }
+    if (payment.status !== "pending") { await client.query("ROLLBACK"); return res.status(409).json({ error: "Payment is not pending" }); }
+    // Serialize confirmations so one bank receipt cannot pay for multiple orders.
+    await client.query("SELECT pg_advisory_xact_lock(8148993001::bigint)");
+    const duplicate = await client.query("SELECT id FROM payment_transactions WHERE provider='opay' AND status='verified' AND metadata->>'receipt_reference'=$1", [receiptReference]);
+    if (duplicate.rows.length) { await client.query("ROLLBACK"); return res.status(409).json({ error: "This bank receipt has already been used" }); }
+    const order = await client.query("SELECT * FROM orders WHERE id=$1 FOR UPDATE", [payment.order_id]);
+    if (!order.rows[0] || order.rows[0].status !== "pending" || Math.round(Number(order.rows[0].total_amount)*100) !== Math.round(Number(payment.amount)*100)) { await client.query("ROLLBACK"); return res.status(409).json({ error: "Order is not awaiting this payment" }); }
+    await client.query("UPDATE payment_transactions SET status='verified', verified_at=NOW(), metadata=COALESCE(metadata,'{}'::jsonb) || $2::jsonb WHERE id=$1", [payment.id, JSON.stringify({ receipt_reference: receiptReference, confirmed_by: req.user.id })]);
+    await client.query("UPDATE orders SET payment_status='verified', status='paid' WHERE id=$1", [payment.order_id]);
+    await client.query("COMMIT");
+    res.json({ message: "OPay transfer confirmed", order_id: payment.order_id });
+  } catch (err) { await client.query("ROLLBACK"); console.error("OPAY CONFIRM ERROR", err); res.status(500).json({ error: "Could not confirm OPay transfer" }); }
+  finally { client.release(); }
 });
 
 router.post("/verify", verifyToken, async (req, res) => {
@@ -368,7 +320,7 @@ router.post("/verify", verifyToken, async (req, res) => {
       error: "Browser verification cannot mark a payment as successful.",
       reference: existing.rows[0].reference,
       status: existing.rows[0].status,
-      next_step: "Await provider API verification or signed webhook confirmation.",
+      next_step: "Await administrator confirmation of your OPay receipt.",
     });
   } catch (err) {
     console.error("PAYMENT VERIFY ERROR:", err);

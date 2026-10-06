@@ -45,6 +45,7 @@ router.post("/create", verifyToken, async (req, res) => {
   try {
     const { reference, delivery_address } = req.body;
     const user_id = Number(req.user.id);
+    if (!reference) return res.status(400).json({ error: "Initialize your OPay transfer before placing the order" });
     await ensurePaymentGatewayTables();
     await ensureOrderDeliveryFeeColumn();
 
@@ -166,26 +167,27 @@ router.post("/create", verifyToken, async (req, res) => {
       ? await client.query(
           `SELECT *
            FROM payment_transactions
-           WHERE reference=$1 AND user_id=$2 AND status='verified'
+           WHERE reference=$1 AND user_id=$2 AND (status='verified' OR (provider='opay' AND status='pending'))
            FOR UPDATE`,
           [reference, user_id]
         )
       : { rows: [] };
-    const verifiedPayment = paymentTx.rows[0];
+    const orderPayment = paymentTx.rows[0];
+    const verifiedPayment = orderPayment?.status === "verified" ? orderPayment : null;
 
-    if (reference && !verifiedPayment) {
+    if (reference && !orderPayment) {
       await client.query("ROLLBACK");
       transactionStarted = false;
       return res.status(400).json({ error: "Verified payment is required for this order" });
     }
 
-    if (verifiedPayment) {
-      if (verifiedPayment.order_id) {
+    if (orderPayment) {
+      if (orderPayment.order_id) {
         await client.query("ROLLBACK");
         transactionStarted = false;
         return res.status(409).json({ error: "Payment reference has already been used" });
       }
-      if (Math.round(Number(verifiedPayment.amount) * 100) !== Math.round(Number(totalAmount) * 100)) {
+      if (Math.round(Number(orderPayment.amount) * 100) !== Math.round(Number(totalAmount) * 100)) {
         await client.query("ROLLBACK");
         transactionStarted = false;
         return res.status(400).json({ error: "Verified payment amount does not match the current order total" });
@@ -268,18 +270,9 @@ router.post("/create", verifyToken, async (req, res) => {
 
     await client.query(`DELETE FROM cart WHERE user_id = $1`, [user_id]);
 
-    if (verifiedPayment) {
-      await client.query(
-        `UPDATE orders
-         SET payment_gateway=$1, payment_channel=$2, payment_status='verified'
-         WHERE id=$3`,
-        [verifiedPayment.provider, verifiedPayment.channel, orderId]
-      );
-
-      await client.query(
-        "UPDATE payment_transactions SET order_id=$1 WHERE id=$2",
-        [orderId, verifiedPayment.id]
-      );
+    if (orderPayment) {
+      await client.query("UPDATE orders SET payment_gateway=$1, payment_channel=$2, payment_status=$3 WHERE id=$4", [orderPayment.provider, orderPayment.channel, orderPayment.status, orderId]);
+      await client.query("UPDATE payment_transactions SET order_id=$1 WHERE id=$2", [orderId, orderPayment.id]);
     }
 
     await client.query("COMMIT");
@@ -797,7 +790,7 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
     transactionStarted = true;
 
     const existingOrderRes = await client.query(
-      `SELECT user_id, rider_id, status, inventory_restored, order_number FROM orders WHERE id = $1 FOR UPDATE`,
+      `SELECT user_id, rider_id, status, inventory_restored, order_number, payment_gateway, payment_status FROM orders WHERE id = $1 FOR UPDATE`,
       [id]
     );
 
@@ -814,6 +807,12 @@ router.put("/:id/status", verifyToken, isAdmin, async (req, res) => {
       await client.query("ROLLBACK");
       transactionStarted = false;
       return res.status(409).json({ error: `Order is already ${order.status} and cannot move to ${status}` });
+    }
+
+    if (order.payment_gateway === "opay" && order.payment_status !== "verified" && !["pending", "cancelled"].includes(status)) {
+      await client.query("ROLLBACK");
+      transactionStarted = false;
+      return res.status(409).json({ error: "Confirm the OPay receipt in Admin Payments before progressing this order" });
     }
 
     const allowedTransitions = {

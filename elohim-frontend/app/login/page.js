@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import API from "../../lib/api";
 import { useRouter } from "next/navigation";
@@ -14,6 +14,26 @@ export default function AuthPage() {
   const [registeredEmail, setRegisteredEmail] = useState("");
   const [mfaRequired, setMfaRequired] = useState(false);
   const [mfaCode, setMfaCode] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [retrySeconds, setRetrySeconds] = useState(0);
+  const authInFlight = useRef(false);
+
+  useEffect(() => {
+    if (!retrySeconds) return;
+    const timer = setTimeout(() => setRetrySeconds(value => Math.max(0, value - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [retrySeconds]);
+
+  const showAuthError = (err, fallback) => {
+    if (err.response?.status === 429) {
+      const wait = Number(err.response.headers?.["retry-after"]);
+      setRetrySeconds(Number.isFinite(wait) && wait > 0 ? Math.ceil(wait) : 900);
+      toast.error("Too many requests. Wait for the countdown before trying again.");
+      return;
+    }
+    toast.error(err.response?.data?.error || err.response?.data?.message || err.message || fallback);
+  };
+
 
   const [form, setForm] = useState({
     name: "",
@@ -25,6 +45,9 @@ export default function AuthPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (authInFlight.current || retrySeconds > 0) return;
+    authInFlight.current = true;
+    setAuthBusy(true);
 
     try {
       if (isLogin) {
@@ -79,12 +102,19 @@ export default function AuthPage() {
         err.response?.data?.error ||
         (isLogin ? "Login failed" : "Registration failed");
 
-      toast.error(serverMessage);
+      showAuthError(err, serverMessage);
+    } finally {
+      authInFlight.current = false;
+      setAuthBusy(false);
     }
   };
 
   const verifyAdminMfa = async (event) => {
     event.preventDefault();
+    if (authInFlight.current || retrySeconds > 0) return;
+    if (!/^\d{6}$/.test(mfaCode.trim())) return toast.error("Enter the six-digit code from your email");
+    authInFlight.current = true;
+    setAuthBusy(true);
     try {
       const res = await API.post("/auth/verify-admin-mfa", { email: form.email, code: mfaCode });
       if (!res.data?.token || !res.data?.user?.is_admin) {
@@ -99,7 +129,10 @@ export default function AuthPage() {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.dispatchEvent(new Event("auth:changed"));
-      toast.error(err.response?.data?.error || err.message || "Verification failed");
+      showAuthError(err, "Verification failed");
+    } finally {
+      authInFlight.current = false;
+      setAuthBusy(false);
     }
   };
 
@@ -160,8 +193,9 @@ export default function AuthPage() {
           {isLogin ? "Login to Elohim Grains" : "Create an Account"}
         </h1>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {mfaRequired ? <><p className="text-sm text-slate-600">Enter the 6-digit code sent to your verified admin email.</p><input required inputMode="numeric" maxLength="6" placeholder="Admin verification code" className="border p-2 w-full rounded" value={mfaCode} onChange={(e)=>setMfaCode(e.target.value)}/><button type="button" onClick={verifyAdminMfa} className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold">Verify admin login</button></> : <>
+        {retrySeconds > 0 && <p role="status" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Too many requests. Try again in {Math.floor(retrySeconds / 60)}:{String(retrySeconds % 60).padStart(2, "0")}. If your code has expired, reload this page after the countdown and sign in for a new code.</p>}
+        <form onSubmit={mfaRequired ? verifyAdminMfa : handleSubmit} className="space-y-3">
+          {mfaRequired ? <><p className="text-sm text-slate-600">Enter the 6-digit code sent to your verified admin email.</p><input required inputMode="numeric" maxLength="6" placeholder="Admin verification code" className="border p-2 w-full rounded" value={mfaCode} onChange={(e)=>setMfaCode(e.target.value)}/><button type="submit" disabled={authBusy || retrySeconds > 0} className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold disabled:opacity-50">{authBusy ? "Verifying..." : "Verify admin login"}</button></> : <>
           {!isLogin && (
             <>
               <input
@@ -237,8 +271,8 @@ export default function AuthPage() {
   </div>
 )}
 
-          <button className="bg-green-600 hover:bg-green-700 text-white w-full py-2 rounded">
-            {isLogin ? "Login" : "Register"}
+          <button type="submit" disabled={authBusy || retrySeconds > 0} className="bg-green-600 hover:bg-green-700 text-white w-full py-2 rounded disabled:opacity-50">
+            {authBusy ? "Please wait..." : isLogin ? "Login" : "Register"}
           </button>
           </>}
         </form>

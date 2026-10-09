@@ -276,6 +276,7 @@ const corsOptions = {
   },
 
   credentials: true,
+  exposedHeaders: ["Retry-After"],
 
   methods: [
     "GET",
